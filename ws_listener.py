@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-BSC 区块监听器（HTTP 轮询代替 WebSocket，更稳定）
-- 轮询最新区块号
-- 回调 event_parser 处理新区块
+BSC 区块监听器（HTTP 轮询 0.45s/次，BSC 出块频率）
 """
 
 import time, requests
@@ -56,6 +54,9 @@ class BlockListener:
             try:
                 cur = self.latest_block()
                 if cur > self.last_block:
+                    gap = cur - self.last_block
+                    if gap > 5:
+                        print(f"[追赶] 落后 {gap} 个区块...")
                     for bn in range(self.last_block+1, cur+1):
                         blk = self.get_block(bn)
                         if blk and self.callback:
@@ -63,7 +64,7 @@ class BlockListener:
                             self.callback(bn, blk, ts)
                         time.sleep(0.02)
                     self.last_block = cur
-                time.sleep(1)
+                time.sleep(0.45)
             except Exception as e:
                 print(f"[监听] 异常: {e}")
                 time.sleep(5)
