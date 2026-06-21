@@ -2,11 +2,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-import os
+import os, threading, time, requests
 from datetime import datetime, timezone, timedelta
 from db import get_all_daily, get_conn
 from event_parser import get_balance, BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
-from pusher import push_to_feishu, push_to_telegram
+from pusher import push_to_feishu, push_to_telegram, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 BJT = timezone(timedelta(hours=8))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -40,6 +40,40 @@ def get_today_data():
             "dynamic_turbo":round(max(di-sb,0),2),"stake_balance":round(stake_bal,2),
             "stake_in":round(si,2),"stake_out":round(so,2),"net_stake":round(si-so-bo,2),
             "event_count":ec,"last_block":lb}
+
+# ---------- Telegram /today 命令轮询 ----------
+def telegram_poll():
+    """后台轮询 Telegram 消息，响应 /today 命令"""
+    if not TELEGRAM_BOT_TOKEN:
+        print("[Telegram Poll] 未配置 BOT_TOKEN，跳过")
+        return
+    offset = 0
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+            params = {"offset": offset, "timeout": 30, "allowed_updates": ["message"]}
+            r = requests.get(url, params=params, timeout=35)
+            d = r.json()
+            if not d.get("ok"):
+                time.sleep(5)
+                continue
+            for update in d.get("result", []):
+                update_id = update.get("update_id", 0)
+                offset = max(offset, update_id + 1)
+                msg = update.get("message", {})
+                chat_id = msg.get("chat", {}).get("id")
+                text = msg.get("text", "").strip()
+                # 只响应来自指定群组的 /today 命令
+                if chat_id == TELEGRAM_CHAT_ID and text == "/today":
+                    print(f"[Telegram Poll] 收到 /today 命令")
+                    record = get_today_data()
+                    push_to_telegram(record)
+        except Exception as e:
+            print(f"[Telegram Poll] 异常: {e}")
+            time.sleep(5)
+
+# 启动后台轮询
+threading.Thread(target=telegram_poll, daemon=True).start()
 
 @app.get("/api/today")
 def get_today():
