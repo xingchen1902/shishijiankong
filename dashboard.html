@@ -121,11 +121,21 @@ td.neg { color: #ef4444; }
   <!-- 当日实时汇总 -->
   <div class="today-card">
     <div class="today-title">📊 当日实时汇总 · <span id="todayDate"></span></div>
-    <div class="today-grid">
+    <div class="today-grid" style="grid-template-columns: repeat(6, 1fr);">
       <div class="today-item warn">
         <div class="label">奖金池提取</div>
         <div class="value" id="tdBonusWithdraw">--</div>
         <div class="sub">ARK</div>
+      </div>
+      <div class="today-item purple">
+        <div class="label">静态涡轮</div>
+        <div class="value" id="tdStatic">--</div>
+        <div class="sub">gARK 销毁</div>
+      </div>
+      <div class="today-item teal">
+        <div class="label">动态涡轮</div>
+        <div class="value" id="tdTurbo">--</div>
+        <div class="sub">动静态-静态</div>
       </div>
       <div class="today-item pos">
         <div class="label">新增质押</div>
@@ -138,18 +148,8 @@ td.neg { color: #ef4444; }
         <div class="sub">ARK</div>
       </div>
       <div class="today-item info">
-        <div class="label">净质押</div>
+        <div class="label">净质押量</div>
         <div class="value" id="tdNetStake">--</div>
-        <div class="sub">ARK</div>
-      </div>
-      <div class="today-item purple">
-        <div class="label">静态涡轮</div>
-        <div class="value" id="tdStatic">--</div>
-        <div class="sub">gARK 销毁</div>
-      </div>
-      <div class="today-item info">
-        <div class="label">动静态涡轮</div>
-        <div class="value" id="tdDynamic">--</div>
         <div class="sub">ARK</div>
       </div>
     </div>
