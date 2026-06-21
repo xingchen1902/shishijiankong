@@ -53,7 +53,7 @@ if FastAPI:
                 COUNT(*) as event_count,
                 MAX(block) as last_block
             FROM events
-            WHERE (created_at >= datetime('now', '-1 day') OR (timestamp IS NOT NULL AND timestamp LIKE ?))
+            WHERE (created_at >= datetime('now', '+8 hours', '-1 day') OR (timestamp IS NOT NULL AND timestamp LIKE ?))
         """, (today + "%")).fetchone()
         conn.close()
 
@@ -116,7 +116,7 @@ if FastAPI:
                 COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
                 COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in
             FROM events
-            WHERE (created_at >= datetime('now', '-1 day') OR (timestamp IS NOT NULL AND timestamp LIKE ?))
+            WHERE (created_at >= datetime('now', '+8 hours', '-1 day') OR (timestamp IS NOT NULL AND timestamp LIKE ?))
         """, (today + "%")).fetchone()
         conn.close()
 
