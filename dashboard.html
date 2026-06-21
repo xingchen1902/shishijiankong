@@ -263,15 +263,15 @@ function updateDaily(data) {
     const ns = Number(r.net_stake);
     return '<tr>' +
       '<td>' + r.date + '</td>' +
-    '<td>' + fmt(r.bonus_balance) + '</td>' +
-    '<td>' + fmt(r.bonus_withdraw) + '</td>' +
-    '<td>' + fmt(r.dynamic_in) + '</td>' +
-    '<td>' + fmt(r.static_burn) + '</td>' +
-    '<td>' + (r.dynamic_in - r.static_burn > 0 ? fmt(r.dynamic_in - r.static_burn) : '0.00') + '</td>' +
-    '<td>' + fmt(r.stake_balance) + '</td>' +
-    '<td class="pos">' + fmt(r.stake_in) + '</td>' +
-    '<td class="neg">' + fmt(r.stake_out) + '</td>' +
-    '<td class="' + (ns >= 0 ? 'pos' : 'neg') + '">' + fmt(ns) + '</td>' +
+      '<td>' + fmt(r.bonus_balance) + '</td>' +
+      '<td>' + fmt(r.bonus_withdraw) + '</td>' +
+      '<td>' + fmt(r.dynamic_in) + '</td>' +
+      '<td>' + fmt(r.static_burn) + '</td>' +
+      '<td>' + (r.dynamic_in - r.static_burn > 0 ? fmt(r.dynamic_in - r.static_burn) : '0.00') + '</td>' +
+      '<td>' + fmt(r.stake_balance) + '</td>' +
+      '<td class="pos">' + fmt(r.stake_in) + '</td>' +
+      '<td class="neg">' + fmt(r.stake_out) + '</td>' +
+      '<td class="' + (ns >= 0 ? 'pos' : 'neg') + '">' + fmt(ns) + '</td>' +
   }).join('');
 }
 
