@@ -6,8 +6,7 @@
 <title>ARK 实时监控看板</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
-
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
 .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 24px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .header h1 { font-size: 22px; font-weight: 700; }
 .header h1 span { color: #60a5fa; }
@@ -15,10 +14,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .header-status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .dot.green { background: #22c55e; }
 .dot.yellow { background: #eab308; }
-
 .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-
-/* 卡片网格 - 实时 */
 .realtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .rt-card { background: #1e293b; border-radius: 10px; padding: 14px; text-align: center; border: 1px solid #334155; }
 .rt-card .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
@@ -30,8 +26,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .rt-card.purple .value { color: #a78bfa; }
 .rt-card.orange .value { color: #f59e0b; }
 .rt-card.teal .value { color: #14b8a6; }
-
-/* 当日实时汇总卡片 */
 .today-card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #334155; }
 .today-title { font-size: 14px; font-weight: 600; color: #94a3b8; margin-bottom: 16px; }
 .today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
@@ -44,8 +38,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .today-item.info .value { color: #60a5fa; }
 .today-item.purple .value { color: #a78bfa; }
 .today-item .sub { font-size: 11px; color: #475569; margin-top: 2px; }
-
-/* 历史表格 */
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -57,8 +49,6 @@ tbody tr:hover { background: #1a2332; }
 tbody tr:last-child td { border-bottom: none; }
 td.pos { color: #22c55e; }
 td.neg { color: #ef4444; }
-
-/* 事件实时流 */
 .events-box { background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-top: 20px; padding: 16px; max-height: 300px; overflow-y: auto; }
 .events-box .event-item { padding: 6px 0; border-bottom: 1px solid #1a2332; font-size: 12px; display: flex; justify-content: space-between; }
 .events-box .event-item:last-child { border: none; }
@@ -68,9 +58,7 @@ td.neg { color: #ef4444; }
 .event-type.stake_out { background: #422006; color: #fcd34d; }
 .event-type.static_burn { background: #1a052e; color: #d8b4fe; }
 .event-type.dynamic { background: #0c4a6e; color: #7dd3fc; }
-
 .footer { text-align: center; padding: 20px; color: #475569; font-size: 12px; }
-
 @media (max-width: 600px) {
   .container { padding: 12px; }
   .today-grid { grid-template-columns: repeat(2, 1fr); }
@@ -80,7 +68,6 @@ td.neg { color: #ef4444; }
 </style>
 </head>
 <body>
-
 <div class="header">
   <div>
     <h1><span>ARK</span> 实时监控</h1>
@@ -93,93 +80,43 @@ td.neg { color: #ef4444; }
 </div>
 
 <div class="container">
-
-  <!-- 4 个实时余额卡片 -->
+  <!-- 实时余额卡片 -->
   <div class="realtime-grid">
-    <div class="rt-card blue">
-      <div class="label">奖金池余额</div>
-      <div class="value" id="bonusBal">--</div>
-      <div class="sub">ARK</div>
-    </div>
-    <div class="rt-card green">
-      <div class="label">质押池余额</div>
-      <div class="value" id="stakeBal">--</div>
-      <div class="sub">ARK</div>
-    </div>
-    <div class="rt-card orange">
-      <div class="label">累计事件</div>
-      <div class="value" id="eventCount">--</div>
-      <div class="sub">今日</div>
-    </div>
-    <div class="rt-card purple">
-      <div class="label">最新区块</div>
-      <div class="value" id="lastBlock">--</div>
-      <div class="sub" id="lastBlockTime"></div>
-    </div>
+    <div class="rt-card blue"><div class="label">奖金池余额</div><div class="value" id="bonusBal">--</div></div>
+    <div class="rt-card green"><div class="label">质押池余额</div><div class="value" id="stakeBal">--</div></div>
+    <div class="rt-card purple"><div class="label">今日事件</div><div class="value" id="eventCount">--</div><div class="sub">条</div></div>
+    <div class="rt-card orange"><div class="label">最新区块</div><div class="value" id="lastBlock">--</div></div>
   </div>
 
   <!-- 当日实时汇总 -->
   <div class="today-card">
     <div class="today-title">📊 当日实时汇总 · <span id="todayDate"></span></div>
-    <div class="today-grid" style="grid-template-columns: repeat(6, 1fr);">
-      <div class="today-item warn">
-        <div class="label">奖金池提取</div>
-        <div class="value" id="tdBonusWithdraw">--</div>
-        <div class="sub">ARK</div>
-      </div>
-      <div class="today-item purple">
-        <div class="label">静态涡轮</div>
-        <div class="value" id="tdStatic">--</div>
-        <div class="sub">gARK 销毁</div>
-      </div>
-      <div class="today-item teal">
-        <div class="label">动态涡轮</div>
-        <div class="value" id="tdTurbo">--</div>
-        <div class="sub">动静态-静态</div>
-      </div>
-      <div class="today-item pos">
-        <div class="label">新增质押</div>
-        <div class="value" id="tdStakeIn">--</div>
-        <div class="sub">ARK</div>
-      </div>
-      <div class="today-item neg">
-        <div class="label">赎回</div>
-        <div class="value" id="tdStakeOut">--</div>
-        <div class="sub">ARK</div>
-      </div>
-      <div class="today-item info">
-        <div class="label">净质押量</div>
-        <div class="value" id="tdNetStake">--</div>
-        <div class="sub">ARK</div>
-      </div>
+    <div class="today-grid">
+      <div class="today-item warn"><div class="label">奖金池提取</div><div class="value" id="tdBonusWithdraw">--</div></div>
+      <div class="today-item info"><div class="label">静态涡轮</div><div class="value" id="tdStatic">--</div></div>
+      <div class="today-item purple"><div class="label">动态涡轮</div><div class="value" id="tdTurbo">--</div></div>
+      <div class="today-item pos"><div class="label">新增质押</div><div class="value" id="tdStakeIn">--</div></div>
+      <div class="today-item neg"><div class="label">赎回</div><div class="value" id="tdStakeOut">--</div></div>
+      <div class="today-item" id="tdNetStakeCard"><div class="label">净质押量</div><div class="value" id="tdNetStake">--</div></div>
     </div>
   </div>
 
-  <!-- 历史数据表 -->
-  <div class="section-title">📈 历史数据（近30天）</div>
-  <div class="table-wrap" id="historyTable">
+  <!-- 历史表格 -->
+  <div class="section-title">📅 每日历史汇总</div>
+  <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>日期</th>
-          <th style="color:#60a5fa;">奖金池余额</th>
-          <th style="color:#f59e0b;">奖金池提取</th>
-          <th style="color:#7dd3fc;">动静态涡轮</th>
-          <th style="color:#a78bfa;">静态涡轮</th>
-          <th style="color:#14b8a6;">动态涡轮</th>
-          <th style="color:#94a3b8;">质押池余额</th>
-          <th style="color:#22c55e;">新增质押</th>
-          <th style="color:#ef4444;">赎回</th>
-          <th style="color:#f97316;">净质押量</th>
+          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>动静态涡轮</th><th>静态涡轮</th><th>动态涡轮</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
         </tr>
       </thead>
       <tbody id="dailyBody">
-        <tr><td colspan="10" style="text-align:center;padding:30px;color:#64748b;">加载中...</td></tr>
+        <tr><td colspan="10" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr>
       </tbody>
     </table>
   </div>
 
-  <!-- 实时事件流 -->
+  <!-- 事件流 -->
   <div class="section-title">⚡ 最新事件流</div>
   <div class="events-box" id="eventStream">
     <div style="text-align:center;color:#64748b;padding:10px;">等待数据...</div>
@@ -189,126 +126,134 @@ td.neg { color: #ef4444; }
 <div class="footer">ARK 实时监控 · 数据来源 BSC 链上</div>
 
 <script>
-const TYPE_LABELS = {
+var TYPE_LABELS = {
   bonus_withdraw: "奖金池提取", stake_in: "新增质押", stake_out: "赎回",
   static_burn: "静态销毁", dynamic: "动静态涡轮"
 };
-const API_BASE = window.location.origin;
+var API_BASE = window.location.origin;
 
 function fmt(n) {
-  if (n === null || n === undefined || n === '--') return '--';
-  return Number(n).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  if (n === null || n === undefined || n === "--") return "--";
+  return Number(n).toLocaleString("zh-CN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 function fmtInt(n) {
-  if (n === null || n === undefined) return '--';
-  return Number(n).toLocaleString('zh-CN');
+  if (n === null || n === undefined) return "--";
+  return Number(n).toLocaleString("zh-CN");
 }
 
-async function fetchAPI(path) {
+function fetchAPI(path) {
   try {
-    const r = await fetch(API_BASE + path);
-    return await r.json();
+    return fetch(API_BASE + path).then(function(r) { return r.json(); });
   } catch(e) {
-    console.error('API error:', path, e);
+    console.error("API error:", path, e);
     return null;
   }
 }
 
 function updateHeader(todayInfo) {
-  const now = new Date();
-  const bjt = new Date(now.getTime() + 8 * 3600000);
-  document.getElementById('refreshTime').textContent =
-    '刷新: ' + bjt.toISOString().slice(11, 19);
-  document.getElementById('todayDate').textContent = bjt.toISOString().slice(0, 10);
-
-  const status = document.getElementById('headerStatus');
+  var now = new Date();
+  var bjt = new Date(now.getTime() + 8 * 3600000);
+  document.getElementById("refreshTime").textContent = "刷新: " + bjt.toISOString().slice(11, 19);
+  document.getElementById("todayDate").textContent = bjt.toISOString().slice(0, 10);
+  var status = document.getElementById("headerStatus");
   if (todayInfo && todayInfo.data) {
-    status.innerHTML = '<span class="dot green"></span>运行中';
-    status.style.color = '#22c55e';
+    status.innerHTML = "<span class=\"dot green\"></span>运行中";
   } else {
-    status.innerHTML = '<span class="dot yellow"></span>数据等待中';
-    status.style.color = '#eab308';
+    status.innerHTML = "<span class=\"dot yellow\"></span>数据等待中";
   }
 }
 
 function updateToday(data) {
   if (!data) return;
-  document.getElementById('bonusBal').textContent = fmt(data.bonus_balance);
-  document.getElementById('stakeBal').textContent = fmt(data.stake_balance);
-  document.getElementById('eventCount').textContent = fmtInt(data.event_count);
-  document.getElementById('lastBlock').textContent = fmtInt(data.last_block);
+  document.getElementById("bonusBal").textContent = fmt(data.bonus_balance);
+  document.getElementById("stakeBal").textContent = fmt(data.stake_balance);
+  document.getElementById("eventCount").textContent = fmtInt(data.event_count);
+  document.getElementById("lastBlock").textContent = fmtInt(data.last_block);
+  document.getElementById("tdBonusWithdraw").textContent = fmt(data.bonus_withdraw);
+  document.getElementById("tdStakeIn").textContent = fmt(data.stake_in);
+  document.getElementById("tdStakeOut").textContent = fmt(data.stake_out);
+  document.getElementById("tdNetStake").textContent = fmt(data.net_stake);
+  document.getElementById("tdStatic").textContent = fmt(data.static_burn);
 
-  document.getElementById('tdBonusWithdraw').textContent = fmt(data.bonus_withdraw);
-  document.getElementById('tdStakeIn').textContent = fmt(data.stake_in);
-  document.getElementById('tdStakeOut').textContent = fmt(data.stake_out);
-  document.getElementById('tdNetStake').textContent = fmt(data.net_stake);
-  document.getElementById('tdStatic').textContent = fmt(data.static_burn);
-  document.getElementById('tdDynamic').textContent = fmt(data.dynamic_in);
-  document.getElementById('tdTurbo').textContent = fmt(data.dynamic_turbo);
+  document.getElementById("tdTurbo").textContent = fmt(data.dynamic_turbo);
+  var nsCard = document.getElementById("tdNetStakeCard");
+  if (data.net_stake >= 0) { nsCard.className = "today-item pos"; } else { nsCard.className = "today-item neg"; }
 }
 
 function updateBalances(data) {
   if (!data) return;
-  document.getElementById('bonusBal').textContent = fmt(data.bonus_balance);
-  document.getElementById('stakeBal').textContent = fmt(data.stake_balance);
+  document.getElementById("bonusBal").textContent = fmt(data.bonus_balance);
+  document.getElementById("stakeBal").textContent = fmt(data.stake_balance);
 }
 
 function updateDaily(data) {
-  const tbody = document.getElementById('dailyBody');
+  var tbody = document.getElementById("dailyBody");
   if (!data || !data.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:#64748b;">暂无历史数据</td></tr>';
+    tbody.innerHTML = "<tr><td colspan=\"10\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
     return;
   }
-  tbody.innerHTML = data.map(function(r) {
-    const ns = Number(r.net_stake);
-    return '<tr>' +
-      '<td>' + r.date + '</td>' +
-      '<td>' + fmt(r.bonus_balance) + '</td>' +
-      '<td>' + fmt(r.bonus_withdraw) + '</td>' +
-      '<td>' + fmt(r.dynamic_in) + '</td>' +
-      '<td>' + fmt(r.static_burn) + '</td>' +
-      '<td>' + (r.dynamic_in - r.static_burn > 0 ? fmt(r.dynamic_in - r.static_burn) : '0.00') + '</td>' +
-      '<td>' + fmt(r.stake_balance) + '</td>' +
-      '<td class="pos">' + fmt(r.stake_in) + '</td>' +
-      '<td class="neg">' + fmt(r.stake_out) + '</td>' +
-      '<td class="' + (ns >= 0 ? 'pos' : 'neg') + '">' + fmt(ns) + '</td>' +
-  }).join('');
+  var html = "";
+  for (var i = 0; i < data.length; i++) {
+    var r = data[i];
+    var ns = Number(r.net_stake);
+    var dt = Number(r.dynamic_in) - Number(r.static_burn);
+    var dtFmt = dt > 0 ? fmt(dt) : "0.00";
+    html += "<tr>" +
+      "<td>" + r.date + "</td>" +
+      "<td>" + fmt(r.bonus_balance) + "</td>" +
+      "<td>" + fmt(r.bonus_withdraw) + "</td>" +
+      "<td>" + fmt(r.dynamic_in) + "</td>" +
+      "<td>" + fmt(r.static_burn) + "</td>" +
+      "<td>" + dtFmt + "</td>" +
+      "<td>" + fmt(r.stake_balance) + "</td>" +
+      "<td class=\"pos\">" + fmt(r.stake_in) + "</td>" +
+      "<td class=\"neg\">" + fmt(r.stake_out) + "</td>" +
+      "<td class=\"" + (ns >= 0 ? "pos" : "neg") + "\">" + fmt(ns) + "</td>" +
+      "</tr>";
+  }
+  tbody.innerHTML = html;
 }
 
 function updateEvents(allEvents) {
-  const box = document.getElementById('eventStream');
+  var box = document.getElementById("eventStream");
   if (!allEvents || !allEvents.length) {
-    box.innerHTML = '<div style="text-align:center;color:#64748b;padding:10px;">暂无事件</div>';
+    box.innerHTML = "<div style=\"text-align:center;color:#64748b;padding:10px;\">暂无事件</div>";
     return;
   }
-  const items = allEvents.slice(0, 50).map(function(e) {
-    const label = TYPE_LABELS[e.type] || e.type;
-    const ts = e.timestamp ? e.timestamp.slice(11, 19) : '';
-    const txShort = e.tx ? e.tx.slice(0, 10) + '...' : '';
-    return '<div class="event-item">' +
-      '<span><span class="event-type ' + e.type + '">' + label + '</span> #' + e.block + ' ' + ts + ' <span style="color:#475569;font-size:11px;">' + txShort + '</span></span>' +
-      '<span style="font-weight:600;">' + fmt(e.value) + ' ARK</span>' +
-      '</div>';
-  }).join('');
-  box.innerHTML = items;
+  var html = "";
+  var maxItems = Math.min(allEvents.length, 50);
+  for (var i = 0; i < maxItems; i++) {
+    var e = allEvents[i];
+    var label = TYPE_LABELS[e.type] || e.type;
+    var ts = e.timestamp ? e.timestamp.slice(11, 19) : "";
+    var txShort = e.tx ? e.tx.slice(0, 10) + "..." : "";
+    html += "<div class=\"event-item\">" +
+      "<span><span class=\"event-type " + e.type + "\">" + label + "</span> #" + e.block + " " + ts + " <span style=\"color:#475569;font-size:11px;\">" + txShort + "</span></span>" +
+      "<span style=\"font-weight:600;\">" + fmt(e.value) + " ARK</span>" +
+      "</div>";
+  }
+  box.innerHTML = html;
 }
 
-async function loadAll() {
-  const [today, daily, balances, realtime] = await Promise.all([
-    fetchAPI('/api/today'),
-    fetchAPI('/api/daily'),
-    fetchAPI('/api/balances'),
-    fetchAPI('/api/realtime?limit=50')
-  ]);
-
-  updateHeader(today);
-  updateToday(today ? today.data : null);
-  updateBalances(balances);
-  updateDaily(daily ? daily.data : null);
-  updateEvents(realtime ? realtime.data : null);
+function loadAll() {
+  Promise.all([
+    fetchAPI("/api/today"),
+    fetchAPI("/api/daily"),
+    fetchAPI("/api/balances"),
+    fetchAPI("/api/realtime?limit=50")
+  ]).then(function(results) {
+    var today = results[0];
+    var daily = results[1];
+    var balances = results[2];
+    var realtime = results[3];
+    updateHeader(today);
+    updateToday(today ? today.data : null);
+    updateBalances(balances);
+    updateDaily(daily ? daily.data : null);
+    updateEvents(realtime ? realtime.data : null);
+  });
 }
 
-// 每 30 秒刷新
 loadAll();
 setInterval(loadAll, 30000);
 </script>
