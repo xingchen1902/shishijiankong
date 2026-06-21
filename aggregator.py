@@ -82,7 +82,7 @@ class DailyAggregator:
         stake_out = float(row["stake_out"])
         static_burn = float(row["static_burn"])
         dynamic_in = float(row["dynamic_in"])
-        net_stake = stake_in_val - stake_out - bonus_out
+        net_stake = stake_in - stake_out
 
         bonus_bal = get_balance(TOKEN_ARK, BONUS_POOL) / 10**DECIMALS
         stake_bal = get_balance(TOKEN_ARK, STAKE_POOL) / 10**DECIMALS

@@ -70,7 +70,8 @@ td.neg { color: #ef4444; }
 <body>
 <div class="header">
   <div>
-    <h1><span>ARK</span> 实时监控</h1>
+    <img src="/logo.png" style="width:36px;height:36px;border-radius:50%;vertical-align:middle;margin-right:10px;"><h1 style="display:inline-block;vertical-align:middle;"><span>ARK</span> 实时监控</h1>
+    <div style="font-size: 14px; font-weight: 700; color: #f59e0b; margin-top: 4px;">本页面由创亿社区提供</div>
     <div class="header-status" id="headerStatus">连接中...</div>
   </div>
   <div style="display:flex; gap: 12px; align-items: center;">
@@ -128,7 +129,7 @@ td.neg { color: #ef4444; }
 <script>
 var TYPE_LABELS = {
   bonus_withdraw: "奖金池提取", stake_in: "新增质押", stake_out: "赎回",
-  static_burn: "静态销毁", dynamic: "动静态涡轮"
+  static_burn: "静态涡轮", dynamic: "动态涡轮"
 };
 var API_BASE = window.location.origin;
 
@@ -225,10 +226,12 @@ function updateEvents(allEvents) {
   for (var i = 0; i < maxItems; i++) {
     var e = allEvents[i];
     var label = TYPE_LABELS[e.type] || e.type;
-    var ts = e.timestamp ? e.timestamp.slice(11, 19) : "";
-    var txShort = e.tx ? e.tx.slice(0, 10) + "..." : "";
+    var ts = e.timestamp ? new Date(new Date(e.timestamp).getTime() + 8*3600000).toISOString().slice(11, 19) : "";
+    var txLink = e.tx ? "<a href=\"https://bscscan.com/tx/" + e.tx + "\" target=\"_blank\" style=\"color:#60a5fa;text-decoration:none;\">" + e.tx.slice(0, 10) + "...</a>" : "-";
+    var fromShort = e.from_addr ? e.from_addr.slice(0, 6) + "..." + e.from_addr.slice(-4) : "-";
+    var toShort = e.to_addr ? e.to_addr.slice(0, 6) + "..." + e.to_addr.slice(-4) : "-";
     html += "<div class=\"event-item\">" +
-      "<span><span class=\"event-type " + e.type + "\">" + label + "</span> #" + e.block + " " + ts + " <span style=\"color:#475569;font-size:11px;\">" + txShort + "</span></span>" +
+      "<span><span class=\"event-type " + e.type + "\">" + label + "</span> " + ts + " " + txLink + "<br><span style=\"color:#64748b;font-size:10px;\">" + fromShort + " &rarr; " + toShort + "</span></span>" +
       "<span style=\"font-weight:600;\">" + fmt(e.value) + " ARK</span>" +
       "</div>";
   }

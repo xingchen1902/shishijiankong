@@ -133,7 +133,7 @@ class EventParser:
         pad_bonus = "0x" + "0"*24 + BONUS_POOL[2:]
         pad_stake = "0x" + "0"*24 + STAKE_POOL[2:]
         pad_target = "0x" + "0"*24 + TARGET_DYNAMIC[2:]
-        REF_BLOCK = 105500000
+        REF_BLOCK = 105553753
         BASE_TS = 1782057600.0  # 2026-06-22 00:00:00 BJT
         BLOCK_SEC = 0.45
 

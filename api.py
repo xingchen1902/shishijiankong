@@ -2,9 +2,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import os, threading, time, requests
 from datetime import datetime, timezone, timedelta
-from db import get_all_daily, get_conn
+from db import get_all_daily_until_yesterday, get_conn
 from event_parser import get_balance, BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
 from pusher import push_to_feishu, push_to_telegram, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
@@ -12,6 +13,12 @@ BJT = timezone(timedelta(hours=8))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(title="ARK")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+import os.path
+logo_path = os.path.join(BASE_DIR, "logo.png")
+if os.path.exists(logo_path):
+    @app.get("/logo.png")
+    def get_logo():
+        return FileResponse(logo_path, media_type="image/png")
 
 def get_today_data():
     today = datetime.now(BJT).strftime("%Y-%m-%d")
@@ -23,8 +30,8 @@ def get_today_data():
                COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0),
                COUNT(*), MAX(block)
-        FROM events WHERE block >= 105500000
-    """).fetchone()
+        FROM events WHERE timestamp LIKE ?
+    """, (today + "%",)).fetchone()
     conn.close()
     bonus_bal = get_balance(TOKEN_ARK, BONUS_POOL) / 10**DECIMALS
     stake_bal = get_balance(TOKEN_ARK, STAKE_POOL) / 10**DECIMALS
@@ -38,7 +45,7 @@ def get_today_data():
     return {"date":today,"bonus_balance":round(bonus_bal,2),"bonus_withdraw":round(bo,2),
             "static_burn":round(sb,2),"dynamic_in":round(di,2),
             "dynamic_turbo":round(max(di-sb,0),2),"stake_balance":round(stake_bal,2),
-            "stake_in":round(si,2),"stake_out":round(so,2),"net_stake":round(si-so-bo,2),
+            "stake_in":round(si,2),"stake_out":round(so,2),"net_stake":round(si-so,2),
             "event_count":ec,"last_block":lb}
 
 # ---------- Telegram /today 命令轮询 ----------
@@ -81,7 +88,7 @@ def get_today():
 
 @app.get("/api/daily")
 def get_daily():
-    return {"data": get_all_daily(), "count": 0}
+    return {"data": get_all_daily_until_yesterday(), "count": 0}
 
 @app.get("/api/balances")
 def get_balances():

@@ -95,9 +95,12 @@ def upsert_daily_summary(date_str, **kwargs):
     conn.commit()
     conn.close()
 
-def get_all_daily():
+def get_all_daily_until_yesterday():
+    from datetime import datetime, timezone, timedelta
+    BJT = timezone(timedelta(hours=8))
+    today = datetime.now(BJT).strftime('%Y-%m-%d')
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM daily_summary ORDER BY date DESC LIMIT 30").fetchall()
+    rows = conn.execute("SELECT * FROM daily_summary WHERE date < ? ORDER BY date DESC LIMIT 30").fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
