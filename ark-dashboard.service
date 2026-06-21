@@ -1,0 +1,18 @@
+[Unit]
+Description=ARK Dashboard 看板服务
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/bsc-monitor
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/bsc-monitor/venv/bin/uvicorn api:app --host 0.0.0.0 --port 8899
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
