@@ -1,0 +1,12 @@
+.git
+.gitignore
+.dockerignore
+__pycache__
+*.pyc
+node_modules
+.env
+data/*.db
+ark-monitor.service
+ark-dashboard.service
+DEPLOY.md
+README.md
