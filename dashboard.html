@@ -164,16 +164,17 @@ td.neg { color: #ef4444; }
           <th>日期</th>
           <th style="color:#60a5fa;">奖金池余额</th>
           <th style="color:#f59e0b;">奖金池提取</th>
+          <th style="color:#7dd3fc;">动静态涡轮</th>
+          <th style="color:#a78bfa;">静态涡轮</th>
+          <th style="color:#14b8a6;">动态涡轮</th>
+          <th style="color:#94a3b8;">质押池余额</th>
           <th style="color:#22c55e;">新增质押</th>
           <th style="color:#ef4444;">赎回</th>
-          <th style="color:#14b8a6;">净质押</th>
-          <th style="color:#a78bfa;">静态涡轮</th>
-          <th style="color:#7dd3fc;">动静态涡轮</th>
-          <th style="color:#94a3b8;">质押池余额</th>
+          <th style="color:#f97316;">净质押量</th>
         </tr>
       </thead>
       <tbody id="dailyBody">
-        <tr><td colspan="9" style="text-align:center;padding:30px;color:#64748b;">加载中...</td></tr>
+        <tr><td colspan="10" style="text-align:center;padding:30px;color:#64748b;">加载中...</td></tr>
       </tbody>
     </table>
   </div>
@@ -243,6 +244,7 @@ function updateToday(data) {
   document.getElementById('tdNetStake').textContent = fmt(data.net_stake);
   document.getElementById('tdStatic').textContent = fmt(data.static_burn);
   document.getElementById('tdDynamic').textContent = fmt(data.dynamic_in);
+  document.getElementById('tdTurbo').textContent = fmt(data.dynamic_turbo);
 }
 
 function updateBalances(data) {
@@ -254,22 +256,22 @@ function updateBalances(data) {
 function updateDaily(data) {
   const tbody = document.getElementById('dailyBody');
   if (!data || !data.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#64748b;">暂无历史数据</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:#64748b;">暂无历史数据</td></tr>';
     return;
   }
   tbody.innerHTML = data.map(function(r) {
     const ns = Number(r.net_stake);
     return '<tr>' +
       '<td>' + r.date + '</td>' +
-      '<td>' + fmt(r.bonus_balance) + '</td>' +
-      '<td>' + fmt(r.bonus_withdraw) + '</td>' +
-      '<td class="pos">' + fmt(r.stake_in) + '</td>' +
-      '<td class="neg">' + fmt(r.stake_out) + '</td>' +
-      '<td class="' + (ns >= 0 ? 'pos' : 'neg') + '">' + fmt(ns) + '</td>' +
-      '<td>' + fmt(r.static_burn) + '</td>' +
-      '<td>' + fmt(r.dynamic_in) + '</td>' +
-      '<td>' + fmt(r.stake_balance) + '</td>' +
-      '</tr>';
+    '<td>' + fmt(r.bonus_balance) + '</td>' +
+    '<td>' + fmt(r.bonus_withdraw) + '</td>' +
+    '<td>' + fmt(r.dynamic_in) + '</td>' +
+    '<td>' + fmt(r.static_burn) + '</td>' +
+    '<td>' + (r.dynamic_in - r.static_burn > 0 ? fmt(r.dynamic_in - r.static_burn) : '0.00') + '</td>' +
+    '<td>' + fmt(r.stake_balance) + '</td>' +
+    '<td class="pos">' + fmt(r.stake_in) + '</td>' +
+    '<td class="neg">' + fmt(r.stake_out) + '</td>' +
+    '<td class="' + (ns >= 0 ? 'pos' : 'neg') + '">' + fmt(ns) + '</td>' +
   }).join('');
 }
 
