@@ -1,0 +1,18 @@
+[Unit]
+Description=ARK 实时监控服务
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/bsc-monitor
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/bsc-monitor/venv/bin/python3 /opt/bsc-monitor/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
