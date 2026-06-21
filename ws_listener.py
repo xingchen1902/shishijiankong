@@ -57,13 +57,24 @@ class BlockListener:
                     gap = cur - self.last_block
                     if gap > 5:
                         print(f"[追赶] 落后 {gap} 个区块...")
-                    for bn in range(self.last_block+1, cur+1):
-                        blk = self.get_block(bn)
-                        if blk and self.callback:
-                            ts = datetime.fromtimestamp(int(blk["timestamp"],16), BJT)
-                            self.callback(bn, blk, ts)
-                        time.sleep(0.02)
-                    self.last_block = cur
+                    # 循环追赶直到追上最新区块
+                    while self.last_block < cur:
+                        batch_start = self.last_block + 1
+                        batch_end = min(cur, batch_start + 5000 - 1)
+                        print(f"[批量] #{batch_start} -> #{batch_end}")
+                        try:
+                            self.callback(batch_start, batch_end, 1)
+                        except Exception as ex:
+                            import traceback
+                            tb = traceback.format_exc()
+                            print(f"[回调异常] {ex}")
+                            for line in tb.split("\n")[-6:]:
+                                if line.strip():
+                                    print(f"  {line.strip()}")
+                        self.last_block = batch_end
+                        if self.last_block < cur:
+                            cur = self.latest_block()
+                    print(f"[追上] 最新区块 #{cur}")
                 time.sleep(0.45)
             except Exception as e:
                 print(f"[监听] 异常: {e}")

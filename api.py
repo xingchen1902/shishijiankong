@@ -23,8 +23,8 @@ def get_today_data():
                COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0),
                COUNT(*), MAX(block)
-        FROM events WHERE timestamp LIKE ?
-    """, (today + "%",)).fetchone()
+        FROM events WHERE block >= 105500000
+    """).fetchone()
     conn.close()
     bonus_bal = get_balance(TOKEN_ARK, BONUS_POOL) / 10**DECIMALS
     stake_bal = get_balance(TOKEN_ARK, STAKE_POOL) / 10**DECIMALS

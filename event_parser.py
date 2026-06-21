@@ -125,3 +125,74 @@ class EventParser:
 
     def clear(self):
         self.events = []
+
+
+    def parse_block_range(self, from_block, to_block):
+        """批量解析区块范围（用 2 次 RPC）"""
+        results = []
+        pad_bonus = "0x" + "0"*24 + BONUS_POOL[2:]
+        pad_stake = "0x" + "0"*24 + STAKE_POOL[2:]
+        pad_target = "0x" + "0"*24 + TARGET_DYNAMIC[2:]
+        REF_BLOCK = 105500000
+        BASE_TS = 1782057600.0  # 2026-06-22 00:00:00 BJT
+        BLOCK_SEC = 0.45
+
+        CHUNK = 5000
+        for start in range(from_block, to_block + 1, CHUNK):
+            end = min(start + CHUNK - 1, to_block)
+            params_ark = {"fromBlock": hex(start), "toBlock": hex(end),
+                          "address": TOKEN_ARK, "topics": [TRANSFER_TOPIC]}
+            params_gark = {"fromBlock": hex(start), "toBlock": hex(end),
+                           "address": TOKEN_GARK, "topics": [TRANSFER_TOPIC]}
+
+            ark_logs = _rpc(RPC_URLS[0], "eth_getLogs", [params_ark], retries=3)
+            if ark_logs is None:
+                ark_logs = _rpc(RPC_URLS[1], "eth_getLogs", [params_ark], retries=3)
+            if ark_logs is None:
+                ark_logs = []
+
+            gark_logs = _rpc(RPC_URLS[0], "eth_getLogs", [params_gark], retries=3)
+            if gark_logs is None:
+                gark_logs = _rpc(RPC_URLS[1], "eth_getLogs", [params_gark], retries=3)
+            if gark_logs is None:
+                gark_logs = []
+
+            for log in ark_logs:
+                bn = int(log["blockNumber"], 16)
+                tx = log.get("transactionHash", "")
+                fr = "0x" + log["topics"][1][26:]
+                to = "0x" + log["topics"][2][26:]
+                val = int(log["data"], 16) / 10**DECIMALS
+                ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
+
+                if fr == BONUS_POOL:
+                    etype = "bonus_withdraw"
+                elif to == STAKE_POOL:
+                    etype = "stake_in"
+                elif fr == STAKE_POOL:
+                    etype = "stake_out"
+                elif to == TARGET_DYNAMIC:
+                    etype = "dynamic"
+                else:
+                    continue
+
+                results.append({"block": bn, "tx": tx, "type": etype,
+                    "from": fr, "to": to, "value": val, "timestamp": ts})
+
+            for log in gark_logs:
+                to = "0x" + log["topics"][2][26:]
+                if to in (BURN_ADDR, BURN_ADDR2):
+                    bn = int(log["blockNumber"], 16)
+                    tx = log.get("transactionHash", "")
+                    fr = "0x" + log["topics"][1][26:]
+                    val = int(log["data"], 16) / 10**DECIMALS
+                    ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
+                    results.append({"block": bn, "tx": tx, "type": "static_burn",
+                        "from": fr, "to": to, "value": val, "timestamp": ts})
+
+        self.events.extend(results)
+        if results:
+            min_b = min(e["block"] for e in results)
+            max_b = max(e["block"] for e in results)
+            print(f"  [批量] {len(results)} 条事件 #{min_b}~#{max_b} ({from_block}->{to_block})")
+        return results

@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   ark-monitor:
     build: .
@@ -9,7 +7,16 @@ services:
       - "8899:8899"
     volumes:
       - ./data:/app/data
+      - ./docker-entrypoint.sh:/app/docker-entrypoint.sh
       - ./.env:/app/.env
+      - ./event_parser.py:/app/event_parser.py
+      - ./ws_listener.py:/app/ws_listener.py
+      - ./main.py:/app/main.py
+      - ./aggregator.py:/app/aggregator.py
+      - ./api.py:/app/api.py
+      - ./pusher.py:/app/pusher.py
+      - ./dashboard.html:/app/dashboard.html
+      - ./db.py:/app/db.py
     environment:
       - TZ=Asia/Shanghai
 
