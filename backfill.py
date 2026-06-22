@@ -25,6 +25,9 @@ class RPCManager:
                     r = requests.post(url, json={"jsonrpc":"2.0","method":method,"params":params,"id":1}, timeout=20)
                     d = r.json()
                     if "error" in d:
+                        err = d.get("error", {}).get("message", "")
+                        if any(k in err.lower() for k in ["exceed", "limit", "quota", "429", "rate", "too many"]):
+                            break  # 快速切换RPC
                         time.sleep(1)
                         continue
                     return d["result"]
