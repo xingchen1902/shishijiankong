@@ -44,11 +44,11 @@ class DailyAggregator:
 
     def _pending_push(self, date_str):
         now = datetime.now(BJT)
-        if now.hour == 0 and now.minute >= 30:
+        if now.hour == 0 and now.minute >= 5:
             self.compute_and_push(date_str)
         else:
             self._pending_push_date = date_str
-            print(f"  [汇总] {date_str} 等待 00:30 推送")
+            print(f"  [汇总] {date_str} 等待 00:05 推送")
     def compute_and_push(self, date_str):
         # 防重复推送检查（容器重启后同一天不会推两次）
         if hasattr(self, "_pushed_dates") and date_str in self._pushed_dates:
