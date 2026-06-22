@@ -19,7 +19,7 @@ RPC_URLS = [
     "https://bsc.mytokenpocket.vip",
 ]
 
-BATCH_SIZE = 10
+BATCH_SIZE = 20
 
 class RPCManager:
     def __init__(self, urls):
