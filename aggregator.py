@@ -9,7 +9,7 @@
 
 import time, threading
 from datetime import datetime, timezone, timedelta
-from db import get_conn, insert_events_batch, upsert_daily_summary, get_all_daily
+from db import get_conn, insert_events_batch, upsert_daily_summary, get_all_daily_until_yesterday as get_all_daily
 from event_parser import EventParser, get_balance, BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
 from pusher import push_to_feishu, push_to_telegram
 

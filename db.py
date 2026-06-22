@@ -100,7 +100,7 @@ def get_all_daily_until_yesterday():
     BJT = timezone(timedelta(hours=8))
     today = datetime.now(BJT).strftime('%Y-%m-%d')
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM daily_summary WHERE date < ? ORDER BY date DESC LIMIT 30").fetchall()
+    rows = conn.execute("SELECT * FROM daily_summary WHERE date < ? ORDER BY date DESC LIMIT 30", (today,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

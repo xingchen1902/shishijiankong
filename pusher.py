@@ -102,8 +102,9 @@ def push_to_telegram(record):
 净质押：<b>{f(record['net_stake'])}</b> ARK
 
 <b>⚡ 涡轮</b>
-静态（gARK销毁）：{f(record.get('static_burn',0))} ARK
-动静态：{f(record.get('dynamic_in',0))} ARK
+静态涡轮：{f(record.get('static_burn',0))} ARK
+动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
+动静态涡轮：{f(record.get('dynamic_in',0))} ARK
 
 ━━━━━━━━━━━━━━━━━━
 <i>实时监控 · 每日汇总</i>"""
