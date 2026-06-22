@@ -49,6 +49,134 @@ def get_today_data():
             "event_count":ec,"last_block":lb}
 
 # ---------- Telegram /today 命令轮询 ----------
+
+def _send_today(record):
+    """只推 Telegram，不写飞书"""
+    from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    import requests
+    def f(n): return f"{float(n):,.2f}"
+    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+<b>💰 奖金池</b>
+余额：{f(record['bonus_balance'])} ARK
+当日提取：<code>{f(record['bonus_withdraw'])}</code> ARK
+
+<b>🔒 质押池</b>
+余额：{f(record['stake_balance'])} ARK
+新增质押：<code>{f(record['stake_in'])}</code> ARK
+赎回：<code>{f(record['stake_out'])}</code> ARK
+净质押：<b>{f(record['net_stake'])}</b> ARK
+
+<b>⚡ 涡轮</b>
+静态涡轮：{f(record.get('static_burn',0))} ARK
+动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
+动静态涡轮：{f(record.get('dynamic_in',0))} ARK
+
+━━━━━━━━━━━━━━━━━━━━━
+<i>实时监控 · 每日汇总</i>"""
+    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
+              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
+
+
+def _send_today(record):
+    """只推 Telegram，不写飞书"""
+    from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    import requests
+    def f(n): return f"{float(n):,.2f}"
+    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+<b>💰 奖金池</b>
+余额：{f(record['bonus_balance'])} ARK
+当日提取：<code>{f(record['bonus_withdraw'])}</code> ARK
+
+<b>🔒 质押池</b>
+余额：{f(record['stake_balance'])} ARK
+新增质押：<code>{f(record['stake_in'])}</code> ARK
+赎回：<code>{f(record['stake_out'])}</code> ARK
+净质押：<b>{f(record['net_stake'])}</b> ARK
+
+<b>⚡ 涡轮</b>
+静态涡轮：{f(record.get('static_burn',0))} ARK
+动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
+动静态涡轮：{f(record.get('dynamic_in',0))} ARK
+
+━━━━━━━━━━━━━━━━━━━━━
+<i>实时监控 · 每日汇总</i>"""
+    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
+              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
+
+
+def _send_today(record):
+    """只推 Telegram，不写飞书"""
+    from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    import requests
+    def f(n): return f"{float(n):,.2f}"
+    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+<b>💰 奖金池</b>
+余额：{f(record['bonus_balance'])} ARK
+当日提取：<code>{f(record['bonus_withdraw'])}</code> ARK
+
+<b>🔒 质押池</b>
+余额：{f(record['stake_balance'])} ARK
+新增质押：<code>{f(record['stake_in'])}</code> ARK
+赎回：<code>{f(record['stake_out'])}</code> ARK
+净质押：<b>{f(record['net_stake'])}</b> ARK
+
+<b>⚡ 涡轮</b>
+静态涡轮：{f(record.get('static_burn',0))} ARK
+动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
+动静态涡轮：{f(record.get('dynamic_in',0))} ARK
+
+━━━━━━━━━━━━━━━━━━━━━
+<i>实时监控 · 每日汇总</i>"""
+    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
+              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
+
+
+def _send_today(record):
+    """只推 Telegram，不写飞书"""
+    from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    import requests
+    def f(n): return f"{float(n):,.2f}"
+    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
+
+━━━━━━━━━━━━━━━━━━━━━
+
+<b>💰 奖金池</b>
+余额：{f(record['bonus_balance'])} ARK
+当日提取：<code>{f(record['bonus_withdraw'])}</code> ARK
+
+<b>🔒 质押池</b>
+余额：{f(record['stake_balance'])} ARK
+新增质押：<code>{f(record['stake_in'])}</code> ARK
+赎回：<code>{f(record['stake_out'])}</code> ARK
+净质押：<b>{f(record['net_stake'])}</b> ARK
+
+<b>⚡ 涡轮</b>
+静态涡轮：{f(record.get('static_burn',0))} ARK
+动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
+动静态涡轮：{f(record.get('dynamic_in',0))} ARK
+
+━━━━━━━━━━━━━━━━━━━━━
+<i>实时监控 · 每日汇总</i>"""
+    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
+              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
+
 def telegram_poll():
     """后台轮询 Telegram 消息，响应 /today 命令"""
     if not TELEGRAM_BOT_TOKEN:
@@ -74,7 +202,7 @@ def telegram_poll():
                 if chat_id == TELEGRAM_CHAT_ID and text == "/today":
                     print(f"[Telegram Poll] 收到 /today 命令")
                     record = get_today_data()
-                    push_to_telegram(record)
+                    _send_today(record)
         except Exception as e:
             print(f"[Telegram Poll] 异常: {e}")
             time.sleep(5)

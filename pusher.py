@@ -109,9 +109,10 @@ def push_to_telegram(record):
 ━━━━━━━━━━━━━━━━━━
 <i>实时监控 · 每日汇总</i>"""
 
+    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
     r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
-              "disable_web_page_preview": True}, timeout=15)
+              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
     d = r.json()
     if d.get("ok"):
         print(f"  [Telegram] 推送成功 {record['date']}")
