@@ -251,12 +251,14 @@ var trendChart = null;
 
 function updateTrend(data) {
   if (!data || !data.length) return;
-  var labels = [], turbo = [], sb = [], bo = [];
+  var labels = [], turbo = [], sb = [], bo = [], si = [], so = [];
   for (var i = 0; i < data.length; i++) {
     labels.push(data[i].hour + ":00");
     turbo.push(data[i].dynamic_turbo);
     sb.push(data[i].static_burn);
     bo.push(data[i].bonus_withdraw);
+    si.push(data[i].stake_in);
+    so.push(data[i].stake_out);
   }
   var ctx = document.getElementById("trendChart").getContext("2d");
   if (trendChart) trendChart.destroy();
@@ -285,6 +287,22 @@ function updateTrend(data) {
         data: bo,
         borderColor: "#f59e0b",
         backgroundColor: "rgba(245,158,11,0.1)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2
+      }, {
+        label: "新增质押",
+        data: si,
+        borderColor: "#22c55e",
+        backgroundColor: "rgba(34,197,94,0.1)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2
+      }, {
+        label: "赎回",
+        data: so,
+        borderColor: "#ef4444",
+        backgroundColor: "rgba(239,68,68,0.1)",
         fill: true,
         tension: 0.3,
         pointRadius: 2
