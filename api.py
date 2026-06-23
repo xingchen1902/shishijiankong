@@ -48,6 +48,30 @@ def get_today_data():
             "stake_in":round(si,2),"stake_out":round(so,2),"net_stake":round(si-so,2),
             "event_count":ec,"last_block":lb}
 
+
+def get_today_trend():
+    '''按小时统计今日趋势'''
+    today = datetime.now(BJT).strftime("%Y-%m-%d")
+    conn = get_conn()
+    q = '''SELECT CAST(SUBSTR(timestamp, 12, 2) AS INTEGER) as hour,
+        COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0) as bonus_out,
+        COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
+        COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in
+        FROM events WHERE timestamp LIKE ? GROUP BY hour ORDER BY hour'''
+    rows = conn.execute(q, (today + "%",)).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        h = int(r[0])
+        bo = float(r[1]) if r[1] else 0
+        sb = float(r[2]) if r[2] else 0
+        di = float(r[3]) if r[3] else 0
+        result.append({'hour': h, 'bonus_withdraw': round(bo, 2),
+                       'static_burn': round(sb, 2),
+                       'dynamic_turbo': round(max(di - sb, 0), 2)})
+    return result
+
+
 # ---------- Telegram /today 命令轮询 ----------
 
 def _send_today(record):
@@ -213,6 +237,11 @@ threading.Thread(target=telegram_poll, daemon=True).start()
 @app.get("/api/today")
 def get_today():
     return {"data": get_today_data()}
+
+
+@app.get("/api/today-trend")
+def get_today_trend_api():
+    return {"data": get_today_trend()}
 
 @app.get("/api/daily")
 def get_daily():
