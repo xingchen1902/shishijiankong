@@ -34,6 +34,20 @@ class DailyAggregator:
             print("  [存储] 写入", len(self.event_buffer), "条事件")
             self.event_buffer = []
 
+    def _check_yesterday_push(self):
+        now = datetime.now(BJT)
+        if not (now.hour == 0 and now.minute >= 5):
+            return
+        from db import get_conn
+        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        conn = get_conn()
+        exists = conn.execute("SELECT id FROM daily_summary WHERE date=?", (yesterday,)).fetchone()
+        conn.close()
+        if exists:
+            return
+        print(f"[检查] {yesterday} 未汇总，立即推送")
+        self.compute_and_push(yesterday)
+
     def check_date_change(self):
         today = datetime.now(BJT).strftime("%Y-%m-%d")
         if today != self.current_date:
@@ -41,6 +55,7 @@ class DailyAggregator:
             self.current_date = today
             self.flush_events()
             self._pending_push(yesterday)
+        self._check_yesterday_push()
 
     def _pending_push(self, date_str):
         now = datetime.now(BJT)
