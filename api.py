@@ -37,8 +37,9 @@ def get_today_data():
                COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0),
-               COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0),
-               COUNT(*), MAX(block)
+              COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0),
+              COUNT(*), MAX(block)
         FROM events WHERE timestamp LIKE ?
     """, (today + "%",)).fetchone()
     conn.close()
@@ -49,11 +50,12 @@ def get_today_data():
     sb = float(row[3]) if row[3] else 0
     di = float(row[4]) if row[4] else 0
     tr720 = float(row[5]) if row[5] else 0
-    ec = int(row[6]) if row[6] else 0
-    lb = int(row[7]) if row[7] else 0
+    bi = float(row[6]) if row[6] else 0
+    ec = int(row[7]) if row[7] else 0
+    lb = int(row[8]) if row[8] else 0
 
     # 估算当前余额
-    bonus_bal = base_bonus - bo - tr720
+    bonus_bal = base_bonus + bi - bo - tr720
     stake_bal = base_stake + si + tr720 - so
 
     return {"date":today,"bonus_balance":round(max(bonus_bal,0),2),"bonus_withdraw":round(bo,2),
