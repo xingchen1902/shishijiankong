@@ -31,9 +31,10 @@ BLOCK_SEC = 0.45
 
 RPC_URLS = [
     "https://bsc-mainnet.nodereal.io/v1/70208501917a413bab46cb281fc0997f",
-    "https://bsc-mainnet.nodereal.io/v1/1ad9525366ba4b56a0a2b4fef2b2fef7",
-    "https://rpc.ankr.com/bsc/c9251b3e097417a6e558de2dce53c2d276a591fbd89f2ec9f017392936a5e0b5",
-    "https://bsc.mytokenpocket.vip",
+   "https://bsc-mainnet.nodereal.io/v1/1ad9525366ba4b56a0a2b4fef2b2fef7",
+   "https://rpc.ankr.com/bsc/c9251b3e097417a6e558de2dce53c2d276a591fbd89f2ec9f017392936a5e0b5",
+    "https://bsc-mainnet.nodereal.io/v1/5a4982439b1c47b5a3239531be775cc9",
+   "https://bsc.mytokenpocket.vip",
 ]
 
 class RPCManager:
