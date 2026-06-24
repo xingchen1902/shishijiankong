@@ -202,7 +202,7 @@ function updateBalances(data) {
 function updateDaily(data) {
   var tbody = document.getElementById("dailyBody");
   if (!data || !data.length) {
-    tbody.innerHTML = "<tr><td colspan=\"11\" style=\"text-align:center;padding:20px;color:#64748b;\">暂无历史数据</td></tr>";
+    tbody.innerHTML = "<tr><td colspan=\"10\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
     return;
   }
   var html = "";
@@ -345,12 +345,13 @@ function loadAll() {
     updateDaily(daily ? daily.data : null);
     updateEvents(realtime ? realtime.data : null);
     try { updateTrend(trend ? trend.data : null); } catch(e) { console.error("updateTrend error:", e); }
-  });
-}).catch(function(err) {
+  }).catch(function(err) {
 	console.error("loadAll error:", err);
-});
+  });
 }
 
 loadAll();
 setInterval(loadAll, 30000);
-</scrip
+</script>
+</body>
+</html>
