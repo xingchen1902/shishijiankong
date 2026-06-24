@@ -257,7 +257,7 @@ var trendChart = null;
 
 function updateTrend(data) {
   if (!data || !data.length) return;
-  var labels = [], turbo = [], sb = [], bo = [], si = [], so = [];
+  var labels = [], turbo = [], sb = [], bo = [], si = [], so = [], t720 = [];
   for (var i = 0; i < data.length; i++) {
     labels.push(data[i].hour + ":00");
     turbo.push(data[i].dynamic_turbo);
@@ -265,6 +265,7 @@ function updateTrend(data) {
     bo.push(data[i].bonus_withdraw);
     si.push(data[i].stake_in);
     so.push(data[i].stake_out);
+    t720.push(data[i].transfer_720 || 0);
   }
   var ctx = document.getElementById("trendChart").getContext("2d");
   if (trendChart) trendChart.destroy();
@@ -304,11 +305,19 @@ function updateTrend(data) {
         fill: true,
         tension: 0.3,
         pointRadius: 2
-      }, {
+    }, {
         label: "赎回",
         data: so,
         borderColor: "#ef4444",
         backgroundColor: "rgba(239,68,68,0.1)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2
+      }, {
+        label: "转720天",
+        data: t720,
+        borderColor: "#fdba74",
+        backgroundColor: "rgba(253,186,116,0.1)",
         fill: true,
         tension: 0.3,
         pointRadius: 2
