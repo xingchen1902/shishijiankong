@@ -113,7 +113,7 @@ class EventParser:
         self.events = []
         self._balance_cache = {}
 
-    def process_batch(self, from_block, to_block):
+    def process_batch(self, from_block, to_block, query_gark=True):
         """批量 eth_getLogs，提取 ARK/gARK Transfer 事件"""
         results = []
 
@@ -128,13 +128,17 @@ class EventParser:
             results.extend(_classify_logs(ark_logs, from_block, to_block))
 
         # 2. gARK 批量 getLogs（查销毁）
-        gark_logs = _rpc_call("eth_getLogs", [{
+        gark_logs = None
+        if not query_gark:
+            pass
+        else:
+            gark_logs = _rpc_call("eth_getLogs", [{
             "fromBlock": hex(from_block),
             "toBlock": hex(to_block),
             "address": TOKEN_GARK,
             "topics": [TRANSFER_TOPIC]
         }])
-        if gark_logs:
+        if gark_logs and query_gark:
             for log in gark_logs:
                 to = "0x" + log["topics"][2][26:]
                 if to in (BURN_ADDR, BURN_ADDR2):
