@@ -58,6 +58,7 @@ td.neg { color: #ef4444; }
 .event-type.stake_out { background: #422006; color: #fcd34d; }
 .event-type.static_burn { background: #1a052e; color: #d8b4fe; }
 .event-type.dynamic { background: #0c4a6e; color: #7dd3fc; }
+	.event-type.transfer_720 { background: #1c1917; color: #fdba74; }
 .chart-card { background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155; }
 .footer { text-align: center; padding: 20px; color: #475569; font-size: 12px; }
 @media (max-width: 600px) {
@@ -139,7 +140,7 @@ td.neg { color: #ef4444; }
 <script>
 var TYPE_LABELS = {
   bonus_withdraw: "奖金池提取", stake_in: "新增质押", stake_out: "赎回",
-  static_burn: "静态涡轮", dynamic: "动态涡轮"
+  static_burn: "静态涡轮", dynamic: "动态涡轮", transfer_720: "转720天"
 };
 var API_BASE = window.location.origin;
 
@@ -201,7 +202,7 @@ function updateBalances(data) {
 function updateDaily(data) {
   var tbody = document.getElementById("dailyBody");
   if (!data || !data.length) {
-    tbody.innerHTML = "<tr><td colspan=\"10\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
+    tbody.innerHTML = "<tr><td colspan=\"11\" style=\"text-align:center;padding:20px;color:#64748b;\">暂无历史数据</td></tr>";
     return;
   }
   var html = "";
@@ -210,6 +211,8 @@ function updateDaily(data) {
     var ns = Number(r.net_stake);
     var dt = Number(r.dynamic_in) - Number(r.static_burn);
     var dtFmt = dt > 0 ? fmt(dt) : "0.00";
+    var tr720 = Number(r.transfer_720) || 0;
+    var tr720Fmt = tr720 > 0 ? fmt(tr720) : "0.00";
     html += "<tr>" +
       "<td>" + r.date + "</td>" +
       "<td>" + fmt(r.bonus_balance) + "</td>" +
@@ -217,6 +220,7 @@ function updateDaily(data) {
       "<td>" + fmt(r.dynamic_in) + "</td>" +
       "<td>" + fmt(r.static_burn) + "</td>" +
       "<td>" + dtFmt + "</td>" +
+      "<td>" + tr720Fmt + "</td>" +
       "<td>" + fmt(r.stake_balance) + "</td>" +
       "<td class=\"pos\">" + fmt(r.stake_in) + "</td>" +
       "<td class=\"neg\">" + fmt(r.stake_out) + "</td>" +
@@ -342,10 +346,11 @@ function loadAll() {
     updateEvents(realtime ? realtime.data : null);
     updateTrend(trend ? trend.data : null);
   });
+}).catch(function(err) {
+	console.error("loadAll error:", err);
+});
 }
 
 loadAll();
 setInterval(loadAll, 30000);
-</script>
-</body>
-</html>
+</scrip

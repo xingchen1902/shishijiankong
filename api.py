@@ -84,7 +84,6 @@ def get_today_trend():
 
 
 # ---------- Telegram /today 命令轮询 ----------
-
 def _send_today(record):
     """只推 Telegram，不写飞书"""
     from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
@@ -111,103 +110,7 @@ def _send_today(record):
 
 ━━━━━━━━━━━━━━━━━━━━━
 <i>实时监控 · 每日汇总</i>"""
-    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
-    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
-              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
-
-
-def _send_today(record):
-    """只推 Telegram，不写飞书"""
-    from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-    import requests
-    def f(n): return f"{float(n):,.2f}"
-    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-<b>💰 奖金池</b>
-余额：{f(record['bonus_balance'])} ARK
-当日提取：<code>{f(record['bonus_withdraw'])}</code> ARK
-
-<b>🔒 质押池</b>
-余额：{f(record['stake_balance'])} ARK
-新增质押：<code>{f(record['stake_in'])}</code> ARK
-赎回：<code>{f(record['stake_out'])}</code> ARK
-净质押：<b>{f(record['net_stake'])}</b> ARK
-
-<b>⚡ 涡轮</b>
-静态涡轮：{f(record.get('static_burn',0))} ARK
-动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
-动静态涡轮：{f(record.get('dynamic_in',0))} ARK
-
-━━━━━━━━━━━━━━━━━━━━━
-<i>实时监控 · 每日汇总</i>"""
-    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
-    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
-              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
-
-
-def _send_today(record):
-    """只推 Telegram，不写飞书"""
-    from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-    import requests
-    def f(n): return f"{float(n):,.2f}"
-    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-<b>💰 奖金池</b>
-余额：{f(record['bonus_balance'])} ARK
-当日提取：<code>{f(record['bonus_withdraw'])}</code> ARK
-
-<b>🔒 质押池</b>
-余额：{f(record['stake_balance'])} ARK
-新增质押：<code>{f(record['stake_in'])}</code> ARK
-赎回：<code>{f(record['stake_out'])}</code> ARK
-净质押：<b>{f(record['net_stake'])}</b> ARK
-
-<b>⚡ 涡轮</b>
-静态涡轮：{f(record.get('static_burn',0))} ARK
-动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
-动静态涡轮：{f(record.get('dynamic_in',0))} ARK
-
-━━━━━━━━━━━━━━━━━━━━━
-<i>实时监控 · 每日汇总</i>"""
-    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
-    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
-              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
-
-
-def _send_today(record):
-    """只推 Telegram，不写飞书"""
-    from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-    import requests
-    def f(n): return f"{float(n):,.2f}"
-    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
-
-━━━━━━━━━━━━━━━━━━━━━
-
-<b>💰 奖金池</b>
-余额：{f(record['bonus_balance'])} ARK
-当日提取：<code>{f(record['bonus_withdraw'])}</code> ARK
-
-<b>🔒 质押池</b>
-余额：{f(record['stake_balance'])} ARK
-新增质押：<code>{f(record['stake_in'])}</code> ARK
-赎回：<code>{f(record['stake_out'])}</code> ARK
-净质押：<b>{f(record['net_stake'])}</b> ARK
-
-<b>⚡ 涡轮</b>
-静态涡轮：{f(record.get('static_burn',0))} ARK
-动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
-动静态涡轮：{f(record.get('dynamic_in',0))} ARK
-
-━━━━━━━━━━━━━━━━━━━━━
-<i>实时监控 · 每日汇总</i>"""
-    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
+    reply_markup = {"inline_keyboard": [[{"text": "📊查看更多数据", "url": "http://arkcy.duckdns.org/"}]]}
     requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
               "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
@@ -256,7 +159,18 @@ def get_today_trend_api():
 
 @app.get("/api/daily")
 def get_daily():
-    return {"data": get_all_daily_until_yesterday(), "count": 0}
+    conn = get_conn()
+    today = datetime.now(BJT).strftime("%Y-%m-%d")
+    rows = conn.execute("SELECT * FROM daily_summary WHERE date < ? ORDER BY date DESC LIMIT 30", (today,)).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        # 补充 transfer_720（DB 中可能没有此列）
+        tr720 = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE type='transfer_720' AND timestamp LIKE ?", (d['date'] + '%',)).fetchone()[0]
+        d['transfer_720'] = round(float(tr720), 2)
+        result.append(d)
+    conn.close()
+    return {"data": result, "count": len(result)}
 
 @app.get("/api/balances")
 def get_balances():

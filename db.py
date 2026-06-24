@@ -43,6 +43,7 @@ def init_db():
             bonus_withdraw REAL DEFAULT 0,
             static_burn REAL DEFAULT 0,
             dynamic_in REAL DEFAULT 0,
+            transfer_720 REAL DEFAULT 0,
             stake_balance REAL DEFAULT 0,
             stake_in REAL DEFAULT 0,
             stake_out REAL DEFAULT 0,
