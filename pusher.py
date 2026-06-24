@@ -90,7 +90,7 @@ def push_to_telegram(record):
 
     msg = f"""📊 ARK 链上数据 · {record['date']}
 
-━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 
 💰 奖金池
 余额：{f(record['bonus_balance'])} ARK
@@ -110,7 +110,7 @@ def push_to_telegram(record):
 🔄 转720天
 {_fmt_720(record)} ARK
 
-━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 📡 实时监控 · 每日汇总
 🏷 数据由创亿社区提供"""
 

@@ -114,7 +114,7 @@ def _send_today(record):
     def fmt_720(r): return f(round(float(r.get('transfer_720',0)), 2))
     msg = f"""📊 ARK 链上数据 · {record['date']}
 
-━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 
 💰 奖金池
 余额：{f(record['bonus_balance'])} ARK
@@ -134,7 +134,7 @@ def _send_today(record):
 🔄 转720天
 {fmt_720(record)} ARK
 
-━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 📡 实时监控 · 每日汇总
 🏷 数据由创亿社区提供"""
     reply_markup = {"inline_keyboard": [[{"text": "📊查看更多数据", "url": "http://arkcy.duckdns.org/"}]]}
