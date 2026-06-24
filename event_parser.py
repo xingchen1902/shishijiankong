@@ -86,7 +86,9 @@ def _classify_logs(logs, from_block, to_block):
         val = int(log["data"], 16) / 10**DECIMALS
         ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
 
-        if fr == BONUS_POOL:
+        if fr == BONUS_POOL and to == STAKE_POOL:
+            etype = "transfer_720"
+        elif fr == BONUS_POOL:
             etype = "bonus_withdraw"
         elif to == STAKE_POOL:
             etype = "stake_in"

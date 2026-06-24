@@ -29,6 +29,7 @@ def get_today_data():
                COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0),
                COUNT(*), MAX(block)
         FROM events WHERE timestamp LIKE ?
     """, (today + "%",)).fetchone()
@@ -40,11 +41,12 @@ def get_today_data():
     so = float(row[2]) if row[2] else 0
     sb = float(row[3]) if row[3] else 0
     di = float(row[4]) if row[4] else 0
-    ec = int(row[5]) if row[5] else 0
-    lb = int(row[6]) if row[6] else 0
+    tr720 = float(row[5]) if row[5] else 0
+    ec = int(row[6]) if row[6] else 0
+    lb = int(row[7]) if row[7] else 0
     return {"date":today,"bonus_balance":round(bonus_bal,2),"bonus_withdraw":round(bo,2),
             "static_burn":round(sb,2),"dynamic_in":round(di,2),
-            "dynamic_turbo":round(max(di-sb,0),2),"stake_balance":round(stake_bal,2),
+            "dynamic_turbo":round(max(di-sb,0),2),"transfer_720":round(tr720,2),"stake_balance":round(stake_bal,2),
             "stake_in":round(si,2),"stake_out":round(so,2),"net_stake":round(si-so,2),
             "event_count":ec,"last_block":lb}
 
@@ -57,6 +59,7 @@ def get_today_trend():
         COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0) as bonus_out,
         COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
         COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in,
+        COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
         COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in_val,
         COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out_val
         FROM events WHERE timestamp LIKE ? GROUP BY hour ORDER BY hour'''
@@ -68,13 +71,15 @@ def get_today_trend():
         bo = float(r[1]) if r[1] else 0
         sb = float(r[2]) if r[2] else 0
         di = float(r[3]) if r[3] else 0
-        si2 = float(r[4]) if r[4] else 0
-        so2 = float(r[5]) if r[5] else 0
+        t720 = float(r[4]) if r[4] else 0
+        si2 = float(r[5]) if r[5] else 0
+        so2 = float(r[6]) if r[6] else 0
         result.append({'hour': h, 'bonus_withdraw': round(bo, 2),
                        'static_burn': round(sb, 2),
                        'dynamic_turbo': round(max(di - sb, 0), 2),
-                       'stake_in': round(float(r[4]) if r[4] else 0, 2),
-                       'stake_out': round(float(r[5]) if r[5] else 0, 2)})
+                       'transfer_720': round(float(r[4]) if r[4] else 0, 2),
+                       'stake_in': round(float(r[5]) if r[5] else 0, 2),
+                       'stake_out': round(float(r[6]) if r[6] else 0, 2)})
     return result
 
 

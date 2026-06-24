@@ -67,7 +67,8 @@ def process_batch(from_block, to_block):
                 to = "0x" + log["topics"][2][26:]
                 val = int(log["data"], 16) / 10**DECIMALS
                 ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
-                if fr == BONUS_POOL: etype = "bonus_withdraw"
+                if fr == BONUS_POOL and to == STAKE_POOL: etype = "transfer_720"
+                elif fr == BONUS_POOL: etype = "bonus_withdraw"
                 elif to == STAKE_POOL: etype = "stake_in"
                 elif fr == STAKE_POOL: etype = "stake_out"
                 elif to == TARGET_DYNAMIC: etype = "dynamic"

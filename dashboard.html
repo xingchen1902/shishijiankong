@@ -97,6 +97,7 @@ td.neg { color: #ef4444; }
       <div class="today-item warn"><div class="label">奖金池提取</div><div class="value" id="tdBonusWithdraw">--</div></div>
       <div class="today-item info"><div class="label">静态涡轮</div><div class="value" id="tdStatic">--</div></div>
       <div class="today-item purple"><div class="label">动态涡轮</div><div class="value" id="tdTurbo">--</div></div>
+      <div class="today-item info"><div class="label">转720天</div><div class="value" id="tdTransfer720">--</div></div>
       <div class="today-item pos"><div class="label">新增质押</div><div class="value" id="tdStakeIn">--</div></div>
       <div class="today-item neg"><div class="label">赎回</div><div class="value" id="tdStakeOut">--</div></div>
       <div class="today-item" id="tdNetStakeCard"><div class="label">净质押量</div><div class="value" id="tdNetStake">--</div></div>
@@ -117,11 +118,11 @@ td.neg { color: #ef4444; }
     <table>
       <thead>
         <tr>
-          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>动静态涡轮</th><th>静态涡轮</th><th>动态涡轮</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
+          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>动静态涡轮</th><th>静态涡轮</th><th>动态涡轮</th><th>转720天</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
         </tr>
       </thead>
       <tbody id="dailyBody">
-        <tr><td colspan="10" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr>
+        <tr><td colspan="11" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr>
       </tbody>
     </table>
   </div>
@@ -186,6 +187,7 @@ function updateToday(data) {
   document.getElementById("tdStatic").textContent = fmt(data.static_burn);
 
   document.getElementById("tdTurbo").textContent = fmt(data.dynamic_turbo);
+  document.getElementById("tdTransfer720").textContent = fmt(data.transfer_720);
   var nsCard = document.getElementById("tdNetStakeCard");
   if (data.net_stake >= 0) { nsCard.className = "today-item pos"; } else { nsCard.className = "today-item neg"; }
 }

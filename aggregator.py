@@ -82,7 +82,8 @@ class DailyAggregator:
                 COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in,
                 COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out,
                 COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
-                COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in
+                COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in,
+            COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720
             FROM events
             WHERE date(created_at) = ? OR (timestamp IS NOT NULL AND timestamp LIKE ?)
         """, (date_str, date_str + "%")).fetchone()
@@ -97,6 +98,7 @@ class DailyAggregator:
         stake_out = float(row["stake_out"])
         static_burn = float(row["static_burn"])
         dynamic_in = float(row["dynamic_in"])
+        transfer_720 = float(row["transfer_720"]) if row["transfer_720"] else 0
         net_stake = stake_in - stake_out
 
         bonus_bal = get_balance(TOKEN_ARK, BONUS_POOL) / 10**DECIMALS
@@ -108,6 +110,7 @@ class DailyAggregator:
             "bonus_withdraw": round(bonus_out, 2),
             "static_burn": round(static_burn, 2),
             "dynamic_in": round(dynamic_in, 2),
+            "transfer_720": round(transfer_720, 2),
             "stake_balance": round(stake_bal, 2),
             "stake_in": round(stake_in_val, 2),
             "stake_out": round(stake_out, 2),
