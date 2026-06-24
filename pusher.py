@@ -88,26 +88,26 @@ def push_to_telegram(record):
 
     def f(n): return f"{float(n):,.2f}"
 
-    msg = f"""📊 ARK 链上数据 · {record['date']}
+    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
 
 ━━━━━━━━━━━━━━━━
 
-💰 奖金池
+<b>💰 奖金池</b>
 余额：{f(record['bonus_balance'])} ARK
 当日提取：{f(record['bonus_withdraw'])} ARK
 
-🔒 质押池
+<b>🔒 质押池</b>
 余额：{f(record['stake_balance'])} ARK
 新增质押：{f(record['stake_in'])} ARK
 赎回：{f(record['stake_out'])} ARK
 净质押：{f(record['net_stake'])} ARK
 
-⚡ 涡轮
+<b>⚡ 涡轮</b>
 静态涡轮：{f(record.get('static_burn',0))} ARK
 动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
 动静态涡轮：{f(record.get('dynamic_in',0))} ARK
 
-🔄 转720天
+<b>🔄 转720天</b>
 {_fmt_720(record)} ARK
 
 ━━━━━━━━━━━━━━━━
