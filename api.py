@@ -74,7 +74,7 @@ def get_today_trend():
         COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
         COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in_val,
         COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out_val
-        FROM events WHERE timestamp >= ? GROUP BY hour_label ORDER BY hour_label'''
+        FROM events WHERE REPLACE(timestamp, 'T', ' ') >= ? GROUP BY hour_label ORDER BY hour_label'''
     rows = conn.execute(q, (cutoff,)).fetchall()
     conn.close()
     result = []

@@ -85,7 +85,7 @@ def _classify_logs(logs, from_block, to_block):
         fr = "0x" + log["topics"][1][26:]
         to = "0x" + log["topics"][2][26:]
         val = int(log["data"], 16) / 10**DECIMALS
-        ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
+        ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
 
         if fr == BONUS_POOL and to == STAKE_POOL:
             etype = "transfer_720"
@@ -147,7 +147,7 @@ class EventParser:
                     tx = log.get("transactionHash", "")
                     fr = "0x" + log["topics"][1][26:]
                     val = int(log["data"], 16) / 10**DECIMALS
-                    ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
+                    ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
                     results.append({
                         "block": bn, "tx": tx, "type": "static_burn",
                         "from": fr, "to": to, "value": val, "timestamp": ts,
