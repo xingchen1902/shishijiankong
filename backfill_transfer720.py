@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 补齐 transfer_720 漏块事件
+import os
 用法: python3 backfill_transfer720.py [起始区块]
 默认从 106018641 开始到当前最新块
 """
