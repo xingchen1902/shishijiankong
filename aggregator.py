@@ -83,10 +83,11 @@ class DailyAggregator:
                 COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out,
                 COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
                 COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in,
-            COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720
+                COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
+                COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0) as bonus_in
             FROM events
-            WHERE date(created_at) = ? OR (timestamp IS NOT NULL AND timestamp LIKE ?)
-        """, (date_str, date_str + "%")).fetchone()
+            WHERE REPLACE(timestamp, 'T', ' ') LIKE ?
+        """, (date_str + "%",)).fetchone()
         conn.close()
 
         if not row or row["bonus_out"] is None:
@@ -99,10 +100,21 @@ class DailyAggregator:
         static_burn = float(row["static_burn"])
         dynamic_in = float(row["dynamic_in"])
         transfer_720 = float(row["transfer_720"]) if row["transfer_720"] else 0
-        net_stake = stake_in - stake_out
+        bonus_in = float(row["bonus_in"]) if row["bonus_in"] else 0
 
-        bonus_bal = get_balance(TOKEN_ARK, BONUS_POOL) / 10**DECIMALS
-        stake_bal = get_balance(TOKEN_ARK, STAKE_POOL) / 10**DECIMALS
+        # 前一日余额作为基准
+        prev_date = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        from db import get_conn as gc
+        pc = gc()
+        prev = pc.execute("SELECT * FROM daily_summary WHERE date=?", (prev_date,)).fetchone()
+        pc.close()
+        base_bonus = float(prev["bonus_balance"]) if prev else 0
+        base_stake = float(prev["stake_balance"]) if prev else 0
+
+        # 公式推算余额（0 RPC 依赖）
+        bonus_bal = base_bonus + bonus_in - bonus_out - transfer_720
+        stake_bal = base_stake + stake_in_val + transfer_720 - stake_out
+        net_stake = stake_in_val - stake_out
 
         record = {
             "date": date_str,
