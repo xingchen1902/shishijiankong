@@ -199,9 +199,13 @@ function updateBalances(data) {
   document.getElementById("stakeBal").textContent = fmt(data.stake_balance);
 }
 
-function updateDaily(data) {
+function updateDaily(resp) {
   var tbody = document.getElementById("dailyBody");
   var paginationEl = document.getElementById("dailyPagination");
+  var data = resp && resp.data ? resp.data : resp;
+  var total = resp && resp.total ? resp.total : 0;
+  var page = resp && resp.page ? resp.page : 1;
+  var perPage = resp && resp.per_page ? resp.per_page : 10;
   if (!data || !data.length) {
     tbody.innerHTML = "<tr><td colspan=\"10\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
     if (paginationEl) paginationEl.innerHTML = "";
@@ -232,8 +236,8 @@ function updateDaily(data) {
   tbody.innerHTML = html;
   // 翻页控件
   if (paginationEl) {
-    var totalPages = Math.ceil((data.total || 0) / (data.per_page || 10));
-    var curPage = data.page || 1;
+    var totalPages = Math.ceil((total || 0) / (perPage || 10));
+    var curPage = page || 1;
     if (totalPages <= 1) {
       paginationEl.innerHTML = "";
     } else {
@@ -258,7 +262,8 @@ function updateDaily(data) {
       if (curPage < totalPages) {
         pHtml += "<button onclick=\"goToDailyPage(" + (curPage + 1) + ")\" style=\"padding:4px 12px;border:1px solid #334155;border-radius:4px;background:#1e293b;color:#94a3b8;cursor:pointer;\">下一页</button>";
       }
-      pHtml += "<span style=\"color:#64748b;font-size:12px;margin-left:8px;line-height:28px;\">共 " + data.total + " 条 / " + totalPages + " 页</span>";
+      pHtml += "<span style=\"color:#64748b;font-size:12px;margin-left:8px;line-height:28px;\">\u5171 " + total + " \u6761 / " + totalPages + " \u9875</span>";
+      
       paginationEl.innerHTML = pHtml;
     }
   }
@@ -388,7 +393,7 @@ function loadAll() {
     var trend = results[3];
     updateHeader(today);
     updateToday(today ? today.data : null);
-    updateDaily(daily ? daily.data : null);
+    updateDaily(daily);
     updateEvents(realtime ? realtime.data : null);
     try { updateTrend(trend ? trend.data : null); } catch(e) { console.error("updateTrend error:", e); }
   }).catch(function(err) {
