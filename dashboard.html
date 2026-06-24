@@ -201,8 +201,10 @@ function updateBalances(data) {
 
 function updateDaily(data) {
   var tbody = document.getElementById("dailyBody");
+  var paginationEl = document.getElementById("dailyPagination");
   if (!data || !data.length) {
     tbody.innerHTML = "<tr><td colspan=\"10\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
+    if (paginationEl) paginationEl.innerHTML = "";
     return;
   }
   var html = "";
@@ -228,6 +230,38 @@ function updateDaily(data) {
       "</tr>";
   }
   tbody.innerHTML = html;
+  // 翻页控件
+  if (paginationEl) {
+    var totalPages = Math.ceil((data.total || 0) / (data.per_page || 10));
+    var curPage = data.page || 1;
+    if (totalPages <= 1) {
+      paginationEl.innerHTML = "";
+    } else {
+      var pHtml = "";
+      if (curPage > 1) {
+        pHtml += "<button onclick=\"goToDailyPage(" + (curPage - 1) + ")\" style=\"padding:4px 12px;border:1px solid #334155;border-radius:4px;background:#1e293b;color:#94a3b8;cursor:pointer;\">上一页</button>";
+      }
+      var startPage = Math.max(1, curPage - 2);
+      var endPage = Math.min(totalPages, curPage + 2);
+      if (startPage > 1) {
+        pHtml += "<button onclick=\"goToDailyPage(1)\" style=\"padding:4px 10px;border:1px solid #334155;border-radius:4px;background:#1e293b;color:#94a3b8;cursor:pointer;\">1</button>";
+        if (startPage > 2) pHtml += "<span style=\"color:#64748b;padding:0 4px;\">...</span>";
+      }
+      for (var p = startPage; p <= endPage; p++) {
+        var active = p === curPage ? "background:#3b82f6;color:#fff;border-color:#3b82f6;" : "background:#1e293b;color:#94a3b8;border-color:#334155;";
+        pHtml += "<button onclick=\"goToDailyPage(" + p + ")\" style=\"padding:4px 10px;border:1px solid;border-radius:4px;cursor:pointer;" + active + "\">" + p + "</button>";
+      }
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) pHtml += "<span style=\"color:#64748b;padding:0 4px;\">...</span>";
+        pHtml += "<button onclick=\"goToDailyPage(" + totalPages + ")\" style=\"padding:4px 10px;border:1px solid #334155;border-radius:4px;background:#1e293b;color:#94a3b8;cursor:pointer;\">" + totalPages + "</button>";
+      }
+      if (curPage < totalPages) {
+        pHtml += "<button onclick=\"goToDailyPage(" + (curPage + 1) + ")\" style=\"padding:4px 12px;border:1px solid #334155;border-radius:4px;background:#1e293b;color:#94a3b8;cursor:pointer;\">下一页</button>";
+      }
+      pHtml += "<span style=\"color:#64748b;font-size:12px;margin-left:8px;line-height:28px;\">共 " + data.total + " 条 / " + totalPages + " 页</span>";
+      paginationEl.innerHTML = pHtml;
+    }
+  }
 }
 
 function updateEvents(allEvents) {
@@ -335,10 +369,16 @@ function updateTrend(data) {
   });
 }
 
+window.currentDailyPage = 1;
+window.goToDailyPage = function(page) {
+  window.currentDailyPage = page;
+  loadAll();
+};
+
 function loadAll() {
   Promise.all([
     fetchAPI("/api/today"),
-    fetchAPI("/api/daily"),
+    fetchAPI("/api/daily?page=" + (window.currentDailyPage || 1) + "&per_page=10"),
     fetchAPI("/api/realtime?limit=50"),
     fetchAPI("/api/today-trend")
   ]).then(function(results) {

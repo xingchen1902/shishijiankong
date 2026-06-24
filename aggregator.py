@@ -65,12 +65,7 @@ class DailyAggregator:
         self._check_yesterday_push()
 
     def _pending_push(self, date_str):
-        now = datetime.now(BJT)
-        if now.hour == 0 and now.minute >= 5:
-            self.compute_and_push(date_str, do_push=True)
-        else:
-            self.compute_and_push(date_str, do_push=False)
-            self._pending_push_date = date_str
+        self.compute_and_push(date_str, do_push=True)
     def compute_and_push(self, date_str, do_push=True):
         # 防重复推送检查（容器重启后同一天不会推两次）
         if hasattr(self, "_pushed_dates") and date_str in self._pushed_dates:

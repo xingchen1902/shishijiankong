@@ -185,10 +185,14 @@ def get_today_trend_api():
     return {"data": get_today_trend()}
 
 @app.get("/api/daily")
-def get_daily():
+def get_daily(page: int = 1, per_page: int = 10):
     conn = get_conn()
     today = datetime.now(BJT).strftime("%Y-%m-%d")
-    rows = conn.execute("SELECT * FROM daily_summary WHERE date < ? ORDER BY date DESC LIMIT 30", (today,)).fetchall()
+    # 先查总数
+    total_row = conn.execute("SELECT COUNT(*) FROM daily_summary WHERE date < ?", (today,)).fetchone()
+    total = total_row[0] if total_row else 0
+    offset = (page - 1) * per_page
+    rows = conn.execute("SELECT * FROM daily_summary WHERE date < ? ORDER BY date DESC LIMIT ? OFFSET ?", (today, per_page, offset)).fetchall()
     result = []
     for r in rows:
         d = dict(r)
@@ -197,7 +201,7 @@ def get_daily():
         d['transfer_720'] = round(float(tr720), 2)
         result.append(d)
     conn.close()
-    return {"data": result, "count": len(result)}
+    return {"data": result, "count": len(result), "total": total, "page": page, "per_page": per_page}
 
 
 
