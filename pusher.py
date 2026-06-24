@@ -80,6 +80,9 @@ def push_to_feishu(record):
     return d.get("code") == 0
 
 
+def _fmt_720(r):
+    return f"{float(r.get('transfer_720',0)):,.2f}"
+
 def push_to_telegram(record):
     """推送汇总到 Telegram"""
     if not TELEGRAM_BOT_TOKEN:
