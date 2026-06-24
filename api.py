@@ -86,10 +86,14 @@ def get_today_trend():
         t720 = float(r[4]) if r[4] else 0
         si2 = float(r[5]) if r[5] else 0
         so2 = float(r[6]) if r[6] else 0
-        parts = hl.split(" ")
-        date_part = parts[0][5:]
-        hour_part = parts[1]
-        display = date_part.replace("-", "/") + " " + hour_part + ":00"
+        # hour_label = "2026-06-24 13" -> "06/24 13:00"
+        try:
+            parts = hl.split(" ")
+            date_part = parts[0][5:]
+            hour_part = parts[1]
+            display = date_part.replace("-", "/") + " " + hour_part + ":00"
+        except:
+            display = str(hl)
         result.append({'hour': display, 'bonus_withdraw': round(bo, 2),
                        'static_burn': round(sb, 2),
                        'dynamic_turbo': round(max(di - sb, 0), 2),
