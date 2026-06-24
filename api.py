@@ -64,29 +64,33 @@ def get_today_data():
 
 
 def get_today_trend():
-    '''按小时统计今日趋势'''
-    today = datetime.now(BJT).strftime("%Y-%m-%d")
+    '''最近24小时逐小时趋势'''
+    cutoff = (datetime.now(BJT) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     conn = get_conn()
-    q = '''SELECT CAST(SUBSTR(timestamp, 12, 2) AS INTEGER) as hour,
+    q = '''SELECT SUBSTR(timestamp, 1, 13) as hour_label,
         COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0) as bonus_out,
         COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
         COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in,
         COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
         COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in_val,
         COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out_val
-        FROM events WHERE timestamp LIKE ? GROUP BY hour ORDER BY hour'''
-    rows = conn.execute(q, (today + "%",)).fetchall()
+        FROM events WHERE timestamp >= ? GROUP BY hour_label ORDER BY hour_label'''
+    rows = conn.execute(q, (cutoff,)).fetchall()
     conn.close()
     result = []
     for r in rows:
-        h = int(r[0])
+        hl = r[0]
         bo = float(r[1]) if r[1] else 0
         sb = float(r[2]) if r[2] else 0
         di = float(r[3]) if r[3] else 0
         t720 = float(r[4]) if r[4] else 0
         si2 = float(r[5]) if r[5] else 0
         so2 = float(r[6]) if r[6] else 0
-        result.append({'hour': h, 'bonus_withdraw': round(bo, 2),
+        parts = hl.split(" ")
+        date_part = parts[0][5:]
+        hour_part = parts[1]
+        display = date_part.replace("-", "/") + " " + hour_part + ":00"
+        result.append({'hour': display, 'bonus_withdraw': round(bo, 2),
                        'static_burn': round(sb, 2),
                        'dynamic_turbo': round(max(di - sb, 0), 2),
                        'transfer_720': round(float(r[4]) if r[4] else 0, 2),

@@ -107,7 +107,7 @@ td.neg { color: #ef4444; }
 
   <!-- 分时走势图 -->
   <div class="chart-card">
-    <div class="today-title">📈 今日分时走势</div>
+    <div class="today-title">📈 最近24小时走势</div>
     <div style="position:relative;height:280px;">
       <canvas id="trendChart"></canvas>
     </div>
@@ -259,7 +259,7 @@ function updateTrend(data) {
   if (!data || !data.length) return;
   var labels = [], turbo = [], sb = [], bo = [], si = [], so = [], t720 = [];
   for (var i = 0; i < data.length; i++) {
-    labels.push(data[i].hour + ":00");
+    labels.push(data[i].hour);
     turbo.push(data[i].dynamic_turbo);
     sb.push(data[i].static_burn);
     bo.push(data[i].bonus_withdraw);
