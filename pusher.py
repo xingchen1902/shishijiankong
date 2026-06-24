@@ -88,30 +88,31 @@ def push_to_telegram(record):
 
     def f(n): return f"{float(n):,.2f}"
 
-    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
+    msg = f"""📊 ARK 链上数据 · {record['date']}
 
-━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━
 
-<b>💰 奖金池</b>
+💰 奖金池
 余额：{f(record['bonus_balance'])} ARK
-当日提取：<code>{f(record['bonus_withdraw'])}</code> ARK
+当日提取：{f(record['bonus_withdraw'])} ARK
 
-<b>🔒 质押池</b>
+🔒 质押池
 余额：{f(record['stake_balance'])} ARK
-新增质押：<code>{f(record['stake_in'])}</code> ARK
-赎回：<code>{f(record['stake_out'])}</code> ARK
-净质押：<b>{f(record['net_stake'])}</b> ARK
+新增质押：{f(record['stake_in'])} ARK
+赎回：{f(record['stake_out'])} ARK
+净质押：{f(record['net_stake'])} ARK
 
-<b>⚡ 涡轮</b>
+⚡ 涡轮
 静态涡轮：{f(record.get('static_burn',0))} ARK
 动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
 动静态涡轮：{f(record.get('dynamic_in',0))} ARK
 
-<b>🔄 转720天</b>
+🔄 转720天
 {_fmt_720(record)} ARK
 
-━━━━━━━━━━━━━━━━━━
-<i>实时监控 · 每日汇总</i>"""
+━━━━━━━━━━━━━━━━━━━━━
+📡 实时监控 · 每日汇总
+🏷 数据由创亿社区提供"""
 
     reply_markup = {"inline_keyboard": [[{"text": "📊查看更多数据", "url": "http://arkcy.duckdns.org/"}]]}
     r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
