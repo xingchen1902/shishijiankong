@@ -106,10 +106,13 @@ def push_to_telegram(record):
 动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
 动静态涡轮：{f(record.get('dynamic_in',0))} ARK
 
+<b>🔄 转720天</b>
+{_fmt_720(record)} ARK
+
 ━━━━━━━━━━━━━━━━━━
 <i>实时监控 · 每日汇总</i>"""
 
-    reply_markup = {"inline_keyboard": [[{"text": "📊 打开看板", "url": "http://arkcy.duckdns.org/"}]]}
+    reply_markup = {"inline_keyboard": [[{"text": "📊查看更多数据", "url": "http://arkcy.duckdns.org/"}]]}
     r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
               "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)

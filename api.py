@@ -89,6 +89,7 @@ def _send_today(record):
     from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
     import requests
     def f(n): return f"{float(n):,.2f}"
+    def fmt_720(r): return f(round(float(r.get('transfer_720',0)), 2))
     msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
 
 ━━━━━━━━━━━━━━━━━━━━━
@@ -107,6 +108,9 @@ def _send_today(record):
 静态涡轮：{f(record.get('static_burn',0))} ARK
 动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
 动静态涡轮：{f(record.get('dynamic_in',0))} ARK
+
+<b>🔄 转720天</b>
+{fmt_720(record)} ARK
 
 ━━━━━━━━━━━━━━━━━━━━━
 <i>实时监控 · 每日汇总</i>"""
