@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 import os, threading, time, requests
 from datetime import datetime, timezone, timedelta
 from db import get_all_daily_until_yesterday, get_conn
-from event_parser import get_balance, BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
+from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
 from pusher import push_to_feishu, push_to_telegram, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 BJT = timezone(timedelta(hours=8))
@@ -22,7 +22,15 @@ if os.path.exists(logo_path):
 
 def get_today_data():
     today = datetime.now(BJT).strftime("%Y-%m-%d")
+    yesterday = (datetime.now(BJT) - timedelta(days=1)).strftime("%Y-%m-%d")
     conn = get_conn()
+
+    # 取昨日汇总作为余额基准
+    yd = conn.execute("SELECT * FROM daily_summary WHERE date=?", (yesterday,)).fetchone()
+    base_bonus = float(yd["bonus_balance"]) if yd else 0
+    base_stake = float(yd["stake_balance"]) if yd else 0
+
+    # 取今日事件汇总
     row = conn.execute("""
         SELECT COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0),
@@ -34,8 +42,7 @@ def get_today_data():
         FROM events WHERE timestamp LIKE ?
     """, (today + "%",)).fetchone()
     conn.close()
-    bonus_bal = get_balance(TOKEN_ARK, BONUS_POOL) / 10**DECIMALS
-    stake_bal = get_balance(TOKEN_ARK, STAKE_POOL) / 10**DECIMALS
+
     bo = float(row[0]) if row[0] else 0
     si = float(row[1]) if row[1] else 0
     so = float(row[2]) if row[2] else 0
@@ -44,9 +51,14 @@ def get_today_data():
     tr720 = float(row[5]) if row[5] else 0
     ec = int(row[6]) if row[6] else 0
     lb = int(row[7]) if row[7] else 0
-    return {"date":today,"bonus_balance":round(bonus_bal,2),"bonus_withdraw":round(bo,2),
+
+    # 估算当前余额
+    bonus_bal = base_bonus - bo - tr720
+    stake_bal = base_stake + si + tr720 - so
+
+    return {"date":today,"bonus_balance":round(max(bonus_bal,0),2),"bonus_withdraw":round(bo,2),
             "static_burn":round(sb,2),"dynamic_in":round(di,2),
-            "dynamic_turbo":round(max(di-sb,0),2),"transfer_720":round(tr720,2),"stake_balance":round(stake_bal,2),
+            "dynamic_turbo":round(max(di-sb,0),2),"transfer_720":round(tr720,2),"stake_balance":round(max(stake_bal,0),2),
             "stake_in":round(si,2),"stake_out":round(so,2),"net_stake":round(si-so,2),
             "event_count":ec,"last_block":lb}
 
@@ -176,10 +188,7 @@ def get_daily():
     conn.close()
     return {"data": result, "count": len(result)}
 
-@app.get("/api/balances")
-def get_balances():
-    return {"bonus_balance":round(get_balance(TOKEN_ARK,BONUS_POOL)/10**DECIMALS,2),
-            "stake_balance":round(get_balance(TOKEN_ARK,STAKE_POOL)/10**DECIMALS,2)}
+
 
 @app.get("/api/realtime")
 def get_realtime(limit:int=100):

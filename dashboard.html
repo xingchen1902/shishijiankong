@@ -330,18 +330,15 @@ function loadAll() {
   Promise.all([
     fetchAPI("/api/today"),
     fetchAPI("/api/daily"),
-    fetchAPI("/api/balances"),
     fetchAPI("/api/realtime?limit=50"),
     fetchAPI("/api/today-trend")
   ]).then(function(results) {
     var today = results[0];
     var daily = results[1];
-    var balances = results[2];
-    var realtime = results[3];
-    var trend = results[4];
+    var realtime = results[2];
+    var trend = results[3];
     updateHeader(today);
     updateToday(today ? today.data : null);
-    updateBalances(balances);
     updateDaily(daily ? daily.data : null);
     updateEvents(realtime ? realtime.data : null);
     try { updateTrend(trend ? trend.data : null); } catch(e) { console.error("updateTrend error:", e); }
