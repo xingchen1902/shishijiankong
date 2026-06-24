@@ -344,7 +344,7 @@ function loadAll() {
     updateBalances(balances);
     updateDaily(daily ? daily.data : null);
     updateEvents(realtime ? realtime.data : null);
-    updateTrend(trend ? trend.data : null);
+    try { updateTrend(trend ? trend.data : null); } catch(e) { console.error("updateTrend error:", e); }
   });
 }).catch(function(err) {
 	console.error("loadAll error:", err);
