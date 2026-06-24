@@ -38,15 +38,22 @@ class DailyAggregator:
         now = datetime.now(BJT)
         if not (now.hour == 0 and now.minute >= 5):
             return
+        # 如果有等待推送的日期，现在就推
+        pd = getattr(self, "_pending_push_date", None)
+        if pd:
+            self._pending_push_date = None
+            print(f"  [汇总] {pd} 开始推送")
+            self.compute_and_push(pd, do_push=True)
+            return
+        # 兜底：如果昨天的汇总完全没写过
         from db import get_conn
         yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
         conn = get_conn()
         exists = conn.execute("SELECT id FROM daily_summary WHERE date=?", (yesterday,)).fetchone()
         conn.close()
-        if exists:
-            return
-        print(f"[检查] {yesterday} 未汇总，立即推送")
-        self.compute_and_push(yesterday)
+        if not exists:
+            print(f"[检查] {yesterday} 未汇总，立即推送")
+            self.compute_and_push(yesterday)
 
     def check_date_change(self):
         today = datetime.now(BJT).strftime("%Y-%m-%d")
@@ -58,8 +65,13 @@ class DailyAggregator:
         self._check_yesterday_push()
 
     def _pending_push(self, date_str):
-        self.compute_and_push(date_str)
-    def compute_and_push(self, date_str):
+        now = datetime.now(BJT)
+        if now.hour == 0 and now.minute >= 5:
+            self.compute_and_push(date_str, do_push=True)
+        else:
+            self.compute_and_push(date_str, do_push=False)
+            self._pending_push_date = date_str
+    def compute_and_push(self, date_str, do_push=True):
         # 防重复推送检查（容器重启后同一天不会推两次）
         if hasattr(self, "_pushed_dates") and date_str in self._pushed_dates:
             print(f"  [汇总] {date_str} 已推送过，跳过")
@@ -135,9 +147,10 @@ class DailyAggregator:
 
         upsert_daily_summary(date_str, **{k: v for k, v in record.items() if k != "date"})
 
-        push_to_feishu(record)
-        push_to_telegram(record)
-        if not hasattr(self, "_pushed_dates"):
-            self._pushed_dates = set()
-        self._pushed_dates.add(date_str)
+        if do_push:
+            push_to_feishu(record)
+            push_to_telegram(record)
+            if not hasattr(self, "_pushed_dates"):
+                self._pushed_dates = set()
+            self._pushed_dates.add(date_str)
         print("=" * 50)
