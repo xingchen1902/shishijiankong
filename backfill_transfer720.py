@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
-"""
-补齐 transfer_720 漏块事件
-import os
-用法: python3 backfill_transfer720.py [起始区块]
-默认从 106018641 开始到当前最新块
-"""
-import sqlite3, time, requests, sys
+"""补齐 transfer_720 漏块事件"""
+import os, sys, time, sqlite3, requests
 from datetime import datetime, timezone, timedelta
 
 BJT = timezone(timedelta(hours=8))
@@ -25,8 +20,6 @@ STAKE_POOL = "0xd1D95292F450b665566df4c4255615eF4Ed9BD0B".lower()
 REF_BLOCK = 105553753
 BASE_TS = 1782057600.0
 BLOCK_SEC = 0.45
-
-DB_PATH = "/app/data/ark_monitor.db"
 
 class RPCManager:
     def __init__(self, urls):
@@ -51,9 +44,10 @@ class RPCManager:
                     time.sleep(1)
                     continue
             self.index = (self.index + 1) % len(self.urls)
-        raise Exception("RPC 均不可用")
+        raise Exception("RPC all failed")
 
 _rpc = RPCManager(RPC_URLS)
+DB_PATH = "/app/data/ark_monitor.db"
 
 def get_conn():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -62,17 +56,13 @@ def get_conn():
     return conn
 
 def get_existing_tx_set(conn):
-    """获取已有 events 的 tx hash 集合，用于去重"""
     rows = conn.execute("SELECT DISTINCT tx FROM events WHERE type='transfer_720'").fetchall()
     return set(r["tx"] for r in rows)
 
 def backfill(from_block, to_block, existing_txs):
-    """批量查 eth_getLogs，补齐 transfer_720 事件"""
     total_new = 0
-    total_dup = 0
-    total_empty = 0
-    step = 200  # 每批 200 块
-
+    step = 200
+    scanned = 0
     for start in range(from_block, to_block + 1, step):
         end = min(start + step - 1, to_block)
         try:
@@ -83,17 +73,12 @@ def backfill(from_block, to_block, existing_txs):
                 "topics": [TRANSFER_TOPIC]
             }])
         except Exception as e:
-            print(f"  [失败] #{start}~#{end}: {e}")
+            print(f"  [FAIL] #{start}~#{end}: {e}")
             time.sleep(2)
             continue
-
+        scanned += end - start + 1
         if not logs:
-            total_empty += 1
-            if total_empty % 50 == 0:
-                print(f"  [扫描] #{start}~#{end} 无事件 (已扫 {end-from_block+1} 块)")
-            time.sleep(0.1)
             continue
-
         events = []
         for log in logs:
             fr = "0x" + log["topics"][1][26:]
@@ -101,14 +86,12 @@ def backfill(from_block, to_block, existing_txs):
             if fr == BONUS_POOL and to == STAKE_POOL:
                 tx = log.get("transactionHash", "")
                 if tx in existing_txs:
-                    total_dup += 1
                     continue
                 bn = int(log["blockNumber"], 16)
                 val = int(log["data"], 16) / 10**DECIMALS
                 ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
                 events.append((bn, tx, "transfer_720", fr, to, val, ts))
                 existing_txs.add(tx)
-
         if events:
             conn = get_conn()
             conn.executemany(
@@ -118,50 +101,37 @@ def backfill(from_block, to_block, existing_txs):
             conn.commit()
             conn.close()
             total_new += len(events)
-            print(f"  [补齐] #{start}~#{end} 新增 {len(events)} 条 (累计 {total_new})")
-        else:
-            total_empty += 1
-
+            print(f"  [OK] #{start}~#{end} +{len(events)} (total {total_new})")
         time.sleep(0.15)
-
-    return total_new, total_dup
+    return total_new, scanned
 
 def main():
-    import os
-    # 本地调试时使用相对路径
     global DB_PATH
     if not os.path.exists(DB_PATH) and os.path.exists("data/ark_monitor.db"):
         DB_PATH = "data/ark_monitor.db"
 
     start_block = int(sys.argv[1]) if len(sys.argv) > 1 else 106018641
-
-    # 获取当前安全区块
     try:
         latest = int(_rpc.call("eth_blockNumber", []), 16)
         safe = latest - 1
     except:
-        print("无法获取当前区块")
+        print("Failed to get current block")
         return
 
-    print(f"起始区块: {start_block}")
-    print(f"最新安全区块: {safe}")
-    print(f"需扫描: {safe - start_block + 1} 个区块")
+    print(f"Start: {start_block}")
+    print(f"End: {safe}")
+    print(f"Blocks: {safe - start_block + 1}")
 
     conn = get_conn()
-    existing_txs = get_existing_tx_set(conn)
+    existing = get_existing_tx_set(conn)
     conn.close()
-    print(f"已有 transfer_720 事件: {len(existing_txs)} 条")
+    print(f"Existing transfer_720: {len(existing)}")
 
-    print("\n开始补齐...")
+    print("\nBackfilling...")
     t0 = time.time()
-    new_count, dup_count = backfill(start_block, safe, existing_txs)
+    new_count, scanned = backfill(start_block, safe, existing)
     elapsed = time.time() - t0
-
-    print(f"\n=== 补齐完成 ===")
-    print(f"新增: {new_count} 条")
-    print(f"跳过(重复): {dup_count} 条")
-    print(f"耗时: {elapsed:.1f}秒")
-    print(f"当前时间: {datetime.now(BJT).isoformat()}")
+    print(f"Done: +{new_count} events, {scanned} blocks, {elapsed:.0f}s")
 
 if __name__ == "__main__":
     main()
