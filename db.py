@@ -36,6 +36,20 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
         CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
 
+        CREATE TABLE IF NOT EXISTS raw_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            block INTEGER NOT NULL,
+            tx TEXT NOT NULL,
+            from_addr TEXT,
+            to_addr TEXT,
+            value REAL NOT NULL,
+            timestamp TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_raw_block ON raw_logs(block);
+        CREATE INDEX IF NOT EXISTS idx_raw_from ON raw_logs(from_addr);
+        CREATE INDEX IF NOT EXISTS idx_raw_to ON raw_logs(to_addr);
+
         CREATE TABLE IF NOT EXISTS daily_summary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL UNIQUE,
@@ -51,6 +65,18 @@ def init_db():
             updated_at TEXT DEFAULT (datetime('now'))
         );
     """)
+    conn.commit()
+    conn.close()
+
+def insert_raw_logs_batch(records):
+    if not records: return
+    conn = get_conn()
+    data = [(r['block'], r['tx'], r.get('from',''), r.get('to',''),
+             r['value'], r.get('timestamp','')) for r in records]
+    conn.executemany(
+        'INSERT INTO raw_logs (block, tx, from_addr, to_addr, value, timestamp) VALUES (?,?,?,?,?,?)',
+        data
+    )
     conn.commit()
     conn.close()
 

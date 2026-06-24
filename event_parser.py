@@ -77,8 +77,9 @@ def get_balance(token, address, block_hex="latest"):
     return int(r, 16) if r else 0
 
 def _classify_logs(logs, from_block, to_block):
-    """解析 ARK logs，按地址分类"""
+    """解析 ARK logs，按地址分类，返回 (已分类, 未分类原始log)"""
     results = []
+    raw_records = []
     for log in logs:
         bn = int(log["blockNumber"], 16)
         tx = log.get("transactionHash", "")
@@ -100,13 +101,17 @@ def _classify_logs(logs, from_block, to_block):
         elif to == TARGET_DYNAMIC:
             etype = "dynamic"
         else:
+            raw_records.append({
+                "block": bn, "tx": tx,
+                "from": fr, "to": to, "value": val, "timestamp": ts,
+            })
             continue
 
         results.append({
             "block": bn, "tx": tx, "type": etype,
             "from": fr, "to": to, "value": val, "timestamp": ts,
         })
-    return results
+    return results, raw_records
 
 
 class EventParser:
@@ -128,7 +133,11 @@ class EventParser:
             "topics": [TRANSFER_TOPIC]
         }])
         if ark_logs:
-            results.extend(_classify_logs(ark_logs, from_block, to_block))
+            classified, raw = _classify_logs(ark_logs, from_block, to_block)
+            results.extend(classified)
+            if raw:
+                from db import insert_raw_logs_batch
+                insert_raw_logs_batch(raw)
 
         # 2. gARK 批量 getLogs（查销毁）
         gark_logs = None
