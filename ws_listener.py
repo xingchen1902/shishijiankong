@@ -35,7 +35,7 @@ class RPCManager:
             url = self.urls[self.index]
             for _ in range(retries):
                 try:
-                    r = requests.post(url, json={"jsonrpc":"2.0","method":method,"params":params,"id":1}, timeout=10)
+                    r = requests.post(url, json={"jsonrpc":"2.0","method":method,"params":params,"id":1}, timeout=5)
                     d = r.json()
                     if "error" in d:
                         err = d.get("error", {}).get("message", "")
