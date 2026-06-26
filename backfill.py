@@ -8,6 +8,10 @@ BJT = timezone(timedelta(hours=8))
 RPC_URLS = [
     "https://bsc-mainnet.nodereal.io/v1/70208501917a413bab46cb281fc0997f",
     "https://bsc-mainnet.nodereal.io/v1/1ad9525366ba4b56a0a2b4fef2b2fef7",
+    "https://bsc-mainnet.nodereal.io/v1/5a4982439b1c47b5a3239531be775cc9",
+    "https://bsc-mainnet.nodereal.io/v1/d96a4e697b0541628f61ae6089a97874",
+    "https://bsc-mainnet.nodereal.io/v1/91687987baa549e4a48c18cbbf62a080",
+    "https://bsc-mainnet.nodereal.io/v1/3f6c4ec20c324cd9a489196a2937c368",
     "https://rpc.ankr.com/bsc/c9251b3e097417a6e558de2dce53c2d276a591fbd89f2ec9f017392936a5e0b5",
     "https://bsc.mytokenpocket.vip",
 ]

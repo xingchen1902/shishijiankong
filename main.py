@@ -9,6 +9,7 @@ import os, sys, time, threading
 from datetime import datetime, timezone, timedelta
 
 from db import init_db
+from db import get_conn
 from ws_listener import BlockListener
 from event_parser import EventParser
 from aggregator import DailyAggregator
@@ -38,7 +39,16 @@ def main():
     listener = BlockListener(on_batch_callback=on_batch)
 
     try:
-        start = int(sys.argv[1]) if len(sys.argv) > 1 else 0
+        if len(sys.argv) > 1:
+            start = int(sys.argv[1])
+        else:
+            # 默认从 DB 最大区块继续（避免重启时错过衔接区块）
+            conn = get_conn()
+            db_max = conn.execute("SELECT MAX(block) FROM events").fetchone()[0]
+            conn.close()
+            start = db_max if db_max else 0
+            if start:
+                print(f"[启动] 从 DB 最大区块 #{start} 继续监听")
         listener.start(start_block=start)
     except KeyboardInterrupt:
         aggregator.flush_events()
