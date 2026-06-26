@@ -30,23 +30,22 @@ class RPCManager:
         self.urls = urls
         self.index = 0
 
-    def call(self, method, params, retries=3):
+    def call(self, method, params, retries=1):
         for _ in range(len(self.urls)):
             url = self.urls[self.index]
             for _ in range(retries):
                 try:
-                    r = requests.post(url, json={"jsonrpc":"2.0","method":method,"params":params,"id":1}, timeout=20)
+                    r = requests.post(url, json={"jsonrpc":"2.0","method":method,"params":params,"id":1}, timeout=10)
                     d = r.json()
                     if "error" in d:
                         err = d.get("error", {}).get("message", "")
                         if any(k in err.lower() for k in ["exceed", "limit", "quota", "429", "rate", "too many"]):
-                            break  # 快速切换RPC
+                            break
                         time.sleep(1)
                         continue
                     return d["result"]
                 except:
-                    time.sleep(1)
-                    continue
+                    break  # 超时/断连 → 立即切换
             self.index = (self.index + 1) % len(self.urls)
         raise Exception("RPC 均不可用")
 
