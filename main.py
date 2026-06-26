@@ -26,11 +26,8 @@ def main():
     aggregator = DailyAggregator()
     parser = EventParser()
 
-    gark_counter = 0
     def on_batch(from_block, to_block):
-        nonlocal gark_counter
-        gark_counter += 1
-        query_gark = (gark_counter % 10 == 0)
+        query_gark = True
         events = parser.process_batch(from_block, to_block, query_gark=query_gark)
         if events:
             aggregator.add_events(events)
