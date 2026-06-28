@@ -48,6 +48,11 @@ class RPCManager:
     def call(self, method, params, retries=1):
         for _ in range(len(self.urls)):
             url = self.urls[self.index]
+            name = url.split("/")[2].split(".")[0]
+            if "nodereal" in url:
+                key = url.split("/v1/")[-1][:8] if "/v1/" in url else "???"
+                name = f"NodeReal-{key}"
+            print(f"  [RPC] {name} (#{method})")
             for _ in range(retries):
                 try:
                     r = requests.post(url, json={"jsonrpc":"2.0","method":method,"params":params,"id":1}, timeout=5)
