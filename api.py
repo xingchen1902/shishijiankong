@@ -28,6 +28,7 @@ if os.path.exists(logo_path):
 def get_today_data():
     today = datetime.now(BJT).strftime("%Y-%m-%d")
     yesterday = (datetime.now(BJT) - timedelta(days=1)).strftime("%Y-%m-%d")
+    yesterday_late = yesterday + " 23:30:00"
     conn = get_conn()
 
     # 取昨日汇总作为余额基准
@@ -45,8 +46,10 @@ def get_today_data():
               COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0),
               COUNT(*), MAX(block)
-        FROM events WHERE timestamp LIKE ?
-    """, (today + "%",)).fetchone()
+        FROM events
+        WHERE REPLACE(timestamp, 'T', ' ') LIKE ?
+           OR (datetime(created_at, '+8 hours') LIKE ? AND REPLACE(timestamp, 'T', ' ') >= ?)
+    """, (today + "%", today + "%", yesterday_late)).fetchone()
     conn.close()
 
     bo = float(row[0]) if row[0] else 0

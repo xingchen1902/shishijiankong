@@ -47,6 +47,7 @@ class RPCManager:
 
 RPC = RPCManager(RPC_URLS)
 
+
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()
 TOKEN_GARK = "0x911f12D137D74E5917877f87cf8A8bB2FDde557f".lower()
@@ -61,6 +62,29 @@ BASE_TS = 1782057600.0
 BLOCK_SEC = 0.45
 BATCH_SIZE = 20
 
+_time_ref_block = REF_BLOCK
+_time_ref_ts = BASE_TS
+_time_ref_updated = 0
+
+def refresh_time_ref(force=False):
+    global _time_ref_block, _time_ref_ts, _time_ref_updated
+    now = time.time()
+    if not force and now - _time_ref_updated < 3600:
+        return
+    try:
+        latest = RPC.call("eth_blockNumber", [], retries=1)
+        _time_ref_block = int(latest, 16)
+        _time_ref_ts = now
+        _time_ref_updated = now
+        print(f"[时间校准] ref_block=#{_time_ref_block}")
+    except Exception as e:
+        print(f"[时间校准] 失败: {e}")
+
+def estimate_block_time(block_number):
+    refresh_time_ref()
+    return datetime.fromtimestamp(_time_ref_ts + (block_number - _time_ref_block) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def process_batch(from_block, to_block):
     results = []
     try:
@@ -74,7 +98,7 @@ def process_batch(from_block, to_block):
                 fr = "0x" + log["topics"][1][26:]
                 to = "0x" + log["topics"][2][26:]
                 val = int(log["data"], 16) / 10**DECIMALS
-                ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
+                ts = estimate_block_time(bn)
                 if fr == BONUS_POOL and to == STAKE_POOL: etype = "transfer_720"
                 elif fr == BONUS_POOL: etype = "bonus_withdraw"
                 elif to == STAKE_POOL: etype = "stake_in"
@@ -94,7 +118,7 @@ def process_batch(from_block, to_block):
                     bn = int(log["blockNumber"], 16)
                     fr = "0x" + log["topics"][1][26:]
                     val = int(log["data"], 16) / 10**DECIMALS
-                    ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
+                    ts = estimate_block_time(bn)
                     results.append((bn, log.get("transactionHash",""), "static_burn", fr, to, val, ts))
     except:
         pass

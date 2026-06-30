@@ -71,11 +71,31 @@ class RPCManager:
 
 _rpc = RPCManager(RPC_URLS)
 
+_time_ref_block = REF_BLOCK
+_time_ref_ts = BASE_TS
+_time_ref_updated = 0
+
 def _rpc_call(method, params, retries=3):
     try:
         return _rpc.call(method, params, retries)
     except:
         return None
+
+def _refresh_time_ref(force=False):
+    global _time_ref_block, _time_ref_ts, _time_ref_updated
+    now = time.time()
+    if not force and now - _time_ref_updated < 3600:
+        return
+    latest = _rpc_call("eth_blockNumber", [], retries=1)
+    if latest:
+        _time_ref_block = int(latest, 16)
+        _time_ref_ts = now
+        _time_ref_updated = now
+        print(f"  [时间校准] ref_block=#{_time_ref_block}")
+
+def estimate_block_time(block_number):
+    _refresh_time_ref()
+    return datetime.fromtimestamp(_time_ref_ts + (block_number - _time_ref_block) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
 
 def get_balance(token, address, block_hex="latest"):
     """eth_call 查余额（仅在汇总时需要，不高频调用）"""
@@ -93,7 +113,7 @@ def _classify_logs(logs, from_block, to_block):
         fr = "0x" + log["topics"][1][26:]
         to = "0x" + log["topics"][2][26:]
         val = int(log["data"], 16) / 10**DECIMALS
-        ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
+        ts = estimate_block_time(bn)
 
         if fr == TOKEN_ARK and to == BONUS_POOL:
             etype = "bonus_in"
@@ -165,7 +185,7 @@ class EventParser:
                     tx = log.get("transactionHash", "")
                     fr = "0x" + log["topics"][1][26:]
                     val = int(log["data"], 16) / 10**DECIMALS
-                    ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
+                    ts = estimate_block_time(bn)
                     results.append({
                         "block": bn, "tx": tx, "type": "static_burn",
                         "from": fr, "to": to, "value": val, "timestamp": ts,
