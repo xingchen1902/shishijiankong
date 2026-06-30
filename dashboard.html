@@ -14,7 +14,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .header-status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .dot.green { background: #22c55e; }
 .dot.yellow { background: #eab308; }
-.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+.dashboard-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
+.dashboard-main { min-width: 0; }
+.dex-sidebar { min-width: 0; }
 .realtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .rt-card { background: #1e293b; border-radius: 10px; padding: 14px; text-align: center; border: 1px solid #334155; }
 .rt-card .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
@@ -38,6 +41,47 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .today-item.info .value { color: #60a5fa; }
 .today-item.purple .value { color: #a78bfa; }
 .today-item .sub { font-size: 11px; color: #475569; margin-top: 2px; }
+.dex-card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid #334155; }
+.dex-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.dex-source { font-size: 11px; color: #64748b; text-align: right; }
+.dex-price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.dex-mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+.dex-panel { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 11px; min-width: 0; }
+.dex-panel .label { color: #94a3b8; font-size: 11px; font-weight: 700; letter-spacing: 0; text-align: center; margin-bottom: 6px; }
+.dex-panel .value { color: #e2e8f0; font-size: 20px; font-weight: 600; text-align: center; white-space: nowrap; }
+.dex-panel.small .value { font-size: 18px; font-weight: 600; }
+.dex-panel.price .value { color: #60a5fa; }
+.dex-panel.liquidity .value { color: #14b8a6; }
+.dex-panel.fdv .value { color: #f59e0b; }
+.dex-panel.cap .value { color: #a78bfa; }
+.dex-change-tabs { display: grid; grid-template-columns: repeat(4, 1fr); overflow: hidden; border: 1px solid #334155; border-radius: 10px; margin-bottom: 10px; }
+.dex-change-tab { background: #0f172a; padding: 10px 4px; text-align: center; border-right: 1px solid #334155; cursor: pointer; }
+.dex-change-tab:last-child { border-right: none; }
+.dex-change-tab.active { background: #172033; }
+.dex-change-tab .label { color: #94a3b8; font-size: 12px; font-weight: 700; margin-bottom: 5px; }
+.dex-change-tab .value { font-size: 17px; font-weight: 600; }
+.dex-stats { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+.dex-stat-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: center; padding: 11px 0; border-bottom: 1px solid #1f2937; }
+.dex-stat-row:last-child { border-bottom: none; }
+.dex-stat-label { color: #94a3b8; font-size: 12px; font-weight: 700; }
+.dex-stat-main { min-width: 0; }
+.dex-stat-values { display: flex; justify-content: space-between; color: #cbd5e1; font-size: 13px; font-weight: 600; margin-bottom: 7px; }
+.dex-stat-values b { font-weight: 600; }
+.dex-stat-right { color: #60a5fa; font-size: 18px; font-weight: 600; text-align: left; margin-top: 3px; }
+.dex-bar { display: flex; height: 4px; gap: 4px; background: #1e293b; border-radius: 999px; overflow: hidden; }
+.dex-bar-buy { background: #22c55e; border-radius: 999px; min-width: 3px; }
+.dex-bar-sell { background: #ef4444; border-radius: 999px; min-width: 3px; }
+.dex-volume-bar { height: 4px; background: #1e293b; border-radius: 999px; overflow: hidden; }
+.dex-volume-fill { height: 100%; background: #f59e0b; border-radius: 999px; min-width: 3px; }
+.dex-details { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 0 12px; }
+.dex-detail-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; align-items: center; padding: 12px 0; border-bottom: 1px solid #1f2937; }
+.dex-detail-row:last-child { border-bottom: none; }
+.dex-detail-label { color: #94a3b8; font-size: 12px; font-weight: 700; }
+.dex-detail-value { color: #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dex-detail-value a { color: #60a5fa; text-decoration: none; }
+.dex-positive { color: #22c55e !important; }
+.dex-negative { color: #ef4444 !important; }
+.dex-sidebar .dex-card { position: sticky; top: 20px; margin-bottom: 0; }
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -67,6 +111,10 @@ td.neg { color: #ef4444; }
   .today-item .value { font-size: 15px; }
   .rt-card .value { font-size: 16px; }
 }
+@media (max-width: 1100px) {
+  .dashboard-layout { grid-template-columns: 1fr; }
+  .dex-sidebar .dex-card { position: static; }
+}
 </style>
 </head>
 <body>
@@ -83,6 +131,8 @@ td.neg { color: #ef4444; }
 </div>
 
 <div class="container">
+  <div class="dashboard-layout">
+    <div class="dashboard-main">
   <!-- 实时余额卡片 -->
   <div class="realtime-grid">
     <div class="rt-card blue"><div class="label">奖金池余额</div><div class="value" id="bonusBal">--</div></div>
@@ -134,6 +184,57 @@ td.neg { color: #ef4444; }
   <div class="events-box" id="eventStream">
     <div style="text-align:center;color:#64748b;padding:10px;">等待数据...</div>
   </div>
+    </div>
+
+    <aside class="dex-sidebar">
+      <!-- ARK 底池数据 -->
+      <div class="dex-card">
+        <div class="dex-head">
+          <div class="today-title" style="margin-bottom:0;">ARK 底池数据</div>
+          <div class="dex-source" id="dexSource">Dex Screener · 加载中...</div>
+        </div>
+        <div class="dex-price-grid">
+          <div class="dex-panel price"><div class="label">美元价格</div><div class="value" id="dexPriceUsd">--</div></div>
+          <div class="dex-panel price"><div class="label">交易价格</div><div class="value" id="dexPriceNative">--</div></div>
+        </div>
+        <div class="dex-mini-grid">
+          <div class="dex-panel small liquidity"><div class="label">流动性</div><div class="value" id="dexLiquidityUsd">--</div></div>
+          <div class="dex-panel small fdv"><div class="label">完全稀释估值</div><div class="value" id="dexFdv">--</div></div>
+          <div class="dex-panel small cap"><div class="label">市值</div><div class="value" id="dexMarketCap">--</div></div>
+        </div>
+        <div class="dex-change-tabs">
+          <div class="dex-change-tab" data-period="m5"><div class="label">5分钟</div><div class="value" id="dexChange5m">--</div></div>
+          <div class="dex-change-tab" data-period="h1"><div class="label">1小时</div><div class="value" id="dexChange1h">--</div></div>
+          <div class="dex-change-tab" data-period="h6"><div class="label">6小时</div><div class="value" id="dexChange6h">--</div></div>
+          <div class="dex-change-tab active" data-period="h24"><div class="label">24小时</div><div class="value" id="dexChange24h">--</div></div>
+        </div>
+        <div class="dex-stats">
+          <div class="dex-stat-row">
+            <div><div class="dex-stat-label">交易数</div><div class="dex-stat-right" id="dexTxns24h">--</div></div>
+            <div class="dex-stat-main">
+              <div class="dex-stat-values"><span>买入 <b id="dexBuys24h">--</b></span><span>卖出 <b id="dexSells24h">--</b></span></div>
+              <div class="dex-bar"><div class="dex-bar-buy" id="dexBuyBar"></div><div class="dex-bar-sell" id="dexSellBar"></div></div>
+            </div>
+          </div>
+          <div class="dex-stat-row">
+            <div><div class="dex-stat-label">成交额</div><div class="dex-stat-right" id="dexVolume24h">--</div></div>
+            <div class="dex-stat-main">
+              <div class="dex-stat-values"><span>周期 <b id="dexVolumePeriod">24小时</b></span><span id="dexPairName">ARK/USDT</span></div>
+              <div class="dex-volume-bar"><div class="dex-volume-fill" id="dexVolumeBar"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="dex-details">
+          <div class="dex-detail-row"><div class="dex-detail-label">创建时间</div><div class="dex-detail-value" id="dexPairAge">--</div></div>
+          <div class="dex-detail-row"><div class="dex-detail-label">池内 ARK</div><div class="dex-detail-value"><span id="dexPoolArk">--</span> · <span id="dexPoolArkUsd">--</span></div></div>
+          <div class="dex-detail-row"><div class="dex-detail-label">池内 USDT</div><div class="dex-detail-value"><span id="dexPoolUsdt">--</span> · <span id="dexPoolUsdtUsd">--</span></div></div>
+          <div class="dex-detail-row"><div class="dex-detail-label">LP 地址</div><div class="dex-detail-value"><a id="dexPairAddr" href="#" target="_blank">--</a></div></div>
+          <div class="dex-detail-row"><div class="dex-detail-label">ARK</div><div class="dex-detail-value"><a id="dexArkAddr" href="#" target="_blank">--</a></div></div>
+          <div class="dex-detail-row"><div class="dex-detail-label">USDT</div><div class="dex-detail-value"><a id="dexUsdtAddr" href="#" target="_blank">--</a></div></div>
+        </div>
+      </div>
+    </aside>
+  </div>
 </div>
 
 <div class="footer">ARK 实时监控 · 数据来源 BSC 链上</div>
@@ -144,6 +245,9 @@ var TYPE_LABELS = {
   static_burn: "静态涡轮", dynamic: "动态涡轮", transfer_720: "转720天"
 };
 var API_BASE = window.location.origin;
+var currentDexData = null;
+var currentDexPeriod = "h24";
+var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24小时"};
 
 function fmt(n) {
   if (n === null || n === undefined || n === "--") return "--";
@@ -153,10 +257,64 @@ function fmtInt(n) {
   if (n === null || n === undefined) return "--";
   return Number(n).toLocaleString("zh-CN");
 }
+function fmtToken(n, digits) {
+  if (n === null || n === undefined) return "--";
+  return Number(n).toLocaleString("zh-CN", {minimumFractionDigits: digits, maximumFractionDigits: digits});
+}
+function fmtUsd(n, digits) {
+  if (n === null || n === undefined || Number(n) === 0) return "--";
+  return "$" + Number(n).toLocaleString("zh-CN", {minimumFractionDigits: digits, maximumFractionDigits: digits});
+}
+function fmtCompactUsd(n) {
+  if (n === null || n === undefined) return "--";
+  return "$" + Number(n).toLocaleString("zh-CN", {maximumFractionDigits: 0});
+}
+function fmtPct(n) {
+  if (n === null || n === undefined) return "--";
+  var v = Number(n);
+  return (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+}
+function fmtCompact(n) {
+  if (n === null || n === undefined) return "--";
+  var v = Number(n);
+  if (Math.abs(v) >= 1000000000) return (v / 1000000000).toFixed(1) + "B";
+  if (Math.abs(v) >= 1000000) return (v / 1000000).toFixed(1) + "M";
+  if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + "K";
+  return v.toLocaleString("zh-CN", {maximumFractionDigits: 0});
+}
+function shortAddr(s) {
+  if (!s) return "--";
+  return s.slice(0, 6) + "..." + s.slice(-4);
+}
+function setPct(el, n) {
+  if (!el) return;
+  var v = Number(n || 0);
+  el.textContent = fmtPct(v);
+  el.className = "value " + (v >= 0 ? "dex-positive" : "dex-negative");
+}
+function formatAge(ms) {
+  if (!ms) return "--";
+  var diff = Date.now() - Number(ms);
+  var days = Math.max(0, Math.floor(diff / 86400000));
+  if (days >= 1) return days + "天前";
+  var hours = Math.floor(diff / 3600000);
+  return Math.max(hours, 1) + "小时前";
+}
+function esc(s) {
+  return String(s || "").replace(/[&<>"']/g, function(c) {
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+  });
+}
 
 function fetchAPI(path) {
   try {
-    return fetch(API_BASE + path).then(function(r) { return r.json(); });
+    return fetch(API_BASE + path).then(function(r) {
+      if (!r.ok) return null;
+      return r.json().catch(function() { return null; });
+    }).catch(function(e) {
+      console.error("API error:", path, e);
+      return null;
+    });
   } catch(e) {
     console.error("API error:", path, e);
     return null;
@@ -192,6 +350,71 @@ function updateToday(data) {
   document.getElementById("tdTransfer720").textContent = fmt(data.transfer_720);
   var nsCard = document.getElementById("tdNetStakeCard");
   if (data.net_stake >= 0) { nsCard.className = "today-item pos"; } else { nsCard.className = "today-item neg"; }
+}
+
+function updateDex(data) {
+  var source = document.getElementById("dexSource");
+  if (!data || data.error) {
+    source.textContent = data && data.error ? "Dex Screener · 暂时不可用" : "Dex Screener · 等待数据";
+    return;
+  }
+  currentDexData = data;
+  var updated = data.updated_at ? new Date(data.updated_at).toLocaleTimeString("zh-CN", {hour12:false}) : "--";
+  source.textContent = "Dex Screener · 更新 " + updated + (data.cached ? " · 缓存数据" : "");
+  var best = data.best_pair || {};
+
+  document.getElementById("dexPriceUsd").textContent = fmtUsd(data.price_usd, 2);
+  document.getElementById("dexPriceNative").textContent = Number(data.price_native || data.price_usd || 0).toFixed(4) + " USDT";
+  document.getElementById("dexLiquidityUsd").textContent = "$" + fmtCompact(data.liquidity_usd);
+  document.getElementById("dexFdv").textContent = "$" + fmtCompact(data.fdv);
+  document.getElementById("dexMarketCap").textContent = "$" + fmtCompact(data.market_cap);
+  setPct(document.getElementById("dexChange5m"), data.price_change_m5);
+  setPct(document.getElementById("dexChange1h"), data.price_change_h1);
+  setPct(document.getElementById("dexChange6h"), data.price_change_h6);
+  setPct(document.getElementById("dexChange24h"), data.price_change_h24);
+  renderDexPeriod(currentDexPeriod);
+  document.getElementById("dexPairAge").textContent = formatAge(data.pair_created_at);
+  document.getElementById("dexPoolArk").textContent = fmtToken(data.pool_ark, 0);
+  document.getElementById("dexPoolArkUsd").textContent = "$" + fmtCompact(Number(data.pool_ark || 0) * Number(data.price_usd || 0));
+  document.getElementById("dexPoolUsdt").textContent = fmtToken(data.pool_usdt, 0);
+  document.getElementById("dexPoolUsdtUsd").textContent = "$" + fmtCompact(data.pool_usdt);
+  var pairAddr = document.getElementById("dexPairAddr");
+  pairAddr.textContent = shortAddr(data.pair_address);
+  pairAddr.href = "https://bscscan.com/address/" + data.pair_address;
+  var arkAddr = document.getElementById("dexArkAddr");
+  arkAddr.textContent = shortAddr(data.token_address);
+  arkAddr.href = "https://bscscan.com/token/" + data.token_address;
+  var usdtAddr = document.getElementById("dexUsdtAddr");
+  usdtAddr.textContent = shortAddr(best.quote_address);
+  usdtAddr.href = "https://bscscan.com/token/" + best.quote_address;
+}
+
+function renderDexPeriod(period) {
+  if (!currentDexData) return;
+  currentDexPeriod = period || "h24";
+  var best = currentDexData.best_pair || {};
+  var periodData = (currentDexData.periods && currentDexData.periods[currentDexPeriod]) || {};
+  var buys = Number(periodData.buys || 0);
+  var sells = Number(periodData.sells || 0);
+  var totalTrades = Math.max(buys + sells, 1);
+  var buyPct = Math.max(2, buys / totalTrades * 100);
+  var sellPct = Math.max(2, sells / totalTrades * 100);
+  var tabs = document.querySelectorAll(".dex-change-tab");
+  for (var i = 0; i < tabs.length; i++) {
+    if (tabs[i].getAttribute("data-period") === currentDexPeriod) tabs[i].classList.add("active");
+    else tabs[i].classList.remove("active");
+  }
+  document.getElementById("dexTxns24h").textContent = fmtInt(periodData.txns || 0);
+  document.getElementById("dexBuys24h").textContent = fmtInt(buys);
+  document.getElementById("dexSells24h").textContent = fmtInt(sells);
+  document.getElementById("dexBuyBar").style.width = buyPct + "%";
+  document.getElementById("dexSellBar").style.width = sellPct + "%";
+  document.getElementById("dexVolume24h").textContent = "$" + fmtCompact(periodData.volume || 0);
+  var h24Volume = Number((currentDexData.periods && currentDexData.periods.h24 && currentDexData.periods.h24.volume) || 0);
+  var volumePct = h24Volume > 0 ? Math.min(100, Math.max(2, Number(periodData.volume || 0) / h24Volume * 100)) : 0;
+  document.getElementById("dexVolumeBar").style.width = volumePct + "%";
+  document.getElementById("dexVolumePeriod").textContent = DEX_PERIOD_LABELS[currentDexPeriod] || "24小时";
+  document.getElementById("dexPairName").textContent = (best.base_symbol || "ARK") + "/" + (best.quote_symbol || "USDT");
 }
 
 function updateBalances(data) {
@@ -381,19 +604,28 @@ window.goToDailyPage = function(page) {
   loadAll();
 };
 
+document.querySelectorAll(".dex-change-tab").forEach(function(tab) {
+  tab.addEventListener("click", function() {
+    renderDexPeriod(tab.getAttribute("data-period"));
+  });
+});
+
 function loadAll() {
   Promise.all([
     fetchAPI("/api/today"),
     fetchAPI("/api/daily?page=" + (window.currentDailyPage || 1) + "&per_page=10"),
     fetchAPI("/api/realtime?limit=50"),
-    fetchAPI("/api/today-trend")
+    fetchAPI("/api/today-trend"),
+    fetchAPI("/api/dex/ark")
   ]).then(function(results) {
     var today = results[0];
     var daily = results[1];
     var realtime = results[2];
     var trend = results[3];
+    var dex = results[4];
     updateHeader(today);
     updateToday(today ? today.data : null);
+    updateDex(dex ? dex.data : null);
     updateDaily(daily);
     updateEvents(realtime ? realtime.data : null);
     try { updateTrend(trend ? trend.data : null); } catch(e) { console.error("updateTrend error:", e); }

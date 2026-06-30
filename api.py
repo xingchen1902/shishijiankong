@@ -11,6 +11,11 @@ from pusher import push_to_feishu, push_to_telegram, TELEGRAM_BOT_TOKEN, TELEGRA
 
 BJT = timezone(timedelta(hours=8))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEX_CACHE_TTL = 45
+DEX_MIN_LIQUIDITY_USD = 1000
+DEX_PRIMARY_PAIR = "0xcaaf3c41a40103a23eeaa4bba468af3cf5b0e0d8"
+TOKEN_USDT = "0x55d398326f99059ff775485246999027b3197955"
+DEX_CACHE = {"ts": 0, "data": None}
 app = FastAPI(title="ARK")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 import os.path
@@ -105,6 +110,175 @@ def get_today_trend():
     return result
 
 
+def _to_float(value, default=0.0):
+    try:
+        if value in (None, ""):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _dex_pair_row(pair):
+    txns = pair.get("txns") or {}
+    volume = pair.get("volume") or {}
+    price_change = pair.get("priceChange") or {}
+    liquidity = pair.get("liquidity") or {}
+    base = pair.get("baseToken") or {}
+    quote = pair.get("quoteToken") or {}
+    base_address = (base.get("address") or "").lower()
+    quote_address = (quote.get("address") or "").lower()
+    price_usd = _to_float(pair.get("priceUsd"))
+    price_native = _to_float(pair.get("priceNative"))
+    ark_price_usd = price_usd
+    if quote_address == TOKEN_ARK and price_native:
+        ark_price_usd = price_usd / price_native
+    base_liquidity = _to_float(liquidity.get("base"))
+    quote_liquidity = _to_float(liquidity.get("quote"))
+    if not base_liquidity and base_address == TOKEN_ARK and ark_price_usd:
+        base_liquidity = _to_float(liquidity.get("usd")) / ark_price_usd / 2
+    if not quote_liquidity and quote_address == TOKEN_USDT:
+        quote_liquidity = _to_float(liquidity.get("usd")) / 2
+    periods = {}
+    for key in ("m5", "h1", "h6", "h24"):
+        period_txns = txns.get(key) or {}
+        buys = int(period_txns.get("buys") or 0)
+        sells = int(period_txns.get("sells") or 0)
+        periods[key] = {
+            "volume": _to_float(volume.get(key)),
+            "txns": buys + sells,
+            "buys": buys,
+            "sells": sells,
+            "price_change": _to_float(price_change.get(key)),
+        }
+    return {
+        "chain_id": pair.get("chainId"),
+        "dex_id": pair.get("dexId"),
+        "pair_address": pair.get("pairAddress"),
+        "url": pair.get("url"),
+        "base_address": base_address,
+        "quote_address": quote_address,
+        "base_symbol": base.get("symbol") or "ARK",
+        "quote_symbol": quote.get("symbol") or "",
+        "price_usd": price_usd,
+        "ark_price_usd": round(ark_price_usd, 10),
+        "price_native": pair.get("priceNative"),
+        "liquidity_usd": _to_float(liquidity.get("usd")),
+        "base_liquidity": round(base_liquidity, 6),
+        "quote_liquidity": round(quote_liquidity, 6),
+        "ark_liquidity": round(base_liquidity if base_address == TOKEN_ARK else quote_liquidity, 6),
+        "usdt_liquidity": round(base_liquidity if base_address == TOKEN_USDT else quote_liquidity, 6),
+        "periods": periods,
+        "volume_h24": periods["h24"]["volume"],
+        "volume_h6": periods["h6"]["volume"],
+        "volume_h1": periods["h1"]["volume"],
+        "volume_m5": periods["m5"]["volume"],
+        "txns_m5": periods["m5"]["txns"],
+        "txns_h1": periods["h1"]["txns"],
+        "txns_h6": periods["h6"]["txns"],
+        "txns_h24": periods["h24"]["txns"],
+        "buys_m5": periods["m5"]["buys"],
+        "buys_h1": periods["h1"]["buys"],
+        "buys_h6": periods["h6"]["buys"],
+        "buys_h24": periods["h24"]["buys"],
+        "sells_m5": periods["m5"]["sells"],
+        "sells_h1": periods["h1"]["sells"],
+        "sells_h6": periods["h6"]["sells"],
+        "sells_h24": periods["h24"]["sells"],
+        "price_change_m5": periods["m5"]["price_change"],
+        "price_change_h24": periods["h24"]["price_change"],
+        "price_change_h6": periods["h6"]["price_change"],
+        "price_change_h1": periods["h1"]["price_change"],
+        "fdv": _to_float(pair.get("fdv")),
+        "market_cap": _to_float(pair.get("marketCap")),
+        "pair_created_at": pair.get("pairCreatedAt"),
+    }
+
+
+def get_ark_dex_data():
+    now = time.time()
+    if DEX_CACHE["data"] and now - DEX_CACHE["ts"] < DEX_CACHE_TTL:
+        data = dict(DEX_CACHE["data"])
+        data["cached"] = True
+        return data
+
+    url = f"https://api.dexscreener.com/token-pairs/v1/bsc/{TOKEN_ARK}"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        raw_pairs = resp.json()
+        if not isinstance(raw_pairs, list):
+            raw_pairs = []
+        pairs = [_dex_pair_row(pair) for pair in raw_pairs]
+        pairs.sort(key=lambda p: p["liquidity_usd"], reverse=True)
+        primary_pairs = [p for p in pairs if (p.get("pair_address") or "").lower() == DEX_PRIMARY_PAIR]
+        visible_pairs = primary_pairs or [p for p in pairs if p["liquidity_usd"] >= DEX_MIN_LIQUIDITY_USD]
+        if not visible_pairs and pairs:
+            visible_pairs = [pairs[0]]
+        best = visible_pairs[0] if visible_pairs else None
+        period_totals = {}
+        for key in ("m5", "h1", "h6", "h24"):
+            period_totals[key] = {
+                "volume": round(sum(p["periods"][key]["volume"] for p in visible_pairs), 2),
+                "txns": sum(p["periods"][key]["txns"] for p in visible_pairs),
+                "buys": sum(p["periods"][key]["buys"] for p in visible_pairs),
+                "sells": sum(p["periods"][key]["sells"] for p in visible_pairs),
+                "price_change": best["periods"][key]["price_change"] if best else 0,
+            }
+        data = {
+            "updated_at": datetime.now(BJT).isoformat(),
+            "source": "Dex Screener",
+            "token_address": TOKEN_ARK,
+            "pair_count": len(visible_pairs),
+            "price_usd": best["ark_price_usd"] if best else 0,
+            "price_native": best["price_native"] if best else "0",
+            "price_change_m5": best["price_change_m5"] if best else 0,
+            "price_change_h1": best["price_change_h1"] if best else 0,
+            "price_change_h6": best["price_change_h6"] if best else 0,
+            "price_change_h24": best["price_change_h24"] if best else 0,
+            "periods": period_totals,
+            "liquidity_usd": round(sum(p["liquidity_usd"] for p in visible_pairs), 2),
+            "pool_ark": best["ark_liquidity"] if best else 0,
+            "pool_usdt": best["usdt_liquidity"] if best else 0,
+            "fdv": best["fdv"] if best else 0,
+            "market_cap": best["market_cap"] if best else 0,
+            "volume_h24": round(sum(p["volume_h24"] for p in visible_pairs), 2),
+            "txns_h24": sum(p["txns_h24"] for p in visible_pairs),
+            "buys_h24": sum(p["buys_h24"] for p in visible_pairs),
+            "sells_h24": sum(p["sells_h24"] for p in visible_pairs),
+            "pair_address": best["pair_address"] if best else DEX_PRIMARY_PAIR,
+            "pair_created_at": best["pair_created_at"] if best else None,
+            "best_pair": best,
+            "pairs": visible_pairs[:12],
+            "cached": False,
+        }
+        DEX_CACHE["ts"] = now
+        DEX_CACHE["data"] = data
+        return data
+    except Exception as e:
+        if DEX_CACHE["data"]:
+            data = dict(DEX_CACHE["data"])
+            data["cached"] = True
+            data["stale"] = True
+            data["error"] = str(e)
+            return data
+        return {
+            "updated_at": datetime.now(BJT).isoformat(),
+            "source": "Dex Screener",
+            "token_address": TOKEN_ARK,
+            "pair_count": 0,
+            "price_usd": 0,
+            "price_change_h24": 0,
+            "liquidity_usd": 0,
+            "volume_h24": 0,
+            "txns_h24": 0,
+            "best_pair": None,
+            "pairs": [],
+            "cached": False,
+            "error": str(e),
+        }
+
+
 # ---------- Telegram /today 命令轮询 ----------
 def _send_today(record):
     """只推 Telegram，不写飞书"""
@@ -183,6 +357,10 @@ def get_today():
 @app.get("/api/today-trend")
 def get_today_trend_api():
     return {"data": get_today_trend()}
+
+@app.get("/api/dex/ark")
+def get_ark_dex():
+    return {"data": get_ark_dex_data()}
 
 @app.get("/api/daily")
 def get_daily(page: int = 1, per_page: int = 10):
