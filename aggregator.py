@@ -20,6 +20,19 @@ class DailyAggregator:
         self.current_date = datetime.now(BJT).strftime("%Y-%m-%d")
         self.lock = threading.Lock()
         self.parser = EventParser()
+        self._restore_pending_push()
+
+    def _restore_pending_push(self):
+        now = datetime.now(BJT)
+        if not (now.hour == 0 and now.minute < 5):
+            return
+
+        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        conn = get_conn()
+        exists = conn.execute("SELECT id FROM daily_summary WHERE date=?", (yesterday,)).fetchone()
+        conn.close()
+        if exists:
+            self._pending_push_date = yesterday
 
     def add_events(self, events):
         with self.lock:
