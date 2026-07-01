@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ARK 事件解析器
-- eth_getLogs 查小批量（每 10 块一批，省 CU 模式）
+- eth_getLogs 查批量（每 200 块一批，省 CU 模式）
 - 按地址分类：奖金池提取、质押/赎回、涡轮
 - 余额缓存，不高频调 eth_call
 """
@@ -12,9 +12,12 @@ import requests
 
 BJT = timezone(timedelta(hours=8))
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+SWAP_TOPIC = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
 
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()
 TOKEN_GARK = "0x911f12D137D74E5917877f87cf8A8bB2FDde557f".lower()
+TOKEN_USDT = "0x55d398326f99059fF775485246999027B3197955".lower()
+ARK_USDT_LP = "0xCAaF3c41a40103a23Eeaa4BbA468AF3cF5b0e0D8".lower()
 DECIMALS = 18
 
 BONUS_POOL = "0x8501168656FcaC4628F6910CcABEA8B64Ebe5BD4".lower()
@@ -23,7 +26,7 @@ TARGET_DYNAMIC = "0x8366a748E02F730911Cb5AB4fd049d2E1e0414b7".lower()
 BURN_ADDR = "0x0000000000000000000000000000000000000000"
 BURN_ADDR2 = "0x000000000000000000000000000000000000dead"
 
-BATCH_SIZE = 20
+BATCH_SIZE = 200
 # 基准：105553753 (BJT 2026-06-22 00:00:01)
 REF_BLOCK = 105553753
 BASE_TS = 1782057600.0
@@ -31,13 +34,6 @@ BLOCK_SEC = 0.45
 
 RPC_URLS = [
     "https://bsc-mainnet.nodereal.io/v1/70208501917a413bab46cb281fc0997f",
-    "https://bsc-mainnet.nodereal.io/v1/1ad9525366ba4b56a0a2b4fef2b2fef7",
-    "https://bsc-mainnet.nodereal.io/v1/5a4982439b1c47b5a3239531be775cc9",
-    "https://bsc-mainnet.nodereal.io/v1/d96a4e697b0541628f61ae6089a97874",
-    "https://bsc-mainnet.nodereal.io/v1/91687987baa549e4a48c18cbbf62a080",
-    "https://bsc-mainnet.nodereal.io/v1/3f6c4ec20c324cd9a489196a2937c368",
-    "https://rpc.ankr.com/bsc/c9251b3e097417a6e558de2dce53c2d276a591fbd89f2ec9f017392936a5e0b5",
-    "https://bsc.mytokenpocket.vip",
 ]
 
 class RPCManager:
@@ -140,6 +136,48 @@ def _classify_logs(logs, from_block, to_block):
         })
     return results, raw_records
 
+def _topic_addr(topic):
+    return "0x" + topic[-40:]
+
+def _uint256_words(data):
+    body = data[2:] if data.startswith("0x") else data
+    return [int(body[i:i+64], 16) for i in range(0, len(body), 64) if body[i:i+64]]
+
+def _parse_lp_swap_logs(logs):
+    swaps = []
+    for log in logs:
+        words = _uint256_words(log.get("data", "0x"))
+        if len(words) < 4:
+            continue
+        usdt_in, ark_in, usdt_out, ark_out = [v / 10**DECIMALS for v in words[:4]]
+        amount_usdt = usdt_in or usdt_out
+        amount_ark = ark_in or ark_out
+        if ark_out > 0 and usdt_in > 0:
+            side = "buy_ark"
+        elif ark_in > 0 and usdt_out > 0:
+            side = "sell_ark"
+        else:
+            side = "swap"
+        price_usdt = amount_usdt / amount_ark if amount_ark else 0
+        bn = int(log["blockNumber"], 16)
+        swaps.append({
+            "block": bn,
+            "tx": log.get("transactionHash", ""),
+            "log_index": int(log.get("logIndex", "0x0"), 16),
+            "side": side,
+            "sender": _topic_addr(log["topics"][1]) if len(log.get("topics", [])) > 1 else "",
+            "to": _topic_addr(log["topics"][2]) if len(log.get("topics", [])) > 2 else "",
+            "usdt_in": usdt_in,
+            "usdt_out": usdt_out,
+            "ark_in": ark_in,
+            "ark_out": ark_out,
+            "amount_usdt": amount_usdt,
+            "amount_ark": amount_ark,
+            "price_usdt": price_usdt,
+            "timestamp": estimate_block_time(bn),
+        })
+    return swaps
+
 
 class EventParser:
     """解析批量 ARK Transfer 事件（每批调 2 次 eth_getLogs）"""
@@ -190,6 +228,20 @@ class EventParser:
                         "block": bn, "tx": tx, "type": "static_burn",
                         "from": fr, "to": to, "value": val, "timestamp": ts,
                     })
+
+        # 3. ARK/USDT LP Swap logs
+        lp_logs = _rpc_call("eth_getLogs", [{
+            "fromBlock": hex(from_block),
+            "toBlock": hex(to_block),
+            "address": ARK_USDT_LP,
+            "topics": [SWAP_TOPIC]
+        }])
+        if lp_logs:
+            swaps = _parse_lp_swap_logs(lp_logs)
+            if swaps:
+                from db import insert_lp_swaps_batch
+                insert_lp_swaps_batch(swaps)
+                print(f"  [LP] #{from_block}~#{to_block} {len(swaps)} swaps")
 
         self.events.extend(results)
         if results:

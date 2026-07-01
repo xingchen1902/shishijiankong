@@ -8,9 +8,6 @@ TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523
 
 RPC_URLS = [
     "https://bsc-mainnet.nodereal.io/v1/70208501917a413bab46cb281fc0997f",
-    "https://bsc-mainnet.nodereal.io/v1/1ad9525366ba4b56a0a2b4fef2b2fef7",
-    "https://rpc.ankr.com/bsc/c9251b3e097417a6e558de2dce53c2d276a591fbd89f2ec9f017392936a5e0b5",
-    "https://bsc.mytokenpocket.vip",
 ]
 
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()

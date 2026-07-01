@@ -214,8 +214,8 @@ td.neg { color: #ef4444; }
           <div class="dex-stat-row">
             <div><div class="dex-stat-label">成交额</div><div class="dex-stat-right" id="dexVolume24h">--</div></div>
             <div class="dex-stat-main">
-              <div class="dex-stat-values"><span>周期 <b id="dexVolumePeriod">24小时</b></span><span id="dexPairName">ARK/USDT</span></div>
-              <div class="dex-volume-bar"><div class="dex-volume-fill" id="dexVolumeBar"></div></div>
+              <div class="dex-stat-values"><span>买入 <b id="lpBuyValue">--</b></span><span>卖出 <b id="lpSellValue">--</b></span></div>
+              <div class="dex-bar"><div class="dex-bar-buy" id="lpBuyValueBar"></div><div class="dex-bar-sell" id="lpSellValueBar"></div></div>
             </div>
           </div>
         </div>
@@ -247,6 +247,7 @@ var TYPE_LABELS = {
 };
 var API_BASE = window.location.origin;
 var currentDexData = null;
+var currentLpData = null;
 var currentDexPeriod = "h24";
 var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24小时"};
 
@@ -390,6 +391,11 @@ function updateDex(data) {
   usdtAddr.href = "https://bscscan.com/token/" + best.quote_address;
 }
 
+function updateLpSwaps(resp) {
+  currentLpData = resp && resp.summary ? resp.summary : null;
+  renderDexPeriod(currentDexPeriod);
+}
+
 function renderDexPeriod(period) {
   if (!currentDexData) return;
   currentDexPeriod = period || "h24";
@@ -410,12 +416,17 @@ function renderDexPeriod(period) {
   document.getElementById("dexSells24h").textContent = fmtInt(sells);
   document.getElementById("dexBuyBar").style.width = buyPct + "%";
   document.getElementById("dexSellBar").style.width = sellPct + "%";
-  document.getElementById("dexVolume24h").textContent = "$" + fmtCompact(periodData.volume || 0);
-  var h24Volume = Number((currentDexData.periods && currentDexData.periods.h24 && currentDexData.periods.h24.volume) || 0);
-  var volumePct = h24Volume > 0 ? Math.min(100, Math.max(2, Number(periodData.volume || 0) / h24Volume * 100)) : 0;
-  document.getElementById("dexVolumeBar").style.width = volumePct + "%";
-  document.getElementById("dexVolumePeriod").textContent = DEX_PERIOD_LABELS[currentDexPeriod] || "24小时";
-  document.getElementById("dexPairName").textContent = (best.base_symbol || "ARK") + "/" + (best.quote_symbol || "USDT");
+  var lp = currentLpData || {};
+  var buyValue = Number(lp.buy_value_usdt || 0);
+  var sellValue = Number(lp.sell_value_usdt || 0);
+  var lpVolume = buyValue + sellValue;
+  var buyValuePct = lpVolume > 0 ? Math.max(2, buyValue / lpVolume * 100) : 0;
+  var sellValuePct = lpVolume > 0 ? Math.max(2, sellValue / lpVolume * 100) : 0;
+  document.getElementById("dexVolume24h").textContent = "$" + fmtCompact(lpVolume || periodData.volume || 0);
+  document.getElementById("lpBuyValue").textContent = "$" + fmtCompact(buyValue);
+  document.getElementById("lpSellValue").textContent = "$" + fmtCompact(sellValue);
+  document.getElementById("lpBuyValueBar").style.width = buyValuePct + "%";
+  document.getElementById("lpSellValueBar").style.width = sellValuePct + "%";
 }
 
 function updateBalances(data) {
@@ -607,7 +618,11 @@ window.goToDailyPage = function(page) {
 
 document.querySelectorAll(".dex-change-tab").forEach(function(tab) {
   tab.addEventListener("click", function() {
-    renderDexPeriod(tab.getAttribute("data-period"));
+    currentDexPeriod = tab.getAttribute("data-period");
+    fetchAPI("/api/lp-swaps?limit=5&period=" + currentDexPeriod).then(function(lp) {
+      updateLpSwaps(lp);
+    });
+    renderDexPeriod(currentDexPeriod);
   });
 });
 
@@ -617,15 +632,18 @@ function loadAll() {
     fetchAPI("/api/daily?page=" + (window.currentDailyPage || 1) + "&per_page=10"),
     fetchAPI("/api/realtime?limit=50"),
     fetchAPI("/api/today-trend"),
-    fetchAPI("/api/dex/ark")
+    fetchAPI("/api/dex/ark"),
+    fetchAPI("/api/lp-swaps?limit=5&period=" + currentDexPeriod)
   ]).then(function(results) {
     var today = results[0];
     var daily = results[1];
     var realtime = results[2];
     var trend = results[3];
     var dex = results[4];
+    var lp = results[5];
     updateHeader(today);
     updateToday(today ? today.data : null);
+    updateLpSwaps(lp);
     updateDex(dex ? dex.data : null);
     updateDaily(daily);
     updateEvents(realtime ? realtime.data : null);

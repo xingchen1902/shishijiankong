@@ -64,6 +64,29 @@ def init_db():
             net_stake REAL DEFAULT 0,
             updated_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS lp_swaps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            block INTEGER NOT NULL,
+            tx TEXT NOT NULL,
+            log_index INTEGER NOT NULL,
+            side TEXT,
+            sender TEXT,
+            to_addr TEXT,
+            usdt_in REAL DEFAULT 0,
+            usdt_out REAL DEFAULT 0,
+            ark_in REAL DEFAULT 0,
+            ark_out REAL DEFAULT 0,
+            amount_usdt REAL DEFAULT 0,
+            amount_ark REAL DEFAULT 0,
+            price_usdt REAL DEFAULT 0,
+            timestamp TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(tx, log_index)
+        );
+        CREATE INDEX IF NOT EXISTS idx_lp_swaps_block ON lp_swaps(block);
+        CREATE INDEX IF NOT EXISTS idx_lp_swaps_side ON lp_swaps(side);
+        CREATE INDEX IF NOT EXISTS idx_lp_swaps_created ON lp_swaps(created_at);
     """)
     conn.commit()
     conn.close()
@@ -96,6 +119,28 @@ def insert_events_batch(events):
              e["value"], e.get("timestamp","")) for e in events]
     conn.executemany(
         "INSERT INTO events (block, tx, type, from_addr, to_addr, value, timestamp) VALUES (?,?,?,?,?,?,?)",
+        data
+    )
+    conn.commit()
+    conn.close()
+
+def insert_lp_swaps_batch(swaps):
+    if not swaps: return
+    conn = get_conn()
+    data = [(
+        s["block"], s["tx"], s["log_index"], s.get("side", ""),
+        s.get("sender", ""), s.get("to", ""),
+        s.get("usdt_in", 0), s.get("usdt_out", 0),
+        s.get("ark_in", 0), s.get("ark_out", 0),
+        s.get("amount_usdt", 0), s.get("amount_ark", 0),
+        s.get("price_usdt", 0), s.get("timestamp", "")
+    ) for s in swaps]
+    conn.executemany(
+        """INSERT OR IGNORE INTO lp_swaps (
+            block, tx, log_index, side, sender, to_addr,
+            usdt_in, usdt_out, ark_in, ark_out,
+            amount_usdt, amount_ark, price_usdt, timestamp
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         data
     )
     conn.commit()
