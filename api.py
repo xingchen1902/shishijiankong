@@ -393,6 +393,31 @@ def get_realtime(limit:int=100):
     conn.close()
     return {"data": [dict(r) for r in rows]}
 
+@app.get("/api/lp-swaps")
+def get_lp_swaps(limit:int=100, period: str = "h24"):
+    period_hours = {"m5": 5 / 60, "h1": 1, "h6": 6, "h24": 24}
+    hours = period_hours.get(period, 24)
+    cutoff = (datetime.now(BJT) - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM lp_swaps ORDER BY block DESC, log_index DESC LIMIT ?", (limit,)).fetchall()
+    summary = conn.execute("""
+        SELECT
+            COUNT(*) as count,
+            MAX(block) as last_block,
+            COALESCE(SUM(CASE WHEN side='buy_ark' THEN amount_ark ELSE 0 END),0) as buy_ark,
+            COALESCE(SUM(CASE WHEN side='sell_ark' THEN amount_ark ELSE 0 END),0) as sell_ark,
+            COALESCE(SUM(CASE WHEN side='buy_ark' THEN amount_usdt ELSE 0 END),0) as buy_value_usdt,
+            COALESCE(SUM(CASE WHEN side='sell_ark' THEN amount_usdt ELSE 0 END),0) as sell_value_usdt,
+            COALESCE(SUM(amount_usdt),0) as volume_usdt
+        FROM lp_swaps
+        WHERE REPLACE(timestamp, 'T', ' ') >= ?
+    """, (cutoff,)).fetchone()
+    conn.close()
+    result = dict(summary) if summary else {}
+    result["period"] = period
+    result["cutoff"] = cutoff
+    return {"data": [dict(r) for r in rows], "summary": result}
+
 @app.get("/api/force-summary")
 def force_summary():
     record = get_today_data()

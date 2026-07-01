@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ARK 实时监控入口
-- 省 CU 模式：eth_getLogs 查批量（每 10 块一批）
+- 省 CU 模式：eth_getLogs 查批量（每 200 块一批）
 - 余额缓存，不高频调 eth_call
 """
 
@@ -18,7 +18,7 @@ BJT = timezone(timedelta(hours=8))
 
 def main():
     print("=" * 50)
-    print("ARK 实时监控启动（小批量模式，每10块一批）")
+    print("ARK 实时监控启动（批量模式，每200块一批）")
     print(f"BJT: {datetime.now(BJT).strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 50)
 
