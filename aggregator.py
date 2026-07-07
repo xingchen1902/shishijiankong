@@ -111,13 +111,29 @@ class DailyAggregator:
         snapshot = self._get_dex_snapshot(record["date"])
         if not snapshot:
             print(f"  [Dex] {record['date']} 无底池快照")
-            return record
-        record["pool_ark"] = round(float(snapshot.get("pool_ark") or 0), 2)
-        record["pool_usdt"] = round(float(snapshot.get("pool_usdt") or 0), 2)
-        record["ark_price"] = round(float(snapshot.get("price_usd") or 0), 6)
+        else:
+            record["pool_ark"] = round(float(snapshot.get("pool_ark") or 0), 2)
+            record["pool_usdt"] = round(float(snapshot.get("pool_usdt") or 0), 2)
+            record["ark_price"] = round(float(snapshot.get("price_usd") or 0), 6)
+            print(
+                "  [Dex] 底池 ARK %.2f / USDT %.2f / 价格 %.6f"
+                % (record["pool_ark"], record["pool_usdt"], record["ark_price"])
+            )
+
+        conn = get_conn()
+        row = conn.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN side='buy_ark' THEN amount_usdt ELSE 0 END),0) as buy_value_usdt,
+                COALESCE(SUM(CASE WHEN side='sell_ark' THEN amount_usdt ELSE 0 END),0) as sell_value_usdt
+            FROM lp_swaps
+            WHERE REPLACE(timestamp, 'T', ' ') LIKE ?
+        """, (record["date"] + "%",)).fetchone()
+        conn.close()
+        record["buy_value_usdt"] = round(float(row["buy_value_usdt"]) if row else 0, 2)
+        record["sell_value_usdt"] = round(float(row["sell_value_usdt"]) if row else 0, 2)
         print(
-            "  [Dex] 底池 ARK %.2f / USDT %.2f / 价格 %.6f"
-            % (record["pool_ark"], record["pool_usdt"], record["ark_price"])
+            "  [Dex] 买入价值 %.2f / 卖出价值 %.2f"
+            % (record["buy_value_usdt"], record["sell_value_usdt"])
         )
         return record
 

@@ -348,6 +348,18 @@ def _attach_realtime_dex_data(record):
             record["ark_price"] = round(_to_float(dex_data.get("price_usd")), 6)
     except Exception as e:
         print(f"[Telegram Poll] Dex 数据获取失败: {e}")
+
+    conn = get_conn()
+    row = conn.execute("""
+        SELECT
+            COALESCE(SUM(CASE WHEN side='buy_ark' THEN amount_usdt ELSE 0 END),0) as buy_value_usdt,
+            COALESCE(SUM(CASE WHEN side='sell_ark' THEN amount_usdt ELSE 0 END),0) as sell_value_usdt
+        FROM lp_swaps
+        WHERE REPLACE(timestamp, 'T', ' ') LIKE ?
+    """, (record["date"] + "%",)).fetchone()
+    conn.close()
+    record["buy_value_usdt"] = round(float(row["buy_value_usdt"]) if row else 0, 2)
+    record["sell_value_usdt"] = round(float(row["sell_value_usdt"]) if row else 0, 2)
     return record
 
 def _send_today(record):
@@ -467,7 +479,7 @@ def get_lp_swaps(limit:int=100, period: str = "h24"):
 
 @app.get("/api/force-summary")
 def force_summary():
-    record = get_today_data()
+    record = _attach_realtime_dex_data(get_today_data())
     push_to_feishu(record)
     push_to_telegram(record)
     return {"status":"ok","data":record}

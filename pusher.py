@@ -31,6 +31,8 @@ FIELD_MAP = {
     "pool_ark": "底池ARK",
     "pool_usdt": "底池USDT",
     "ark_price": "ARK价格",
+    "buy_value_usdt": "买入价值",
+    "sell_value_usdt": "卖出价值",
 }
 
 FIELD_PRECISION = {
