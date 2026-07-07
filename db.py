@@ -87,6 +87,42 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_lp_swaps_block ON lp_swaps(block);
         CREATE INDEX IF NOT EXISTS idx_lp_swaps_side ON lp_swaps(side);
         CREATE INDEX IF NOT EXISTS idx_lp_swaps_created ON lp_swaps(created_at);
+
+        CREATE TABLE IF NOT EXISTS dex_daily_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            price_usd REAL DEFAULT 0,
+            pool_ark REAL DEFAULT 0,
+            pool_usdt REAL DEFAULT 0,
+            liquidity_usd REAL DEFAULT 0,
+            pair_address TEXT,
+            source_updated_at TEXT,
+            snapshot_at TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_dex_daily_snapshots_date ON dex_daily_snapshots(date);
+    """)
+    conn.commit()
+    conn.close()
+
+def ensure_dex_daily_snapshots_table():
+    conn = get_conn()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS dex_daily_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            price_usd REAL DEFAULT 0,
+            pool_ark REAL DEFAULT 0,
+            pool_usdt REAL DEFAULT 0,
+            liquidity_usd REAL DEFAULT 0,
+            pair_address TEXT,
+            source_updated_at TEXT,
+            snapshot_at TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_dex_daily_snapshots_date ON dex_daily_snapshots(date);
     """)
     conn.commit()
     conn.close()
@@ -173,6 +209,39 @@ def get_all_daily_until_yesterday():
     today = datetime.now(BJT).strftime('%Y-%m-%d')
     conn = get_conn()
     rows = conn.execute("SELECT * FROM daily_summary WHERE date < ? ORDER BY date DESC LIMIT 30", (today,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_dex_daily_snapshot(date_str):
+    ensure_dex_daily_snapshots_table()
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM dex_daily_snapshots WHERE date = ?", (date_str,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def upsert_dex_daily_snapshot(date_str, **kwargs):
+    ensure_dex_daily_snapshots_table()
+    conn = get_conn()
+    existing = conn.execute("SELECT id FROM dex_daily_snapshots WHERE date = ?", (date_str,)).fetchone()
+    if existing:
+        fields = ", ".join(f"{k}=?" for k in kwargs)
+        vals = list(kwargs.values()) + [date_str]
+        conn.execute(f"UPDATE dex_daily_snapshots SET {fields}, updated_at=datetime('now') WHERE date=?", vals)
+    else:
+        fields = ", ".join(kwargs.keys())
+        placeholders = ", ".join("?" for _ in kwargs)
+        vals = list(kwargs.values())
+        conn.execute(f"INSERT INTO dex_daily_snapshots (date, {fields}) VALUES (?, {placeholders})", [date_str] + vals)
+    conn.commit()
+    conn.close()
+
+def get_dex_daily_snapshots(limit=30):
+    ensure_dex_daily_snapshots_table()
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM dex_daily_snapshots ORDER BY date DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

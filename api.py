@@ -5,7 +5,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os, threading, time, requests
 from datetime import datetime, timezone, timedelta
-from db import get_all_daily_until_yesterday, get_conn
+from db import (
+    get_all_daily_until_yesterday,
+    get_conn,
+    get_dex_daily_snapshot,
+    get_dex_daily_snapshots,
+    init_db,
+    upsert_dex_daily_snapshot,
+)
 from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
 from pusher import push_to_feishu, push_to_telegram, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
@@ -16,8 +23,10 @@ DEX_MIN_LIQUIDITY_USD = 1000
 DEX_PRIMARY_PAIR = "0xcaaf3c41a40103a23eeaa4bba468af3cf5b0e0d8"
 TOKEN_USDT = "0x55d398326f99059ff775485246999027b3197955"
 DEX_CACHE = {"ts": 0, "data": None}
+DEX_SNAPSHOT_LOCK = threading.Lock()
 app = FastAPI(title="ARK")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+init_db()
 import os.path
 logo_path = os.path.join(BASE_DIR, "logo.png")
 if os.path.exists(logo_path):
@@ -282,6 +291,53 @@ def get_ark_dex_data():
         }
 
 
+def _dex_snapshot_payload(date_str, dex_data):
+    return {
+        "price_usd": round(_to_float(dex_data.get("price_usd")), 6),
+        "pool_ark": round(_to_float(dex_data.get("pool_ark")), 6),
+        "pool_usdt": round(_to_float(dex_data.get("pool_usdt")), 6),
+        "liquidity_usd": round(_to_float(dex_data.get("liquidity_usd")), 2),
+        "pair_address": dex_data.get("pair_address") or DEX_PRIMARY_PAIR,
+        "source_updated_at": dex_data.get("updated_at"),
+        "snapshot_at": datetime.now(BJT).isoformat(),
+    }
+
+
+def capture_dex_daily_snapshot(date_str=None, force=False):
+    now = datetime.now(BJT)
+    target_date = date_str or (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    with DEX_SNAPSHOT_LOCK:
+        if not force and get_dex_daily_snapshot(target_date):
+            return get_dex_daily_snapshot(target_date)
+        dex_data = get_ark_dex_data()
+        if not dex_data or dex_data.get("error"):
+            return None
+        upsert_dex_daily_snapshot(target_date, **_dex_snapshot_payload(target_date, dex_data))
+        return get_dex_daily_snapshot(target_date)
+
+
+def ensure_latest_dex_daily_snapshot():
+    now = datetime.now(BJT)
+    if not (now.hour == 0 and now.minute <= 30):
+        return None
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    if not get_dex_daily_snapshot(yesterday):
+        return capture_dex_daily_snapshot(yesterday)
+    return None
+
+
+def dex_daily_snapshot_worker():
+    while True:
+        try:
+            now = datetime.now(BJT)
+            if now.hour == 0 and now.minute <= 30:
+                ensure_latest_dex_daily_snapshot()
+            time.sleep(60)
+        except Exception as e:
+            print(f"[Dex Snapshot] 异常: {e}")
+            time.sleep(60)
+
+
 # ---------- Telegram /today 命令轮询 ----------
 def _send_today(record):
     """只推 Telegram，不写飞书"""
@@ -351,6 +407,7 @@ def telegram_poll():
 
 # 启动后台轮询
 threading.Thread(target=telegram_poll, daemon=True).start()
+threading.Thread(target=dex_daily_snapshot_worker, daemon=True).start()
 
 @app.get("/api/today")
 def get_today():
@@ -364,6 +421,17 @@ def get_today_trend_api():
 @app.get("/api/dex/ark")
 def get_ark_dex():
     return {"data": get_ark_dex_data()}
+
+@app.get("/api/dex/pool-history")
+def get_dex_pool_history(limit:int=30):
+    ensure_latest_dex_daily_snapshot()
+    return {"data": get_dex_daily_snapshots(limit)}
+
+@app.get("/api/dex/capture-pool")
+def capture_dex_pool(date: str = None):
+    target_date = date or datetime.now(BJT).strftime("%Y-%m-%d")
+    row = capture_dex_daily_snapshot(target_date, force=True)
+    return {"status": "ok" if row else "error", "data": row}
 
 @app.get("/api/daily")
 def get_daily(page: int = 1, per_page: int = 10):

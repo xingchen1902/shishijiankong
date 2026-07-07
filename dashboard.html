@@ -14,10 +14,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .header-status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .dot.green { background: #22c55e; }
 .dot.yellow { background: #eab308; }
-.container { max-width: 1600px; margin: 0 auto; padding: 20px; }
-.dashboard-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
+.container { max-width: 1920px; margin: 0 auto; padding: 20px; }
+.dashboard-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px 320px; gap: 20px; align-items: start; }
 .dashboard-main { min-width: 0; }
-.dex-sidebar { min-width: 0; }
+.dex-sidebar, .pool-history-sidebar { min-width: 0; }
 .realtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .rt-card { background: #1e293b; border-radius: 10px; padding: 14px; text-align: center; border: 1px solid #334155; }
 .rt-card .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
@@ -82,6 +82,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .dex-positive { color: #22c55e !important; }
 .dex-negative { color: #ef4444 !important; }
 .dex-sidebar .dex-card { position: static; margin-bottom: 20px; }
+.pool-history-sidebar .dex-card { position: sticky; top: 20px; }
+.pool-note { color: #64748b; font-size: 11px; line-height: 1.5; margin-bottom: 12px; }
+.pool-list { display: flex; flex-direction: column; gap: 8px; max-height: 680px; overflow-y: auto; padding-right: 2px; }
+.pool-row, .pool-table-head { display: grid; grid-template-columns: 74px minmax(0, 1fr) minmax(0, 1fr) 58px; gap: 8px; align-items: center; }
+.pool-table-head { color: #64748b; font-size: 11px; font-weight: 700; padding: 0 10px 6px; }
+.pool-table-head div:not(:first-child) { text-align: right; }
+.pool-row { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 10px; }
+.pool-cell { min-width: 0; color: #cbd5e1; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.pool-cell.date { color: #e2e8f0; text-align: left; }
+.pool-cell.ark { color: #14b8a6; }
+.pool-cell.usdt { color: #f59e0b; }
+.pool-cell.price { color: #60a5fa; }
+.pool-empty { color: #64748b; text-align: center; padding: 18px 8px; font-size: 12px; border: 1px dashed #334155; border-radius: 10px; background: #0f172a; }
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -113,7 +126,7 @@ td.neg { color: #ef4444; }
 }
 @media (max-width: 1100px) {
   .dashboard-layout { grid-template-columns: 1fr; }
-  .dex-sidebar .dex-card { position: static; }
+  .dex-sidebar .dex-card, .pool-history-sidebar .dex-card { position: static; }
 }
 </style>
 </head>
@@ -233,6 +246,22 @@ td.neg { color: #ef4444; }
       <div class="section-title">⚡ 最新事件流</div>
       <div class="events-box" id="eventStream">
         <div style="text-align:center;color:#64748b;padding:10px;">等待数据...</div>
+      </div>
+    </aside>
+
+    <aside class="pool-history-sidebar">
+      <div class="dex-card">
+        <div class="dex-head">
+          <div class="today-title" style="margin-bottom:0;">每日底池记录</div>
+          <div class="dex-source" id="poolHistorySource">本地记录</div>
+        </div>
+        <div class="pool-note">北京时间每日结束后自动记录 Dex Screener 的池内 ARK、池内 USDT 和 ARK 价格。</div>
+        <div class="pool-list" id="poolHistoryList">
+          <div class="pool-table-head"><div>日期</div><div>ARK</div><div>USDT</div><div>价格</div></div>
+          <div id="poolHistoryRows">
+            <div class="pool-empty">等待每日结束后生成记录...</div>
+          </div>
+        </div>
       </div>
     </aside>
   </div>
@@ -394,6 +423,33 @@ function updateDex(data) {
 function updateLpSwaps(resp) {
   currentLpData = resp && resp.summary ? resp.summary : null;
   renderDexPeriod(currentDexPeriod);
+}
+
+function poolSnapshotHtml(row) {
+  if (!row) return "";
+  return "<div class=\"pool-row\">" +
+    "<div class=\"pool-cell date\">" + esc(row.date) + "</div>" +
+    "<div class=\"pool-cell ark\">" + fmtToken(row.pool_ark, 0) + "</div>" +
+    "<div class=\"pool-cell usdt\">" + fmtToken(row.pool_usdt, 0) + "</div>" +
+    "<div class=\"pool-cell price\">" + fmtUsd(row.price_usd, 2) + "</div>" +
+    "</div>";
+}
+
+function updatePoolHistory(resp) {
+  var source = document.getElementById("poolHistorySource");
+  var list = document.getElementById("poolHistoryRows");
+  var rows = resp && resp.data ? resp.data : [];
+  if (source) source.textContent = rows.length ? "本地记录 · " + rows.length + "天" : "本地记录 · 待收盘";
+  if (!list) return;
+  if (!rows.length) {
+    list.innerHTML = "<div class=\"pool-empty\">暂无正式日快照；每日结束后会自动记录上一日数据。</div>";
+    return;
+  }
+  var html = "";
+  for (var i = 0; i < rows.length; i++) {
+    html += poolSnapshotHtml(rows[i]);
+  }
+  list.innerHTML = html;
 }
 
 function renderDexPeriod(period) {
@@ -633,7 +689,8 @@ function loadAll() {
     fetchAPI("/api/realtime?limit=50"),
     fetchAPI("/api/today-trend"),
     fetchAPI("/api/dex/ark"),
-    fetchAPI("/api/lp-swaps?limit=5&period=" + currentDexPeriod)
+    fetchAPI("/api/lp-swaps?limit=5&period=" + currentDexPeriod),
+    fetchAPI("/api/dex/pool-history?limit=30")
   ]).then(function(results) {
     var today = results[0];
     var daily = results[1];
@@ -641,10 +698,12 @@ function loadAll() {
     var trend = results[3];
     var dex = results[4];
     var lp = results[5];
+    var poolHistory = results[6];
     updateHeader(today);
     updateToday(today ? today.data : null);
     updateLpSwaps(lp);
     updateDex(dex ? dex.data : null);
+    updatePoolHistory(poolHistory);
     updateDaily(daily);
     updateEvents(realtime ? realtime.data : null);
     try { updateTrend(trend ? trend.data : null); } catch(e) { console.error("updateTrend error:", e); }
