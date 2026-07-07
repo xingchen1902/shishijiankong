@@ -339,41 +339,20 @@ def dex_daily_snapshot_worker():
 
 
 # ---------- Telegram /today 命令轮询 ----------
+def _attach_realtime_dex_data(record):
+    try:
+        dex_data = get_ark_dex_data()
+        if dex_data and not dex_data.get("error"):
+            record["pool_ark"] = round(_to_float(dex_data.get("pool_ark")), 2)
+            record["pool_usdt"] = round(_to_float(dex_data.get("pool_usdt")), 2)
+            record["ark_price"] = round(_to_float(dex_data.get("price_usd")), 6)
+    except Exception as e:
+        print(f"[Telegram Poll] Dex 数据获取失败: {e}")
+    return record
+
 def _send_today(record):
     """只推 Telegram，不写飞书"""
-    from pusher import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-    import requests
-    def f(n): return f"{float(n):,.2f}"
-    def fmt_720(r): return f(round(float(r.get('transfer_720',0)), 2))
-    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
-
-━━━━━━━━━━━━━━━━
-
-<b>💰 奖金池</b>
-余额：{f(record['bonus_balance'])} ARK
-当日提取：{f(record['bonus_withdraw'])} ARK
-
-<b>🔒 质押池</b>
-余额：{f(record['stake_balance'])} ARK
-新增质押：{f(record['stake_in'])} ARK
-赎回：{f(record['stake_out'])} ARK
-净质押：{f(record['net_stake'])} ARK
-
-<b>⚡ 涡轮</b>
-静态涡轮：{f(record.get('static_burn',0))} ARK
-动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
-动静态涡轮：{f(record.get('dynamic_in',0))} ARK
-
-<b>🔄 转720天</b>
-{fmt_720(record)} ARK
-
-━━━━━━━━━━━━━━━━
-📡 实时监控 · 每日汇总
-🏷 数据由创亿社区提供"""
-    reply_markup = {"inline_keyboard": [[{"text": "📊查看更多数据", "url": "http://arkcy.duckdns.org/"}]]}
-    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
-              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
+    push_to_telegram(_attach_realtime_dex_data(record))
 
 def telegram_poll():
     """后台轮询 Telegram 消息，响应 /today 命令"""
