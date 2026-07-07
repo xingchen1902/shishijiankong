@@ -6,9 +6,15 @@
 - BJT 00:05 推送飞书 + Telegram
 """
 
-import time, threading
+import time, threading, requests
 from datetime import datetime, timezone, timedelta
-from db import get_conn, insert_events_batch, upsert_daily_summary, get_all_daily_until_yesterday as get_all_daily
+from db import (
+    get_conn,
+    get_dex_daily_snapshot,
+    insert_events_batch,
+    upsert_daily_summary,
+    get_all_daily_until_yesterday as get_all_daily,
+)
 from event_parser import EventParser, get_balance, BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
 from pusher import push_to_feishu, push_to_telegram
 
@@ -83,6 +89,38 @@ class DailyAggregator:
         else:
             self.compute_and_push(date_str, do_push=False)
             self._pending_push_date = date_str
+
+    def _get_dex_snapshot(self, date_str):
+        snapshot = get_dex_daily_snapshot(date_str)
+        if snapshot:
+            return snapshot
+        try:
+            r = requests.get(
+                "http://127.0.0.1:8899/api/dex/capture-pool",
+                params={"date": date_str},
+                timeout=20,
+            )
+            d = r.json()
+            if d.get("status") == "ok":
+                return d.get("data")
+        except Exception as e:
+            print(f"  [Dex] 快照获取失败: {e}")
+        return None
+
+    def _attach_dex_snapshot(self, record):
+        snapshot = self._get_dex_snapshot(record["date"])
+        if not snapshot:
+            print(f"  [Dex] {record['date']} 无底池快照")
+            return record
+        record["pool_ark"] = round(float(snapshot.get("pool_ark") or 0), 2)
+        record["pool_usdt"] = round(float(snapshot.get("pool_usdt") or 0), 2)
+        record["ark_price"] = round(float(snapshot.get("price_usd") or 0), 6)
+        print(
+            "  [Dex] 底池 ARK %.2f / USDT %.2f / 价格 %.6f"
+            % (record["pool_ark"], record["pool_usdt"], record["ark_price"])
+        )
+        return record
+
     def compute_and_push(self, date_str, do_push=True):
         # 防重复推送检查（容器重启后同一天不会推两次）
         if hasattr(self, "_pushed_dates") and date_str in self._pushed_dates:
@@ -160,6 +198,7 @@ class DailyAggregator:
         upsert_daily_summary(date_str, **{k: v for k, v in record.items() if k != "date"})
 
         if do_push:
+            record = self._attach_dex_snapshot(record)
             push_to_feishu(record)
             push_to_telegram(record)
             if not hasattr(self, "_pushed_dates"):

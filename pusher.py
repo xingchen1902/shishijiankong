@@ -28,6 +28,13 @@ FIELD_MAP = {
     "stake_in": "新增质押",
     "stake_out": "赎回",
     "net_stake": "净质押量",
+    "pool_ark": "底池ARK",
+    "pool_usdt": "底池USDT",
+    "ark_price": "ARK价格",
+}
+
+FIELD_PRECISION = {
+    "ark_price": 6,
 }
 
 # Telegram 配置
@@ -52,10 +59,17 @@ def push_to_feishu(record):
 
     # 查找并删除旧记录
     url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records"
-    r = requests.get(url + "?page_size=20&field_names=日期", headers=headers, timeout=15)
-    existing = r.json()
-    if existing.get("code") == 0:
-        date_ms = int(datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=BJT).timestamp() * 1000)
+    date_ms = int(datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=BJT).timestamp() * 1000)
+    page_token = ""
+    while True:
+        params = {"page_size": 100}
+        if page_token:
+            params["page_token"] = page_token
+        r = requests.get(url, headers=headers, params=params, timeout=15)
+        existing = r.json()
+        if existing.get("code") != 0:
+            print(f"  [飞书] 查询旧记录失败: {existing}")
+            break
         for item in existing.get("data", {}).get("items", []):
             if item.get("fields", {}).get("日期") == date_ms:
                 rid = item["record_id"]
@@ -63,13 +77,16 @@ def push_to_feishu(record):
                 if dr.get("code") == 0:
                     print(f"  [飞书] 删除旧记录 {date_str}")
                     time.sleep(0.3)
+        if not existing.get("data", {}).get("has_more"):
+            break
+        page_token = existing.get("data", {}).get("page_token", "")
 
     # 写入新记录
     ts = int(datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=BJT).timestamp() * 1000)
     fields = {"日期": ts}
     for key, val in record.items():
-        if key in FIELD_MAP and key != "date":
-            fields[FIELD_MAP[key]] = round(float(val), 2)
+        if key in FIELD_MAP and key != "date" and val is not None:
+            fields[FIELD_MAP[key]] = round(float(val), FIELD_PRECISION.get(key, 2))
 
     r = requests.post(url, headers=headers, json={"fields": fields}, timeout=15)
     d = r.json()
@@ -82,6 +99,9 @@ def push_to_feishu(record):
 
 def _fmt_720(r):
     return f"{float(r.get('transfer_720',0)):,.2f}"
+
+def _fmt_price(r):
+    return f"{float(r.get('ark_price',0)):,.6f}"
 
 def push_to_telegram(record):
     """推送汇总到 Telegram"""
@@ -112,6 +132,11 @@ def push_to_telegram(record):
 
 <b>🔄 转720天</b>
 {_fmt_720(record)} ARK
+
+<b>💧 底池</b>
+ARK：{f(record.get('pool_ark',0))} ARK
+USDT：{f(record.get('pool_usdt',0))} USDT
+ARK价格：${_fmt_price(record)}
 
 ━━━━━━━━━━━━━━━━
 📡 实时监控 · 每日汇总
