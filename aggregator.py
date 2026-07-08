@@ -115,6 +115,18 @@ class DailyAggregator:
             record["pool_ark"] = round(float(snapshot.get("pool_ark") or 0), 2)
             record["pool_usdt"] = round(float(snapshot.get("pool_usdt") or 0), 2)
             record["ark_price"] = round(float(snapshot.get("price_usd") or 0), 6)
+            prev_date = (datetime.strptime(record["date"], "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+            prev_snapshot = get_dex_daily_snapshot(prev_date)
+            if prev_snapshot:
+                record["pool_ark_delta"] = round(
+                    record["pool_ark"] - float(prev_snapshot.get("pool_ark") or 0), 2
+                )
+                record["pool_usdt_delta"] = round(
+                    record["pool_usdt"] - float(prev_snapshot.get("pool_usdt") or 0), 2
+                )
+                record["ark_price_delta"] = round(
+                    record["ark_price"] - float(prev_snapshot.get("price_usd") or 0), 6
+                )
             print(
                 "  [Dex] 底池 ARK %.2f / USDT %.2f / 价格 %.6f"
                 % (record["pool_ark"], record["pool_usdt"], record["ark_price"])

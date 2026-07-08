@@ -346,6 +346,18 @@ def _attach_realtime_dex_data(record):
             record["pool_ark"] = round(_to_float(dex_data.get("pool_ark")), 2)
             record["pool_usdt"] = round(_to_float(dex_data.get("pool_usdt")), 2)
             record["ark_price"] = round(_to_float(dex_data.get("price_usd")), 6)
+            prev_date = (datetime.strptime(record["date"], "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+            prev_snapshot = get_dex_daily_snapshot(prev_date)
+            if prev_snapshot:
+                record["pool_ark_delta"] = round(
+                    record["pool_ark"] - _to_float(prev_snapshot.get("pool_ark")), 2
+                )
+                record["pool_usdt_delta"] = round(
+                    record["pool_usdt"] - _to_float(prev_snapshot.get("pool_usdt")), 2
+                )
+                record["ark_price_delta"] = round(
+                    record["ark_price"] - _to_float(prev_snapshot.get("price_usd")), 6
+                )
     except Exception as e:
         print(f"[Telegram Poll] Dex 数据获取失败: {e}")
 

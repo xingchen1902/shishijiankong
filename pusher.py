@@ -105,6 +105,10 @@ def _fmt_720(r):
 def _fmt_price(r):
     return f"{float(r.get('ark_price',0)):,.6f}"
 
+def _fmt_delta(value, decimals=2):
+    n = float(value or 0)
+    return f"{n:+,.{decimals}f}"
+
 def push_to_telegram(record):
     """推送汇总到 Telegram"""
     if not TELEGRAM_BOT_TOKEN:
@@ -137,8 +141,13 @@ def push_to_telegram(record):
 
 <b>💧 底池</b>
 ARK：{f(record.get('pool_ark',0))} ARK
+较昨日：{_fmt_delta(record.get('pool_ark_delta'))} ARK
+
 USDT：{f(record.get('pool_usdt',0))} USDT
+较昨日：{_fmt_delta(record.get('pool_usdt_delta'))} USDT
+
 ARK价格：${_fmt_price(record)}
+较昨日：{_fmt_delta(record.get('ark_price_delta'), 6)}
 
 ━━━━━━━━━━━━━━━━
 📡 实时监控 · 每日汇总
