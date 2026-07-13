@@ -94,6 +94,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .pool-cell.ark { color: #14b8a6; }
 .pool-cell.usdt { color: #f59e0b; }
 .pool-cell.price { color: #60a5fa; }
+.pool-arrow { display: inline-block; margin-left: 4px; font-size: 10px; line-height: 1; vertical-align: 1px; }
+.pool-arrow.up { color: #22c55e; }
+.pool-arrow.down { color: #ef4444; }
 .pool-empty { color: #64748b; text-align: center; padding: 18px 8px; font-size: 12px; border: 1px dashed #334155; border-radius: 10px; background: #0f172a; }
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
@@ -425,13 +428,22 @@ function updateLpSwaps(resp) {
   renderDexPeriod(currentDexPeriod);
 }
 
-function poolSnapshotHtml(row) {
+function poolArrow(value, prevValue) {
+  if (prevValue === null || prevValue === undefined) return "";
+  var current = Number(value || 0);
+  var previous = Number(prevValue || 0);
+  if (current > previous) return "<span class=\"pool-arrow up\">▲</span>";
+  if (current < previous) return "<span class=\"pool-arrow down\">▼</span>";
+  return "";
+}
+
+function poolSnapshotHtml(row, prevRow) {
   if (!row) return "";
   return "<div class=\"pool-row\">" +
     "<div class=\"pool-cell date\">" + esc(row.date) + "</div>" +
-    "<div class=\"pool-cell ark\">" + fmtToken(row.pool_ark, 0) + "</div>" +
-    "<div class=\"pool-cell usdt\">" + fmtToken(row.pool_usdt, 0) + "</div>" +
-    "<div class=\"pool-cell price\">" + fmtUsd(row.price_usd, 2) + "</div>" +
+    "<div class=\"pool-cell ark\">" + fmtToken(row.pool_ark, 0) + poolArrow(row.pool_ark, prevRow && prevRow.pool_ark) + "</div>" +
+    "<div class=\"pool-cell usdt\">" + fmtToken(row.pool_usdt, 0) + poolArrow(row.pool_usdt, prevRow && prevRow.pool_usdt) + "</div>" +
+    "<div class=\"pool-cell price\">" + fmtUsd(row.price_usd, 2) + poolArrow(row.price_usd, prevRow && prevRow.price_usd) + "</div>" +
     "</div>";
 }
 
@@ -447,7 +459,7 @@ function updatePoolHistory(resp) {
   }
   var html = "";
   for (var i = 0; i < rows.length; i++) {
-    html += poolSnapshotHtml(rows[i]);
+    html += poolSnapshotHtml(rows[i], rows[i + 1]);
   }
   list.innerHTML = html;
 }
