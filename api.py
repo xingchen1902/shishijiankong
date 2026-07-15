@@ -382,7 +382,11 @@ def _attach_realtime_dex_data(record):
 
 def _send_today(record, chat_id=None):
     """只推 Telegram，不写飞书"""
-    push_to_telegram(_attach_realtime_dex_data(record), target_chat_id=chat_id)
+    push_to_telegram(
+        _attach_realtime_dex_data(record),
+        target_chat_id=chat_id,
+        title_suffix="实时数据",
+    )
 
 def _send_chat_id(chat_id, title=""):
     text = f"当前群 ID：{chat_id}"

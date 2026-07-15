@@ -127,7 +127,7 @@ def _fmt_delta(value, decimals=2):
     n = float(value or 0)
     return f"{n:+,.{decimals}f}"
 
-def push_to_telegram(record, target_chat_id=None):
+def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
     """推送汇总到 Telegram"""
     if not TELEGRAM_BOT_TOKEN:
         print("  [Telegram] 跳过: 未配置 BOT_TOKEN")
@@ -136,7 +136,7 @@ def push_to_telegram(record, target_chat_id=None):
     def f(n): return f"{float(n):,.2f}"
 
     msg = f"""<b>📊 ARK 链上数据</b>
-<b>{record['date']} 汇总</b>
+<b>{record['date']} {title_suffix}</b>
 
 ━━━━━━━━━━━━━━━━
 
