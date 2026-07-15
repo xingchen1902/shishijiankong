@@ -378,6 +378,16 @@ def _send_today(record):
     """只推 Telegram，不写飞书"""
     push_to_telegram(_attach_realtime_dex_data(record))
 
+def _send_chat_id(chat_id, title=""):
+    text = f"当前群 ID：{chat_id}"
+    if title:
+        text += f"\n群名：{title}"
+    requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+        timeout=15,
+    )
+
 def telegram_poll():
     """后台轮询 Telegram 消息，响应 /today 命令"""
     if not TELEGRAM_BOT_TOKEN:
@@ -397,10 +407,16 @@ def telegram_poll():
                 update_id = update.get("update_id", 0)
                 offset = max(offset, update_id + 1)
                 msg = update.get("message", {})
-                chat_id = msg.get("chat", {}).get("id")
+                chat = msg.get("chat", {})
+                chat_id = chat.get("id")
                 text = msg.get("text", "").strip()
+                command = text.split()[0].split("@")[0].lower() if text else ""
+                if command == "/id":
+                    print(f"[Telegram Poll] 收到 /id 命令 chat_id={chat_id}")
+                    _send_chat_id(chat_id, chat.get("title", ""))
+                    continue
                 # 只响应来自指定群组的 /today 命令
-                if chat_id == TELEGRAM_CHAT_ID and text == "/today":
+                if chat_id == TELEGRAM_CHAT_ID and command == "/today":
                     print(f"[Telegram Poll] 收到 /today 命令")
                     record = get_today_data()
                     _send_today(record)
