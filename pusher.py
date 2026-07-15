@@ -117,7 +117,8 @@ def push_to_telegram(record):
 
     def f(n): return f"{float(n):,.2f}"
 
-    msg = f"""<b>📊 ARK 链上数据 · {record['date']}</b>
+    msg = f"""<b>📊 ARK 链上数据</b>
+<b>{record['date']} 汇总</b>
 
 ━━━━━━━━━━━━━━━━
 
