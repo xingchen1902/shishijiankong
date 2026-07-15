@@ -43,6 +43,24 @@ FIELD_PRECISION = {
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 _chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 TELEGRAM_CHAT_ID = int(_chat) if _chat.lstrip("-").isdigit() else _chat
+_chat_ids = os.environ.get("TELEGRAM_CHAT_IDS", "")
+_no_button_chat_ids = os.environ.get("TELEGRAM_NO_BUTTON_CHAT_IDS", "")
+
+def _parse_chat_id(value):
+    value = str(value).strip()
+    return int(value) if value.lstrip("-").isdigit() else value
+
+def _parse_chat_ids(value):
+    return [_parse_chat_id(item) for item in value.split(",") if item.strip()]
+
+def get_telegram_chat_ids():
+    chat_ids = _parse_chat_ids(_chat_ids) if _chat_ids else []
+    if TELEGRAM_CHAT_ID and TELEGRAM_CHAT_ID not in chat_ids:
+        chat_ids.insert(0, TELEGRAM_CHAT_ID)
+    return chat_ids
+
+def get_telegram_no_button_chat_ids():
+    return set(_parse_chat_ids(_no_button_chat_ids))
 
 
 def get_feishu_token():
@@ -109,7 +127,7 @@ def _fmt_delta(value, decimals=2):
     n = float(value or 0)
     return f"{n:+,.{decimals}f}"
 
-def push_to_telegram(record):
+def push_to_telegram(record, target_chat_id=None):
     """推送汇总到 Telegram"""
     if not TELEGRAM_BOT_TOKEN:
         print("  [Telegram] 跳过: 未配置 BOT_TOKEN")
@@ -154,14 +172,29 @@ ARK价格：${_fmt_price(record)}
 📡 实时监控 · 每日汇总
 🏷 数据由创亿社区提供"""
 
-    reply_markup = {"inline_keyboard": [[{"text": "📊查看更多数据", "url": "http://arkcy.duckdns.org/"}]]}
-    r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML",
-              "disable_web_page_preview": True, "reply_markup": reply_markup}, timeout=15)
-    d = r.json()
-    if d.get("ok"):
-        print(f"  [Telegram] 推送成功 {record['date']}")
-        return True
-    else:
-        print(f"  [Telegram] 推送失败: {d.get('description', d)}")
-        return False
+    chat_ids = [target_chat_id] if target_chat_id is not None else get_telegram_chat_ids()
+    no_button_chat_ids = get_telegram_no_button_chat_ids()
+    ok = True
+    for chat_id in chat_ids:
+        payload = {
+            "chat_id": chat_id,
+            "text": msg,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        if chat_id not in no_button_chat_ids:
+            payload["reply_markup"] = {
+                "inline_keyboard": [[{"text": "📊查看更多数据", "url": "http://arkcy.duckdns.org/"}]]
+            }
+        r = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json=payload,
+            timeout=15,
+        )
+        d = r.json()
+        if d.get("ok"):
+            print(f"  [Telegram] 推送成功 {record['date']} chat_id={chat_id}")
+        else:
+            ok = False
+            print(f"  [Telegram] 推送失败 chat_id={chat_id}: {d.get('description', d)}")
+    return ok

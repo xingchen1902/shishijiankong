@@ -14,7 +14,13 @@ from db import (
     upsert_dex_daily_snapshot,
 )
 from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
-from pusher import push_to_feishu, push_to_telegram, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from pusher import (
+    get_telegram_chat_ids,
+    push_to_feishu,
+    push_to_telegram,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+)
 
 BJT = timezone(timedelta(hours=8))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -374,9 +380,9 @@ def _attach_realtime_dex_data(record):
     record["sell_value_usdt"] = round(float(row["sell_value_usdt"]) if row else 0, 2)
     return record
 
-def _send_today(record):
+def _send_today(record, chat_id=None):
     """只推 Telegram，不写飞书"""
-    push_to_telegram(_attach_realtime_dex_data(record))
+    push_to_telegram(_attach_realtime_dex_data(record), target_chat_id=chat_id)
 
 def _send_chat_id(chat_id, title=""):
     text = f"当前群 ID：{chat_id}"
@@ -415,11 +421,11 @@ def telegram_poll():
                     print(f"[Telegram Poll] 收到 /id 命令 chat_id={chat_id}")
                     _send_chat_id(chat_id, chat.get("title", ""))
                     continue
-                # 只响应来自指定群组的 /today 命令
-                if chat_id == TELEGRAM_CHAT_ID and command == "/today":
+                # 只响应来自已配置推送群组的 /today 命令
+                if chat_id in get_telegram_chat_ids() and command == "/today":
                     print(f"[Telegram Poll] 收到 /today 命令")
                     record = get_today_data()
-                    _send_today(record)
+                    _send_today(record, chat_id=chat_id)
         except Exception as e:
             print(f"[Telegram Poll] 异常: {e}")
             time.sleep(5)
