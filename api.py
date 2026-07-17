@@ -324,7 +324,7 @@ def capture_dex_daily_snapshot(date_str=None, force=False):
 
 def ensure_latest_dex_daily_snapshot():
     now = datetime.now(BJT)
-    if not (now.hour == 0 and now.minute <= 30):
+    if not (now.hour == 0 and now.minute <= 5):
         return None
     yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
     if not get_dex_daily_snapshot(yesterday):
@@ -336,7 +336,7 @@ def dex_daily_snapshot_worker():
     while True:
         try:
             now = datetime.now(BJT)
-            if now.hour == 0 and now.minute <= 30:
+            if now.hour == 0 and now.minute <= 5:
                 ensure_latest_dex_daily_snapshot()
             time.sleep(60)
         except Exception as e:
