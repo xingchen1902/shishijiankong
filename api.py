@@ -452,9 +452,20 @@ def get_ark_dex():
     return {"data": get_ark_dex_data()}
 
 @app.get("/api/dex/pool-history")
-def get_dex_pool_history(limit:int=30):
+def get_dex_pool_history(page:int=1, per_page:int=20):
     ensure_latest_dex_daily_snapshot()
-    return {"data": get_dex_daily_snapshots(limit)}
+    page = max(1, int(page or 1))
+    per_page = min(20, max(1, int(per_page or 20)))
+    offset = (page - 1) * per_page
+    rows, total = get_dex_daily_snapshots(per_page + 1, offset)
+    next_row = rows[per_page] if len(rows) > per_page else None
+    return {
+        "data": rows[:per_page],
+        "next_row": next_row,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
 
 @app.get("/api/dex/capture-pool")
 def capture_dex_pool(date: str = None):

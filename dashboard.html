@@ -97,6 +97,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .pool-arrow { display: inline-block; margin-left: 4px; font-size: 10px; line-height: 1; vertical-align: 1px; }
 .pool-arrow.up { color: #22c55e; }
 .pool-arrow.down { color: #ef4444; }
+.pool-pagination { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 10px; color: #64748b; font-size: 11px; }
+.pool-page-btn { padding: 4px 10px; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #94a3b8; cursor: pointer; }
+.pool-page-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .pool-empty { color: #64748b; text-align: center; padding: 18px 8px; font-size: 12px; border: 1px dashed #334155; border-radius: 10px; background: #0f172a; }
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
@@ -109,7 +112,7 @@ tbody tr:hover { background: #1a2332; }
 tbody tr:last-child td { border-bottom: none; }
 td.pos { color: #22c55e; }
 td.neg { color: #ef4444; }
-.events-box { background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-top: 20px; padding: 16px; max-height: 300px; overflow-y: auto; }
+.events-box { background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-top: 20px; padding: 16px; overflow-y: auto; }
 .events-box .event-item { padding: 6px 0; border-bottom: 1px solid #1a2332; font-size: 12px; display: flex; justify-content: space-between; }
 .events-box .event-item:last-child { border: none; }
 .event-type { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 6px; }
@@ -265,6 +268,7 @@ td.neg { color: #ef4444; }
             <div class="pool-empty">等待每日结束后生成记录...</div>
           </div>
         </div>
+        <div class="pool-pagination" id="poolHistoryPagination"></div>
       </div>
     </aside>
   </div>
@@ -281,6 +285,8 @@ var API_BASE = window.location.origin;
 var currentDexData = null;
 var currentLpData = null;
 var currentDexPeriod = "h24";
+var currentPoolHistoryPage = 1;
+var POOL_HISTORY_PER_PAGE = 20;
 var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24小时"};
 
 function fmt(n) {
@@ -450,18 +456,33 @@ function poolSnapshotHtml(row, prevRow) {
 function updatePoolHistory(resp) {
   var source = document.getElementById("poolHistorySource");
   var list = document.getElementById("poolHistoryRows");
+  var pagination = document.getElementById("poolHistoryPagination");
   var rows = resp && resp.data ? resp.data : [];
-  if (source) source.textContent = rows.length ? "本地记录 · " + rows.length + "天" : "本地记录 · 待收盘";
+  var total = resp && resp.total ? Number(resp.total) : 0;
+  var page = resp && resp.page ? Number(resp.page) : currentPoolHistoryPage;
+  var perPage = resp && resp.per_page ? Number(resp.per_page) : POOL_HISTORY_PER_PAGE;
+  var totalPages = Math.max(1, Math.ceil(total / perPage));
+  if (source) source.textContent = total ? "本地记录 · " + total + "天" : "本地记录 · 待收盘";
   if (!list) return;
   if (!rows.length) {
     list.innerHTML = "<div class=\"pool-empty\">暂无正式日快照；每日结束后会自动记录上一日数据。</div>";
+    if (pagination) pagination.innerHTML = "";
     return;
   }
+  var compareRows = rows.slice();
+  if (resp && resp.next_row) compareRows.push(resp.next_row);
   var html = "";
   for (var i = 0; i < rows.length; i++) {
-    html += poolSnapshotHtml(rows[i], rows[i + 1]);
+    html += poolSnapshotHtml(rows[i], compareRows[i + 1]);
   }
   list.innerHTML = html;
+  if (pagination) {
+    pagination.innerHTML = totalPages > 1
+      ? "<button class=\"pool-page-btn\" onclick=\"goToPoolHistoryPage(" + (page - 1) + ")\" " + (page <= 1 ? "disabled" : "") + ">上一页</button>" +
+        "<span>" + page + " / " + totalPages + "</span>" +
+        "<button class=\"pool-page-btn\" onclick=\"goToPoolHistoryPage(" + (page + 1) + ")\" " + (page >= totalPages ? "disabled" : "") + ">下一页</button>"
+      : "";
+  }
 }
 
 function renderDexPeriod(period) {
@@ -513,6 +534,7 @@ function updateDaily(resp) {
   if (!data || !data.length) {
     tbody.innerHTML = "<tr><td colspan=\"10\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
     if (paginationEl) paginationEl.innerHTML = "";
+    syncEventStreamHeight();
     return;
   }
   var html = "";
@@ -571,6 +593,16 @@ function updateDaily(resp) {
       paginationEl.innerHTML = pHtml;
     }
   }
+  syncEventStreamHeight();
+}
+
+function syncEventStreamHeight() {
+  var tableWrap = document.querySelector(".table-wrap");
+  var eventBox = document.getElementById("eventStream");
+  if (!tableWrap || !eventBox) return;
+  var height = tableWrap.offsetHeight;
+  eventBox.style.height = height + "px";
+  eventBox.style.maxHeight = height + "px";
 }
 
 function updateEvents(allEvents) {
@@ -684,6 +716,13 @@ window.goToDailyPage = function(page) {
   loadAll();
 };
 
+window.goToPoolHistoryPage = function(page) {
+  currentPoolHistoryPage = Math.max(1, page);
+  loadAll();
+};
+
+window.addEventListener("resize", syncEventStreamHeight);
+
 document.querySelectorAll(".dex-change-tab").forEach(function(tab) {
   tab.addEventListener("click", function() {
     currentDexPeriod = tab.getAttribute("data-period");
@@ -702,7 +741,7 @@ function loadAll() {
     fetchAPI("/api/today-trend"),
     fetchAPI("/api/dex/ark"),
     fetchAPI("/api/lp-swaps?limit=5&period=" + currentDexPeriod),
-    fetchAPI("/api/dex/pool-history?limit=30")
+    fetchAPI("/api/dex/pool-history?page=" + currentPoolHistoryPage + "&per_page=" + POOL_HISTORY_PER_PAGE)
   ]).then(function(results) {
     var today = results[0];
     var daily = results[1];

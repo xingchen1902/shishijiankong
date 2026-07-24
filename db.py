@@ -235,15 +235,16 @@ def upsert_dex_daily_snapshot(date_str, **kwargs):
     conn.commit()
     conn.close()
 
-def get_dex_daily_snapshots(limit=30):
+def get_dex_daily_snapshots(limit=20, offset=0):
     ensure_dex_daily_snapshots_table()
     conn = get_conn()
+    total_row = conn.execute("SELECT COUNT(*) FROM dex_daily_snapshots").fetchone()
     rows = conn.execute(
-        "SELECT * FROM dex_daily_snapshots ORDER BY date DESC LIMIT ?",
-        (limit,)
+        "SELECT * FROM dex_daily_snapshots ORDER BY date DESC LIMIT ? OFFSET ?",
+        (limit, offset)
     ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return [dict(r) for r in rows], (total_row[0] if total_row else 0)
 
 def get_today_events(date_str):
     """获取某天的所有原始事件"""
