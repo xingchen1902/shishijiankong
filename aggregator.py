@@ -133,13 +133,14 @@ class DailyAggregator:
             )
 
         conn = get_conn()
+        next_date = (datetime.strptime(record["date"], "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
         row = conn.execute("""
             SELECT
                 COALESCE(SUM(CASE WHEN side='buy_ark' THEN amount_usdt ELSE 0 END),0) as buy_value_usdt,
                 COALESCE(SUM(CASE WHEN side='sell_ark' THEN amount_usdt ELSE 0 END),0) as sell_value_usdt
             FROM lp_swaps
-            WHERE REPLACE(timestamp, 'T', ' ') LIKE ?
-        """, (record["date"] + "%",)).fetchone()
+            WHERE timestamp >= ? AND timestamp < ?
+        """, (record["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()
         conn.close()
         record["buy_value_usdt"] = round(float(row["buy_value_usdt"]) if row else 0, 2)
         record["sell_value_usdt"] = round(float(row["sell_value_usdt"]) if row else 0, 2)
@@ -161,27 +162,33 @@ class DailyAggregator:
         print("[汇总] 计算", date_str)
 
         conn = get_conn()
+        next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
         row = conn.execute("""
             SELECT
-                COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0) as bonus_out,
+                COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0) as bonus_out_raw,
                 COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in,
-                COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out,
+                COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out_raw,
+                COALESCE(SUM(CASE WHEN type='permanent_bonus' THEN value ELSE 0 END),0) as permanent_bonus,
+                COALESCE(SUM(CASE WHEN type='permanent_stake' THEN value ELSE 0 END),0) as permanent_stake,
                 COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
                 COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in,
                 COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
                 COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0) as bonus_in
             FROM events
-            WHERE REPLACE(timestamp, 'T', ' ') LIKE ?
-        """, (date_str + "%",)).fetchone()
+            WHERE timestamp >= ? AND timestamp < ?
+        """, (date_str + " 00:00:00", next_date + " 00:00:00")).fetchone()
         conn.close()
 
-        if not row or row["bonus_out"] is None:
+        if not row or row["bonus_out_raw"] is None:
             print("  [汇总]", date_str, "无数据")
             return
 
-        bonus_out = float(row["bonus_out"])
+        # 奖金池提取不包含 transfer_720；黑洞转账也从实际提取中排除。
+        bonus_out = max(float(row["bonus_out_raw"]) - float(row["permanent_bonus"]), 0)
         stake_in_val = float(row["stake_in"])
-        stake_out = float(row["stake_out"])
+        stake_out = max(float(row["stake_out_raw"]), 0)
+        permanent_bonus = float(row["permanent_bonus"])
+        permanent_stake = float(row["permanent_stake"])
         static_burn = float(row["static_burn"])
         dynamic_in = float(row["dynamic_in"])
         transfer_720 = float(row["transfer_720"]) if row["transfer_720"] else 0
@@ -197,8 +204,8 @@ class DailyAggregator:
         base_stake = float(prev["stake_balance"]) if prev else 0
 
         # 公式推算余额（0 RPC 依赖）
-        bonus_bal = base_bonus + bonus_in - bonus_out - transfer_720
-        stake_bal = base_stake + stake_in_val + transfer_720 - stake_out
+        bonus_bal = base_bonus + bonus_in - bonus_out - permanent_bonus - transfer_720
+        stake_bal = base_stake + stake_in_val + transfer_720 - stake_out - permanent_stake
         net_stake = stake_in_val - stake_out
 
         record = {
@@ -212,6 +219,8 @@ class DailyAggregator:
             "stake_in": round(stake_in_val, 2),
             "stake_out": round(stake_out, 2),
             "net_stake": round(net_stake, 2),
+            "permanent_bonus": round(permanent_bonus, 2),
+            "permanent_stake": round(permanent_stake, 2),
         }
 
         print("  奖金池提取: %.2f" % bonus_out)

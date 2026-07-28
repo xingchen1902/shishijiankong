@@ -28,6 +28,8 @@ FIELD_MAP = {
     "stake_in": "新增质押",
     "stake_out": "赎回",
     "net_stake": "净质押量",
+    "permanent_stake": "本金永久质押",
+    "permanent_bonus": "收益永久质押",
     "pool_ark": "底池ARK",
     "pool_usdt": "底池USDT",
     "ark_price": "ARK价格",
@@ -61,7 +63,6 @@ def get_telegram_chat_ids():
 
 def get_telegram_no_button_chat_ids():
     return set(_parse_chat_ids(_no_button_chat_ids))
-
 
 def get_feishu_token():
     r = requests.post("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
@@ -150,6 +151,10 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
 赎回：{f(record['stake_out'])} ARK
 净质押：{f(record['net_stake'])} ARK
 
+<b>🔥 销毁质押</b>
+本金永久质押：{f(record.get('permanent_stake',0))} ARK
+收益永久质押：{f(record.get('permanent_bonus',0))} ARK
+
 <b>⚡ 涡轮</b>
 静态涡轮：{f(record.get('static_burn',0))} ARK
 动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
@@ -169,8 +174,8 @@ ARK价格：${_fmt_price(record)}
 较昨日：{_fmt_delta(record.get('ark_price_delta'), 6)}
 
 ━━━━━━━━━━━━━━━━
-📡 实时监控 · 每日汇总
-🏷 数据由创亿社区提供"""
+📡 实时监控 · {title_suffix}
+"""
 
     chat_ids = [target_chat_id] if target_chat_id is not None else get_telegram_chat_ids()
     no_button_chat_ids = get_telegram_no_button_chat_ids()

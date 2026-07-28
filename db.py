@@ -14,12 +14,14 @@ DB_PATH = os.path.join(DB_DIR, "ark_monitor.db")
 
 def get_conn():
     os.makedirs(DB_DIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 def init_db():
     conn = get_conn()
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +37,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_events_block ON events(block);
         CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
         CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
+        CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
 
         CREATE TABLE IF NOT EXISTS raw_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +65,8 @@ def init_db():
             stake_in REAL DEFAULT 0,
             stake_out REAL DEFAULT 0,
             net_stake REAL DEFAULT 0,
+            permanent_bonus REAL DEFAULT 0,
+            permanent_stake REAL DEFAULT 0,
             updated_at TEXT DEFAULT (datetime('now'))
         );
 
@@ -87,6 +92,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_lp_swaps_block ON lp_swaps(block);
         CREATE INDEX IF NOT EXISTS idx_lp_swaps_side ON lp_swaps(side);
         CREATE INDEX IF NOT EXISTS idx_lp_swaps_created ON lp_swaps(created_at);
+        CREATE INDEX IF NOT EXISTS idx_lp_swaps_timestamp ON lp_swaps(timestamp);
 
         CREATE TABLE IF NOT EXISTS dex_daily_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,6 +109,10 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_dex_daily_snapshots_date ON dex_daily_snapshots(date);
     """)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
+    for column in ("permanent_bonus", "permanent_stake"):
+        if column not in columns:
+            conn.execute(f"ALTER TABLE daily_summary ADD COLUMN {column} REAL DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -248,10 +258,11 @@ def get_dex_daily_snapshots(limit=20, offset=0):
 
 def get_today_events(date_str):
     """获取某天的所有原始事件"""
+    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     conn = get_conn()
     rows = conn.execute(
-        "SELECT * FROM events WHERE date(created_at) = ? OR timestamp LIKE ? ORDER BY block",
-        (date_str, f"{date_str}%")
+        "SELECT * FROM events WHERE timestamp >= ? AND timestamp < ? ORDER BY block",
+        (f"{date_str} 00:00:00", f"{next_date} 00:00:00")
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]

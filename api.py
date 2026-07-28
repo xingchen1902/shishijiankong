@@ -43,7 +43,7 @@ if os.path.exists(logo_path):
 def get_today_data():
     today = datetime.now(BJT).strftime("%Y-%m-%d")
     yesterday = (datetime.now(BJT) - timedelta(days=1)).strftime("%Y-%m-%d")
-    yesterday_late = yesterday + " 23:30:00"
+    tomorrow = (datetime.now(BJT) + timedelta(days=1)).strftime("%Y-%m-%d")
     conn = get_conn()
 
     # 取昨日汇总作为余额基准
@@ -53,36 +53,43 @@ def get_today_data():
 
     # 取今日事件汇总
     row = conn.execute("""
-        SELECT COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0),
+        SELECT COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0),
-               COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0),
               COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0),
               COUNT(*), MAX(block)
         FROM events
-        WHERE REPLACE(timestamp, 'T', ' ') LIKE ?
-           OR (datetime(created_at, '+8 hours') LIKE ? AND REPLACE(timestamp, 'T', ' ') >= ?)
-    """, (today + "%", today + "%", yesterday_late)).fetchone()
+        WHERE timestamp >= ? AND timestamp < ?
+    """, (today + " 00:00:00", tomorrow + " 00:00:00")).fetchone()
     conn.close()
 
-    bo = float(row[0]) if row[0] else 0
+    raw_bo = float(row[0]) if row[0] else 0
     si = float(row[1]) if row[1] else 0
-    so = float(row[2]) if row[2] else 0
+    raw_so = float(row[2]) if row[2] else 0
     sb = float(row[3]) if row[3] else 0
     di = float(row[4]) if row[4] else 0
-    tr720 = float(row[5]) if row[5] else 0
-    bi = float(row[6]) if row[6] else 0
-    ec = int(row[7]) if row[7] else 0
-    lb = int(row[8]) if row[8] else 0
+    permanent_bonus = float(row[5]) if row[5] else 0
+    permanent_stake = float(row[6]) if row[6] else 0
+    tr720 = float(row[7]) if row[7] else 0
+    bi = float(row[8]) if row[8] else 0
+    ec = int(row[9]) if row[9] else 0
+    lb = int(row[10]) if row[10] else 0
+    # 地址级统计全部转出，再扣除对应的永久质押黑洞转账。
+    bo = max(raw_bo - permanent_bonus - tr720, 0)
+    so = max(raw_so - permanent_stake, 0)
 
     # 估算当前余额
-    bonus_bal = base_bonus + bi - bo - tr720
-    stake_bal = base_stake + si + tr720 - so
+    bonus_bal = base_bonus + bi - bo - permanent_bonus - tr720
+    stake_bal = base_stake + si + tr720 - so - permanent_stake
 
     return {"date":today,"bonus_balance":round(max(bonus_bal,0),2),"bonus_withdraw":round(bo,2),
             "static_burn":round(sb,2),"dynamic_in":round(di,2),
+            "permanent_bonus":round(permanent_bonus,2),"permanent_stake":round(permanent_stake,2),
             "dynamic_turbo":round(max(di-sb,0),2),"transfer_720":round(tr720,2),"stake_balance":round(max(stake_bal,0),2),
             "stake_in":round(si,2),"stake_out":round(so,2),"net_stake":round(si-so,2),
             "event_count":ec,"last_block":lb}
@@ -92,25 +99,31 @@ def get_today_trend():
     '''最近24小时逐小时趋势'''
     cutoff = (datetime.now(BJT) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     conn = get_conn()
-    q = '''SELECT SUBSTR(REPLACE(timestamp, 'T', ' '), 1, 13) as hour_label,
-        COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0) as bonus_out,
+    q = '''SELECT SUBSTR(timestamp, 1, 13) as hour_label,
+        COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' THEN value ELSE 0 END),0) as bonus_out_all,
         COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
         COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in,
         COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
+        COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0) as permanent_bonus,
+        COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0) as permanent_stake,
         COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in_val,
-        COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out_val
-        FROM events WHERE REPLACE(timestamp, 'T', ' ') >= ? GROUP BY hour_label ORDER BY hour_label'''
+        COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' THEN value ELSE 0 END),0) as stake_out_all
+        FROM events WHERE timestamp >= ? GROUP BY hour_label ORDER BY hour_label'''
     rows = conn.execute(q, (cutoff,)).fetchall()
     conn.close()
     result = []
     for r in rows:
         hl = r[0]
-        bo = float(r[1]) if r[1] else 0
+        bo_all = float(r[1]) if r[1] else 0
         sb = float(r[2]) if r[2] else 0
         di = float(r[3]) if r[3] else 0
         t720 = float(r[4]) if r[4] else 0
-        si2 = float(r[5]) if r[5] else 0
-        so2 = float(r[6]) if r[6] else 0
+        permanent_bonus2 = float(r[5]) if r[5] else 0
+        permanent_stake2 = float(r[6]) if r[6] else 0
+        si2 = float(r[7]) if r[7] else 0
+        so_all = float(r[8]) if r[8] else 0
+        bo = max(bo_all - permanent_bonus2 - t720, 0)
+        so2 = max(so_all - permanent_stake2, 0)
         # hour_label = "2026-06-24 13" -> "06/24 13:00"
         try:
             parts = hl.split(" ")
@@ -119,12 +132,16 @@ def get_today_trend():
             display = date_part.replace("-", "/") + " " + hour_part + ":00"
         except:
             display = str(hl)
-        result.append({'hour': display, 'bonus_withdraw': round(bo, 2),
+        result.append({'hour': display, 'bonus_pool_out': round(bo_all, 2),
+                       'permanent_bonus': round(permanent_bonus2, 2),
+                       'bonus_withdraw': round(bo, 2),
                        'static_burn': round(sb, 2),
                        'dynamic_turbo': round(max(di - sb, 0), 2),
                        'transfer_720': round(float(r[4]) if r[4] else 0, 2),
-                       'stake_in': round(float(r[5]) if r[5] else 0, 2),
-                       'stake_out': round(float(r[6]) if r[6] else 0, 2)})
+                       'stake_in': round(si2, 2),
+                       'stake_pool_out': round(so_all, 2),
+                       'permanent_stake': round(permanent_stake2, 2),
+                       'stake_out': round(so2, 2)})
     return result
 
 
@@ -373,8 +390,11 @@ def _attach_realtime_dex_data(record):
             COALESCE(SUM(CASE WHEN side='buy_ark' THEN amount_usdt ELSE 0 END),0) as buy_value_usdt,
             COALESCE(SUM(CASE WHEN side='sell_ark' THEN amount_usdt ELSE 0 END),0) as sell_value_usdt
         FROM lp_swaps
-        WHERE REPLACE(timestamp, 'T', ' ') LIKE ?
-    """, (record["date"] + "%",)).fetchone()
+        WHERE timestamp >= ? AND timestamp < ?
+    """, (
+        record["date"] + " 00:00:00",
+        (datetime.strptime(record["date"], "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00"),
+    )).fetchone()
     conn.close()
     record["buy_value_usdt"] = round(float(row["buy_value_usdt"]) if row else 0, 2)
     record["sell_value_usdt"] = round(float(row["sell_value_usdt"]) if row else 0, 2)
@@ -486,8 +506,20 @@ def get_daily(page: int = 1, per_page: int = 10):
     for r in rows:
         d = dict(r)
         # 补充 transfer_720（DB 中可能没有此列）
-        tr720 = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE type='transfer_720' AND timestamp LIKE ?", (d['date'] + '%',)).fetchone()[0]
+        next_date = (datetime.strptime(d["date"], "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        tr720 = conn.execute(
+            "SELECT COALESCE(SUM(value),0) FROM events WHERE type='transfer_720' AND timestamp >= ? AND timestamp < ?",
+            (d["date"] + " 00:00:00", next_date + " 00:00:00"),
+        ).fetchone()[0]
         d['transfer_720'] = round(float(tr720), 2)
+        permanent_bonus = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE lower(from_addr)=? AND lower(to_addr)=? AND timestamp >= ? AND timestamp < ?", ("0x8501168656fcac4628f6910ccabea8b64ebe5bd4", "0x0000000000000000000000000000000000000000", d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
+        permanent_stake = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE lower(from_addr)=? AND lower(to_addr)=? AND timestamp >= ? AND timestamp < ?", ("0xd1d95292f450b665566df4c4255615ef4ed9bd0b", "0x0000000000000000000000000000000000000000", d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
+        d['permanent_bonus'] = round(float(permanent_bonus), 2)
+        d['permanent_stake'] = round(float(permanent_stake), 2)
+        bonus_pool_out = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE lower(from_addr)=? AND timestamp >= ? AND timestamp < ?", ("0x8501168656fcac4628f6910ccabea8b64ebe5bd4", d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
+        stake_pool_out = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE lower(from_addr)=? AND timestamp >= ? AND timestamp < ?", ("0xd1d95292f450b665566df4c4255615ef4ed9bd0b", d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
+        d['bonus_withdraw'] = round(max(float(bonus_pool_out) - float(permanent_bonus) - float(tr720), 0), 2)
+        d['stake_out'] = round(max(float(stake_pool_out) - float(permanent_stake), 0), 2)
         result.append(d)
     conn.close()
     return {"data": result, "count": len(result), "total": total, "page": page, "per_page": per_page}
@@ -518,7 +550,7 @@ def get_lp_swaps(limit:int=100, period: str = "h24"):
             COALESCE(SUM(CASE WHEN side='sell_ark' THEN amount_usdt ELSE 0 END),0) as sell_value_usdt,
             COALESCE(SUM(amount_usdt),0) as volume_usdt
         FROM lp_swaps
-        WHERE REPLACE(timestamp, 'T', ' ') >= ?
+        WHERE timestamp >= ?
     """, (cutoff,)).fetchone()
     conn.close()
     result = dict(summary) if summary else {}
