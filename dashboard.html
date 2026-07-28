@@ -137,6 +137,8 @@ td.neg { color: #ef4444; }
   .dashboard-layout { grid-template-columns: 1fr; }
   .dex-sidebar .dex-card, .pool-history-sidebar .dex-card { position: static; }
   .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination { width: 100%; }
+  .dashboard-main > .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dashboard-main > .table-wrap table { min-width: 1120px; table-layout: fixed; }
 }
 </style>
 </head>
