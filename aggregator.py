@@ -167,6 +167,7 @@ class DailyAggregator:
             SELECT
                 COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0) as bonus_out_raw,
                 COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in,
+                COALESCE(SUM(CASE WHEN type='burn_stake' THEN value ELSE 0 END),0) as burn_stake,
                 COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out_raw,
                 COALESCE(SUM(CASE WHEN type='permanent_bonus' THEN value ELSE 0 END),0) as permanent_bonus,
                 COALESCE(SUM(CASE WHEN type='permanent_stake' THEN value ELSE 0 END),0) as permanent_stake,
@@ -185,7 +186,7 @@ class DailyAggregator:
 
         # 奖金池提取不包含 transfer_720；黑洞转账也从实际提取中排除。
         bonus_out = max(float(row["bonus_out_raw"]) - float(row["permanent_bonus"]), 0)
-        stake_in_val = float(row["stake_in"])
+        stake_in_val = float(row["stake_in"]) + float(row["burn_stake"])
         stake_out = max(float(row["stake_out_raw"]), 0)
         permanent_bonus = float(row["permanent_bonus"])
         permanent_stake = float(row["permanent_stake"])

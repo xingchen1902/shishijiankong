@@ -15,7 +15,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .dot.green { background: #22c55e; }
 .dot.yellow { background: #eab308; }
 .container { max-width: 1920px; margin: 0 auto; padding: 20px; }
-.dashboard-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) 340px 360px; gap: 20px; align-items: start; }
+.dashboard-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) 380px 320px; gap: 20px; align-items: start; }
 .dashboard-main { min-width: 0; }
 .dex-sidebar, .pool-history-sidebar { min-width: 0; }
 .realtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
@@ -82,9 +82,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .dex-positive { color: #22c55e !important; }
 .dex-negative { color: #ef4444 !important; }
 .dex-sidebar .dex-card { position: static; margin-bottom: 20px; }
-.pool-history-sidebar .dex-card { position: sticky; top: 20px; }
+.pool-history-sidebar .dex-card { position: static; }
 .pool-note { color: #64748b; font-size: 11px; line-height: 1.5; margin-bottom: 12px; }
-.pool-list { display: flex; flex-direction: column; gap: 8px; max-height: 680px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
+.pool-list { display: flex; flex-direction: column; gap: 8px; max-height: none; overflow: visible; padding-right: 2px; }
 .pool-row, .pool-table-head { display: grid; grid-template-columns: 34% 24% 24% 18%; gap: 0; align-items: center; width: 100%; }
 .pool-table-head { color: #64748b; font-size: 11px; font-weight: 700; padding: 0 8px 6px; }
 .pool-table-head div { text-align: left; }
@@ -103,11 +103,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .pool-empty { color: #64748b; text-align: center; padding: 18px 8px; font-size: 12px; border: 1px dashed #334155; border-radius: 10px; background: #0f172a; }
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: hidden; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
+.dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination { width: calc(100% + 400px); }
 table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
 thead th { background: #0f172a; color: #94a3b8; font-weight: 600; padding: 10px 5px; text-align: right; border-bottom: 1px solid #334155; position: sticky; top: 0; white-space: normal; overflow-wrap: anywhere; }
 thead th:first-child { text-align: left; }
 tbody td { padding: 9px 5px; text-align: right; border-bottom: 1px solid #1a2332; white-space: normal; overflow-wrap: anywhere; }
-thead th:nth-child(10), tbody td:nth-child(10) { white-space: nowrap; overflow: hidden; text-overflow: clip; }
+thead th:nth-child(11), tbody td:nth-child(11) { white-space: nowrap; overflow: hidden; text-overflow: clip; }
 tbody td:first-child { text-align: left; color: #94a3b8; font-weight: 500; }
 tbody tr:hover { background: #1a2332; }
 tbody tr:last-child td { border-bottom: none; }
@@ -134,6 +135,7 @@ td.neg { color: #ef4444; }
 @media (max-width: 1100px) {
   .dashboard-layout { grid-template-columns: 1fr; }
   .dex-sidebar .dex-card, .pool-history-sidebar .dex-card { position: static; }
+  .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination { width: 100%; }
 }
 </style>
 </head>
@@ -168,6 +170,7 @@ td.neg { color: #ef4444; }
       <div class="today-item warn"><div class="label">奖金池提取</div><div class="value" id="tdBonusWithdraw">--</div></div>
       <div class="today-item info"><div class="label">收益永久质押</div><div class="value" id="tdPermanentBonus">--</div></div>
       <div class="today-item info"><div class="label">本金永久质押</div><div class="value" id="tdPermanentStake">--</div></div>
+      <div class="today-item info"><div class="label">新增销毁质押</div><div class="value" id="tdBurnStake">--</div></div>
       <div class="today-item info"><div class="label">静态涡轮</div><div class="value" id="tdStatic">--</div></div>
       <div class="today-item purple"><div class="label">动态涡轮</div><div class="value" id="tdTurbo">--</div></div>
       <div class="today-item info"><div class="label">转720天</div><div class="value" id="tdTransfer720">--</div></div>
@@ -191,11 +194,11 @@ td.neg { color: #ef4444; }
     <table>
       <thead>
         <tr>
-          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>动静态涡轮</th><th>静态涡轮</th><th>动态涡轮</th><th>转720天</th><th>收益永久质押</th><th>本金永久质押</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
+          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>动静态涡轮</th><th>静态涡轮</th><th>动态涡轮</th><th>转720天</th><th>收益永久质押</th><th>本金永久质押</th><th>新增销毁质押</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
         </tr>
       </thead>
       <tbody id="dailyBody">
-        <tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr>
+        <tr><td colspan="14" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr>
       </tbody>
     </table>
   </div>
@@ -251,11 +254,6 @@ td.neg { color: #ef4444; }
         </div>
       </div>
 
-      <!-- 事件流 -->
-      <div class="section-title">⚡ 最新事件流</div>
-      <div class="events-box" id="eventStream">
-        <div style="text-align:center;color:#64748b;padding:10px;">等待数据...</div>
-      </div>
     </aside>
 
     <aside class="pool-history-sidebar">
@@ -272,6 +270,11 @@ td.neg { color: #ef4444; }
           </div>
         </div>
         <div class="pool-pagination" id="poolHistoryPagination"></div>
+      </div>
+      <!-- 事件流 -->
+      <div class="section-title">⚡ 最新事件流</div>
+      <div class="events-box" id="eventStream">
+        <div style="text-align:center;color:#64748b;padding:10px;">等待数据...</div>
       </div>
     </aside>
   </div>
@@ -290,7 +293,7 @@ var currentDexData = null;
 var currentLpData = null;
 var currentDexPeriod = "h24";
 var currentPoolHistoryPage = 1;
-var POOL_HISTORY_PER_PAGE = 20;
+var POOL_HISTORY_PER_PAGE = 15;
 var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24小时"};
 
 function fmt(n) {
@@ -387,6 +390,7 @@ function updateToday(data) {
   document.getElementById("tdBonusWithdraw").textContent = fmt(data.bonus_withdraw);
   document.getElementById("tdPermanentBonus").textContent = fmt(data.permanent_bonus);
   document.getElementById("tdPermanentStake").textContent = fmt(data.permanent_stake);
+  document.getElementById("tdBurnStake").textContent = fmt(data.burn_stake);
   document.getElementById("tdStakeIn").textContent = fmt(data.stake_in);
   document.getElementById("tdStakeOut").textContent = fmt(data.stake_out);
   document.getElementById("tdNetStake").textContent = fmt(data.net_stake);
@@ -538,7 +542,7 @@ function updateDaily(resp) {
   var page = resp && resp.page ? resp.page : 1;
   var perPage = resp && resp.per_page ? resp.per_page : 10;
   if (!data || !data.length) {
-    tbody.innerHTML = "<tr><td colspan=\"13\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
+    tbody.innerHTML = "<tr><td colspan=\"14\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
     if (paginationEl) paginationEl.innerHTML = "";
     syncEventStreamHeight();
     return;
@@ -561,6 +565,7 @@ function updateDaily(resp) {
       "<td>" + tr720Fmt + "</td>" +
       "<td>" + fmt(r.permanent_bonus) + "</td>" +
       "<td>" + fmt(r.permanent_stake) + "</td>" +
+      "<td>" + fmt(r.burn_stake) + "</td>" +
       "<td>" + fmt(r.stake_balance) + "</td>" +
       "<td class=\"pos\">" + fmt(r.stake_in) + "</td>" +
       "<td class=\"neg\">" + fmt(r.stake_out) + "</td>" +

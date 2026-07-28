@@ -18,6 +18,12 @@ STAKE_POOL = "0xd1D95292F450b665566df4c4255615eF4Ed9BD0B".lower()
 TARGET_DYNAMIC = "0x8366a748E02F730911Cb5AB4fd049d2E1e0414b7".lower()
 BURN_ADDR = "0x0000000000000000000000000000000000000000"
 BURN_ADDR2 = "0x000000000000000000000000000000000000dead"
+EXCLUDED_BURN_SOURCES = {
+    "0x7736b5b84caddb7661d250d10e60e31f3c905c99",
+    "0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2",
+    BONUS_POOL,
+    STAKE_POOL,
+}
 REF_BLOCK = 105553753
 BASE_TS = 1782057600.0
 BLOCK_SEC = 0.45
@@ -85,6 +91,8 @@ def classify_ark_log(log):
         etype = "permanent_bonus"
     elif fr == STAKE_POOL and to == BURN_ADDR:
         etype = "permanent_stake"
+    elif to == BURN_ADDR and fr not in EXCLUDED_BURN_SOURCES:
+        etype = "burn_stake"
     elif fr == BONUS_POOL and to == STAKE_POOL:
         etype = "transfer_720"
     elif fr == BONUS_POOL:
