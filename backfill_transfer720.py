@@ -81,7 +81,11 @@ def classify_ark_log(log):
     val = int(log["data"], 16) / 10**DECIMALS
     ts = datetime.fromtimestamp(BASE_TS + (bn - REF_BLOCK) * BLOCK_SEC, BJT).isoformat()
 
-    if fr == BONUS_POOL and to == STAKE_POOL:
+    if fr == BONUS_POOL and to == BURN_ADDR:
+        etype = "permanent_bonus"
+    elif fr == STAKE_POOL and to == BURN_ADDR:
+        etype = "permanent_stake"
+    elif fr == BONUS_POOL and to == STAKE_POOL:
         etype = "transfer_720"
     elif fr == BONUS_POOL:
         etype = "bonus_withdraw"

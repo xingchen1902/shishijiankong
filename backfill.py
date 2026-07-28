@@ -99,7 +99,9 @@ def process_batch(from_block, to_block):
                 to = "0x" + log["topics"][2][26:]
                 val = int(log["data"], 16) / 10**DECIMALS
                 ts = estimate_block_time(bn)
-                if fr == BONUS_POOL and to == STAKE_POOL: etype = "transfer_720"
+                if fr == BONUS_POOL and to == BURN_ADDR: etype = "permanent_bonus"
+                elif fr == STAKE_POOL and to == BURN_ADDR: etype = "permanent_stake"
+                elif fr == BONUS_POOL and to == STAKE_POOL: etype = "transfer_720"
                 elif fr == BONUS_POOL: etype = "bonus_withdraw"
                 elif to == STAKE_POOL: etype = "stake_in"
                 elif fr == STAKE_POOL: etype = "stake_out"

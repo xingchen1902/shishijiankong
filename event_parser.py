@@ -118,7 +118,11 @@ def _classify_logs(logs, from_block, to_block):
         val = int(log["data"], 16) / 10**DECIMALS
         ts = estimate_block_time(bn)
 
-        if fr == TOKEN_ARK and to == BONUS_POOL:
+        if fr == BONUS_POOL and to == BURN_ADDR:
+            etype = "permanent_bonus"
+        elif fr == STAKE_POOL and to == BURN_ADDR:
+            etype = "permanent_stake"
+        elif fr == TOKEN_ARK and to == BONUS_POOL:
             etype = "bonus_in"
         elif fr == BONUS_POOL and to == STAKE_POOL:
             etype = "transfer_720"
