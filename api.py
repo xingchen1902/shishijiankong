@@ -88,7 +88,7 @@ def get_today_data():
 
     # 估算当前余额
     bonus_bal = base_bonus + bi - bo - permanent_bonus - tr720
-    stake_bal = base_stake + real_stake_in + tr720 - so - permanent_stake
+    stake_bal = base_stake + si + tr720 - so - permanent_stake
 
     return {"date":today,"bonus_balance":round(max(bonus_bal,0),2),"bonus_withdraw":round(bo,2),
             "static_burn":round(sb,2),"dynamic_in":round(di,2),

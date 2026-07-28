@@ -206,7 +206,7 @@ class DailyAggregator:
 
         # 公式推算余额（0 RPC 依赖）
         bonus_bal = base_bonus + bonus_in - bonus_out - permanent_bonus - transfer_720
-        stake_bal = base_stake + stake_in_val + transfer_720 - stake_out - permanent_stake
+        stake_bal = base_stake + float(row["stake_in"]) + transfer_720 - stake_out - permanent_stake
         net_stake = stake_in_val - stake_out
 
         record = {
