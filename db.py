@@ -63,6 +63,7 @@ def init_db():
             transfer_720 REAL DEFAULT 0,
             stake_balance REAL DEFAULT 0,
             stake_in REAL DEFAULT 0,
+            burn_stake REAL DEFAULT 0,
             stake_out REAL DEFAULT 0,
             net_stake REAL DEFAULT 0,
             permanent_bonus REAL DEFAULT 0,
@@ -110,7 +111,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_dex_daily_snapshots_date ON dex_daily_snapshots(date);
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
-    for column in ("permanent_bonus", "permanent_stake"):
+    for column in ("burn_stake", "permanent_bonus", "permanent_stake"):
         if column not in columns:
             conn.execute(f"ALTER TABLE daily_summary ADD COLUMN {column} REAL DEFAULT 0")
     conn.commit()

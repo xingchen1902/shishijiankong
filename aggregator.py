@@ -218,6 +218,7 @@ class DailyAggregator:
             "transfer_720": round(transfer_720, 2),
             "stake_balance": round(stake_bal, 2),
             "stake_in": round(stake_in_val, 2),
+            "burn_stake": round(float(row["burn_stake"]), 2),
             "stake_out": round(stake_out, 2),
             "net_stake": round(net_stake, 2),
             "permanent_bonus": round(permanent_bonus, 2),

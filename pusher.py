@@ -148,10 +148,11 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
 <b>🔒 质押池</b>
 余额：{f(record['stake_balance'])} ARK
 新增质押：{f(record['stake_in'])} ARK
+新增销毁质押：{f(record.get('burn_stake',0))} ARK
 赎回：{f(record['stake_out'])} ARK
 净质押：{f(record['net_stake'])} ARK
 
-<b>🔥 销毁质押</b>
+<b>🔥 升级永久质押</b>
 本金永久质押：{f(record.get('permanent_stake',0))} ARK
 收益永久质押：{f(record.get('permanent_bonus',0))} ARK
 

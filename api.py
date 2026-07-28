@@ -95,7 +95,7 @@ def get_today_data():
             "burn_stake":round(burn_stake,2),
             "permanent_bonus":round(permanent_bonus,2),"permanent_stake":round(permanent_stake,2),
             "dynamic_turbo":round(max(di-sb,0),2),"transfer_720":round(tr720,2),"stake_balance":round(max(stake_bal,0),2),
-            "stake_in":round(real_stake_in,2),"stake_out":round(so,2),"net_stake":round(real_stake_in-so,2),
+            "stake_in_raw":round(si,2),"stake_in":round(real_stake_in,2),"burn_stake":round(burn_stake,2),"stake_out":round(so,2),"net_stake":round(real_stake_in-so,2),
             "event_count":ec,"last_block":lb}
 
 
@@ -508,29 +508,7 @@ def get_daily(page: int = 1, per_page: int = 10):
     total = total_row[0] if total_row else 0
     offset = (page - 1) * per_page
     rows = conn.execute("SELECT * FROM daily_summary WHERE date < ? ORDER BY date DESC LIMIT ? OFFSET ?", (today, per_page, offset)).fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        # 补充 transfer_720（DB 中可能没有此列）
-        next_date = (datetime.strptime(d["date"], "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-        tr720 = conn.execute(
-            "SELECT COALESCE(SUM(value),0) FROM events WHERE type='transfer_720' AND timestamp >= ? AND timestamp < ?",
-            (d["date"] + " 00:00:00", next_date + " 00:00:00"),
-        ).fetchone()[0]
-        d['transfer_720'] = round(float(tr720), 2)
-        permanent_bonus = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE lower(from_addr)=? AND lower(to_addr)=? AND timestamp >= ? AND timestamp < ?", ("0x8501168656fcac4628f6910ccabea8b64ebe5bd4", "0x0000000000000000000000000000000000000000", d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
-        permanent_stake = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE lower(from_addr)=? AND lower(to_addr)=? AND timestamp >= ? AND timestamp < ?", ("0xd1d95292f450b665566df4c4255615ef4ed9bd0b", "0x0000000000000000000000000000000000000000", d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
-        d['permanent_bonus'] = round(float(permanent_bonus), 2)
-        d['permanent_stake'] = round(float(permanent_stake), 2)
-        burn_stake = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE type='burn_stake' AND lower(from_addr) NOT IN ('0x7736b5b84caddb7661d250d10e60e31f3c905c99','0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2','0x8501168656fcac4628f6910ccabea8b64ebe5bd4','0xd1d95292f450b665566df4c4255615ef4ed9bd0b') AND timestamp >= ? AND timestamp < ?", (d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
-        d['burn_stake'] = round(float(burn_stake), 2)
-        d['stake_in'] = round(float(d.get('stake_in') or 0) + float(burn_stake), 2)
-        d['net_stake'] = round(float(d['stake_in']) - float(d.get('stake_out') or 0), 2)
-        bonus_pool_out = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE lower(from_addr)=? AND timestamp >= ? AND timestamp < ?", ("0x8501168656fcac4628f6910ccabea8b64ebe5bd4", d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
-        stake_pool_out = conn.execute("SELECT COALESCE(SUM(value),0) FROM events WHERE lower(from_addr)=? AND timestamp >= ? AND timestamp < ?", ("0xd1d95292f450b665566df4c4255615ef4ed9bd0b", d["date"] + " 00:00:00", next_date + " 00:00:00")).fetchone()[0]
-        d['bonus_withdraw'] = round(max(float(bonus_pool_out) - float(permanent_bonus) - float(tr720), 0), 2)
-        d['stake_out'] = round(max(float(stake_pool_out) - float(permanent_stake), 0), 2)
-        result.append(d)
+    result = [dict(r) for r in rows]
     conn.close()
     return {"data": result, "count": len(result), "total": total, "page": page, "per_page": per_page}
 
