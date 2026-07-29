@@ -30,6 +30,11 @@ DEX_PRIMARY_PAIR = "0xcaaf3c41a40103a23eeaa4bba468af3cf5b0e0d8"
 TOKEN_USDT = "0x55d398326f99059ff775485246999027b3197955"
 DEX_CACHE = {"ts": 0, "data": None}
 BONUS_BALANCE_CACHE = {"ts": 0, "value": None}
+# 看板每 30 秒轮询一次；短缓存可避免多个浏览器/机器人同时重复扫描大表。
+TODAY_CACHE_TTL = 8
+TREND_CACHE_TTL = 45
+TODAY_CACHE = {"date": None, "ts": 0, "data": None}
+TREND_CACHE = {"ts": 0, "data": None}
 DEX_SNAPSHOT_LOCK = threading.Lock()
 app = FastAPI(title="ARK")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -43,6 +48,10 @@ if os.path.exists(logo_path):
 
 def get_today_data():
     today = datetime.now(BJT).strftime("%Y-%m-%d")
+    now_ts = time.time()
+    if (TODAY_CACHE["date"] == today and TODAY_CACHE["data"] is not None
+            and now_ts - TODAY_CACHE["ts"] < TODAY_CACHE_TTL):
+        return dict(TODAY_CACHE["data"])
     yesterday = (datetime.now(BJT) - timedelta(days=1)).strftime("%Y-%m-%d")
     tomorrow = (datetime.now(BJT) + timedelta(days=1)).strftime("%Y-%m-%d")
     conn = get_conn()
@@ -92,7 +101,6 @@ def get_today_data():
     # 事件公式保留用于校验；当前看板余额以链上 ARK balanceOf 为准，避免历史汇总基准误差累积。
     bonus_bal = base_bonus + bi - bo - permanent_bonus - tr720
     stake_bal = base_stake + si + tr720 - so - permanent_stake
-    now_ts = time.time()
     if BONUS_BALANCE_CACHE["value"] is None or now_ts - BONUS_BALANCE_CACHE["ts"] >= 15:
         try:
             BONUS_BALANCE_CACHE["value"] = get_balance(TOKEN_ARK, BONUS_POOL) / (10 ** DECIMALS)
@@ -101,20 +109,25 @@ def get_today_data():
             print(f"[链上余额] 查询奖金池失败，使用事件公式: {exc}")
     displayed_bonus_bal = BONUS_BALANCE_CACHE["value"] if BONUS_BALANCE_CACHE["value"] is not None else bonus_bal
 
-    return {"date":today,"bonus_balance":round(max(displayed_bonus_bal,0),2),"bonus_balance_formula":round(max(bonus_bal,0),2),"bonus_withdraw":round(bo,2),
+    result = {"date":today,"bonus_balance":round(max(displayed_bonus_bal,0),2),"bonus_balance_formula":round(max(bonus_bal,0),2),"bonus_withdraw":round(bo,2),
             "static_burn":round(sb,2),"dynamic_in":round(di,2),
             "burn_stake":round(burn_stake,2),
             "permanent_bonus":round(permanent_bonus,2),"permanent_stake":round(permanent_stake,2),
             "dynamic_turbo":round(dynamic_release,2),"dynamic_release":round(dynamic_release,2),"transfer_720":round(tr720,2),"stake_balance":round(max(stake_bal,0),2),
             "stake_in_raw":round(si,2),"stake_in":round(real_stake_in,2),"burn_stake":round(burn_stake,2),"stake_out":round(so,2),"net_stake":round(real_stake_in-so,2),
             "event_count":ec,"last_block":lb}
+    TODAY_CACHE.update({"date": today, "ts": now_ts, "data": result})
+    return dict(result)
 
 
 def get_today_trend():
     '''最近24小时逐小时趋势'''
+    now_ts = time.time()
+    if TREND_CACHE["data"] is not None and now_ts - TREND_CACHE["ts"] < TREND_CACHE_TTL:
+        return [dict(row) for row in TREND_CACHE["data"]]
     cutoff = (datetime.now(BJT) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     conn = get_conn()
-    q = '''SELECT SUBSTR(REPLACE(timestamp, 'T', ' '), 1, 13) as hour_label,
+    q = '''SELECT SUBSTR(timestamp, 1, 13) as hour_label,
         COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' THEN value ELSE 0 END),0) as bonus_out_all,
         COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0) as static_burn,
         COALESCE(SUM(CASE WHEN type='turbo_total' THEN value ELSE 0 END),0) as dynamic_in,
@@ -126,7 +139,7 @@ def get_today_trend():
         COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in_val,
         COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' THEN value ELSE 0 END),0) as stake_out_all
         FROM events
-        WHERE REPLACE(SUBSTR(timestamp, 1, 19), 'T', ' ') >= ?
+        WHERE timestamp >= ?
         GROUP BY hour_label ORDER BY hour_label'''
     rows = conn.execute(q, (cutoff,)).fetchall()
     conn.close()
@@ -165,7 +178,8 @@ def get_today_trend():
                        'stake_pool_out': round(so_all, 2),
                        'permanent_stake': round(permanent_stake2, 2),
                        'stake_out': round(so2, 2)})
-    return result
+    TREND_CACHE.update({"ts": now_ts, "data": result})
+    return [dict(row) for row in result]
 
 
 def _to_float(value, default=0.0):
