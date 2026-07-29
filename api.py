@@ -57,8 +57,9 @@ def get_today_data():
         SELECT COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' THEN value ELSE 0 END),0),
-               COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0),
-               COALESCE(SUM(CASE WHEN lower(from_addr)='0x8366a748e02f730911cb5ab4fd049d2e1e0414b7' AND lower(to_addr)!='0x7dfad978e43d47bae564c2cbba88f280474a7c24' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN type='turbo_total' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN type='release_dynamic' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='burn_stake' AND lower(from_addr) NOT IN ('0x7736b5b84caddb7661d250d10e60e31f3c905c99','0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2','0x8501168656fcac4628f6910ccabea8b64ebe5bd4','0xd1d95292f450b665566df4c4255615ef4ed9bd0b') THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0),
@@ -75,13 +76,14 @@ def get_today_data():
     raw_so = float(row[2]) if row[2] else 0
     sb = float(row[3]) if row[3] else 0
     di = float(row[4]) if row[4] else 0
-    burn_stake = float(row[5]) if row[5] else 0
-    permanent_bonus = float(row[6]) if row[6] else 0
-    permanent_stake = float(row[7]) if row[7] else 0
-    tr720 = float(row[8]) if row[8] else 0
-    bi = float(row[9]) if row[9] else 0
-    ec = int(row[10]) if row[10] else 0
-    lb = int(row[11]) if row[11] else 0
+    dynamic_release = float(row[5]) if row[5] else 0
+    burn_stake = float(row[6]) if row[6] else 0
+    permanent_bonus = float(row[7]) if row[7] else 0
+    permanent_stake = float(row[8]) if row[8] else 0
+    tr720 = float(row[9]) if row[9] else 0
+    bi = float(row[10]) if row[10] else 0
+    ec = int(row[11]) if row[11] else 0
+    lb = int(row[12]) if row[12] else 0
     # 地址级统计全部转出，再扣除对应的永久质押黑洞转账。
     bo = max(raw_bo - permanent_bonus - tr720, 0)
     so = max(raw_so - permanent_stake, 0)
@@ -103,7 +105,7 @@ def get_today_data():
             "static_burn":round(sb,2),"dynamic_in":round(di,2),
             "burn_stake":round(burn_stake,2),
             "permanent_bonus":round(permanent_bonus,2),"permanent_stake":round(permanent_stake,2),
-            "dynamic_turbo":round(max(di-sb,0),2),"transfer_720":round(tr720,2),"stake_balance":round(max(stake_bal,0),2),
+            "dynamic_turbo":round(dynamic_release,2),"dynamic_release":round(dynamic_release,2),"transfer_720":round(tr720,2),"stake_balance":round(max(stake_bal,0),2),
             "stake_in_raw":round(si,2),"stake_in":round(real_stake_in,2),"burn_stake":round(burn_stake,2),"stake_out":round(so,2),"net_stake":round(real_stake_in-so,2),
             "event_count":ec,"last_block":lb}
 
@@ -114,8 +116,9 @@ def get_today_trend():
     conn = get_conn()
     q = '''SELECT SUBSTR(timestamp, 1, 13) as hour_label,
         COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' THEN value ELSE 0 END),0) as bonus_out_all,
-        COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
-        COALESCE(SUM(CASE WHEN lower(from_addr)='0x8366a748e02f730911cb5ab4fd049d2e1e0414b7' AND lower(to_addr)!='0x7dfad978e43d47bae564c2cbba88f280474a7c24' THEN value ELSE 0 END),0) as dynamic_in,
+        COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0) as static_burn,
+        COALESCE(SUM(CASE WHEN type='turbo_total' THEN value ELSE 0 END),0) as dynamic_in,
+        COALESCE(SUM(CASE WHEN type='release_dynamic' THEN value ELSE 0 END),0) as dynamic_release,
         COALESCE(SUM(CASE WHEN type='burn_stake' AND lower(from_addr) NOT IN ('0x7736b5b84caddb7661d250d10e60e31f3c905c99','0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2','0x8501168656fcac4628f6910ccabea8b64ebe5bd4','0xd1d95292f450b665566df4c4255615ef4ed9bd0b') THEN value ELSE 0 END),0) as burn_stake,
         COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
         COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0) as permanent_bonus,
@@ -131,12 +134,13 @@ def get_today_trend():
         bo_all = float(r[1]) if r[1] else 0
         sb = float(r[2]) if r[2] else 0
         di = float(r[3]) if r[3] else 0
-        burn_stake2 = float(r[4]) if r[4] else 0
-        t720 = float(r[5]) if r[5] else 0
-        permanent_bonus2 = float(r[6]) if r[6] else 0
-        permanent_stake2 = float(r[7]) if r[7] else 0
-        si2 = float(r[8]) if r[8] else 0
-        so_all = float(r[9]) if r[9] else 0
+        dynamic_release2 = float(r[4]) if r[4] else 0
+        burn_stake2 = float(r[5]) if r[5] else 0
+        t720 = float(r[6]) if r[6] else 0
+        permanent_bonus2 = float(r[7]) if r[7] else 0
+        permanent_stake2 = float(r[8]) if r[8] else 0
+        si2 = float(r[9]) if r[9] else 0
+        so_all = float(r[10]) if r[10] else 0
         bo = max(bo_all - permanent_bonus2 - t720, 0)
         so2 = max(so_all - permanent_stake2, 0)
         # hour_label = "2026-06-24 13" -> "06/24 13:00"
@@ -151,8 +155,9 @@ def get_today_trend():
                        'permanent_bonus': round(permanent_bonus2, 2),
                        'bonus_withdraw': round(bo, 2),
                        'static_burn': round(sb, 2),
-                       'dynamic_turbo': round(max(di - sb, 0), 2),
-                       'transfer_720': round(float(r[4]) if r[4] else 0, 2),
+                       'dynamic_turbo': round(dynamic_release2, 2),
+                       'dynamic_release': round(dynamic_release2, 2),
+                       'transfer_720': round(t720, 2),
                        'stake_in': round(si2 + burn_stake2, 2),
                        'stake_pool_out': round(so_all, 2),
                        'permanent_stake': round(permanent_stake2, 2),

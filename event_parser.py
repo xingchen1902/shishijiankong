@@ -13,6 +13,8 @@ import requests
 BJT = timezone(timedelta(hours=8))
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 SWAP_TOPIC = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
+RELEASE_TOPIC = "0x3b528916c884f3594beeba6799acd20b08bbcacea83d72c44e00360ea67ea24a"
+TURBO_TOPIC = "0x106f923f993c2149d49b4255ff723acafa1f2d94393f561d3eda32ae348f7241"
 
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()
 TOKEN_GARK = "0x911f12D137D74E5917877f87cf8A8bB2FDde557f".lower()
@@ -224,8 +226,9 @@ class EventParser:
                 from db import insert_raw_logs_batch
                 insert_raw_logs_batch(raw)
 
-        # 2. gARK 批量 getLogs（查销毁）
+        # 2. gARK 批量 getLogs（静态释放的识别依据）
         gark_logs = None
+        static_release_txs = set()
         if not query_gark:
             pass
         else:
@@ -244,12 +247,58 @@ class EventParser:
                     fr = "0x" + log["topics"][1][26:]
                     val = int(log["data"], 16) / 10**DECIMALS
                     ts = estimate_block_time(bn)
+                    static_release_txs.add(tx)
                     results.append({
                         "block": bn, "tx": tx, "type": "static_burn",
                         "from": fr, "to": to, "value": val, "timestamp": ts,
                     })
 
-        # 3. ARK/USDT LP Swap logs
+        # 3. 释放事件：data[0] 是本次释放的 ARK 数量。
+        # 同交易存在 gARK 销毁则为静态释放，否则为动态释放。
+        release_logs = _rpc_call("eth_getLogs", [{
+            "fromBlock": hex(from_block),
+            "toBlock": hex(to_block),
+            "address": TARGET_DYNAMIC,
+            "topics": [RELEASE_TOPIC],
+        }])
+        if release_logs:
+            for log in release_logs:
+                raw_data = log.get("data", "0x")[2:]
+                if len(raw_data) < 64:
+                    continue
+                bn = int(log["blockNumber"], 16)
+                tx = log.get("transactionHash", "")
+                val = int(raw_data[:64], 16) / 10**DECIMALS
+                results.append({
+                    "block": bn, "tx": tx,
+                    "type": "release_static" if tx in static_release_txs else "release_dynamic",
+                    "from": TARGET_DYNAMIC,
+                    "to": _topic_addr(log["topics"][1]) if len(log.get("topics", [])) > 1 else "",
+                    "value": val, "timestamp": estimate_block_time(bn),
+                })
+
+        # 总涡轮是独立的涡轮事件，不等于静态/动态释放之和。
+        turbo_logs = _rpc_call("eth_getLogs", [{
+            "fromBlock": hex(from_block),
+            "toBlock": hex(to_block),
+            "address": TARGET_DYNAMIC,
+            "topics": [TURBO_TOPIC],
+        }])
+        if turbo_logs:
+            for log in turbo_logs:
+                raw_data = log.get("data", "0x")[2:]
+                if len(raw_data) < 64:
+                    continue
+                bn = int(log["blockNumber"], 16)
+                results.append({
+                    "block": bn, "tx": log.get("transactionHash", ""), "type": "turbo_total",
+                    "from": TARGET_DYNAMIC,
+                    "to": _topic_addr(log["topics"][1]) if len(log.get("topics", [])) > 1 else "",
+                    "value": int(raw_data[:64], 16) / 10**DECIMALS,
+                    "timestamp": estimate_block_time(bn),
+                })
+
+        # 4. ARK/USDT LP Swap logs
         lp_logs = _rpc_call("eth_getLogs", [{
             "fromBlock": hex(from_block),
             "toBlock": hex(to_block),

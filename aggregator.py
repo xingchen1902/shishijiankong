@@ -171,8 +171,9 @@ class DailyAggregator:
                 COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out_raw,
                 COALESCE(SUM(CASE WHEN type='permanent_bonus' THEN value ELSE 0 END),0) as permanent_bonus,
                 COALESCE(SUM(CASE WHEN type='permanent_stake' THEN value ELSE 0 END),0) as permanent_stake,
-                COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
-                COALESCE(SUM(CASE WHEN lower(from_addr)='0x8366a748e02f730911cb5ab4fd049d2e1e0414b7' AND lower(to_addr)!='0x7dfad978e43d47bae564c2cbba88f280474a7c24' THEN value ELSE 0 END),0) as dynamic_in,
+                COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0) as static_burn,
+                COALESCE(SUM(CASE WHEN type='turbo_total' THEN value ELSE 0 END),0) as dynamic_in,
+                COALESCE(SUM(CASE WHEN type='release_dynamic' THEN value ELSE 0 END),0) as dynamic_release,
                 COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
                 COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0) as bonus_in
             FROM events
@@ -192,6 +193,7 @@ class DailyAggregator:
         permanent_stake = float(row["permanent_stake"])
         static_burn = float(row["static_burn"])
         dynamic_in = float(row["dynamic_in"])
+        dynamic_release = float(row["dynamic_release"])
         transfer_720 = float(row["transfer_720"]) if row["transfer_720"] else 0
         bonus_in = float(row["bonus_in"]) if row["bonus_in"] else 0
 
@@ -215,6 +217,7 @@ class DailyAggregator:
             "bonus_withdraw": round(bonus_out, 2),
             "static_burn": round(static_burn, 2),
             "dynamic_in": round(dynamic_in, 2),
+            "dynamic_release": round(dynamic_release, 2),
             "transfer_720": round(transfer_720, 2),
             "stake_balance": round(stake_bal, 2),
             "stake_in": round(stake_in_val, 2),

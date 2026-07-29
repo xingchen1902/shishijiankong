@@ -159,7 +159,7 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
 
 <b>⚡ 涡轮</b>
 静态释放：{f(record.get('static_burn',0))} ARK
-动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
+动态释放：{f(record.get('dynamic_release', record.get('dynamic_turbo',0)))} ARK
 总涡轮：{f(record.get('dynamic_in',0))} ARK
 
 <b>🔄 转720天</b>
