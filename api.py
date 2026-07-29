@@ -548,7 +548,14 @@ def get_daily(page: int = 1, per_page: int = 10):
 @app.get("/api/realtime")
 def get_realtime(limit:int=100):
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM events ORDER BY id DESC LIMIT ?",(limit,)).fetchall()
+    # dynamic 是旧版按 ARK 转账写入的辅助记录，static_burn 是识别静态释放的 gARK 销毁凭据。
+    # 两者都已有对应业务事件，事件流不再展示，避免同一笔交易重复出现。
+    rows = conn.execute("""
+        SELECT * FROM events
+        WHERE type NOT IN ('dynamic', 'static_burn')
+        ORDER BY timestamp DESC, block DESC, id DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
     conn.close()
     return {"data": [dict(r) for r in rows]}
 

@@ -124,7 +124,14 @@ td.neg { color: #ef4444; }
 .event-type.stake_out { background: #422006; color: #fcd34d; }
 .event-type.static_burn { background: #1a052e; color: #d8b4fe; }
 .event-type.dynamic { background: #0c4a6e; color: #7dd3fc; }
-	.event-type.transfer_720 { background: #1c1917; color: #fdba74; }
+.event-type.turbo_total { background: #134e4a; color: #5eead4; }
+.event-type.release_dynamic { background: #0c4a6e; color: #7dd3fc; }
+.event-type.release_static { background: #1a052e; color: #d8b4fe; }
+.event-type.burn_stake { background: #3f1d2e; color: #fda4af; }
+.event-type.bonus_in { background: #172554; color: #93c5fd; }
+.event-type.permanent_bonus { background: #422006; color: #fcd34d; }
+.event-type.permanent_stake { background: #14532d; color: #86efac; }
+.event-type.transfer_720 { background: #1c1917; color: #fdba74; }
 .chart-card { background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155; }
 .footer { text-align: center; padding: 20px; color: #475569; font-size: 12px; }
 @media (max-width: 600px) {
@@ -288,8 +295,9 @@ td.neg { color: #ef4444; }
 <script>
 var TYPE_LABELS = {
   bonus_withdraw: "奖金池提取", stake_in: "新增质押", stake_out: "赎回",
-  static_burn: "静态释放", dynamic: "动态释放", transfer_720: "转720天",
-  permanent_bonus: "奖金池永久质押", permanent_stake: "质押池永久质押"
+  bonus_in: "奖金池注入", burn_stake: "新增销毁质押", transfer_720: "转720天",
+  turbo_total: "总涡轮", release_dynamic: "动态释放", release_static: "静态释放",
+  permanent_bonus: "收益永久质押", permanent_stake: "本金永久质押"
 };
 var API_BASE = window.location.origin;
 var currentDexData = null;

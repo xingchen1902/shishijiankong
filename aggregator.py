@@ -165,10 +165,12 @@ class DailyAggregator:
         next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
         row = conn.execute("""
             SELECT
-                COALESCE(SUM(CASE WHEN type='bonus_withdraw' THEN value ELSE 0 END),0) as bonus_out_raw,
+                -- 奖金池提取以奖金池全部转出为基数，再排除永久质押和转 720 天。
+                COALESCE(SUM(CASE WHEN lower(from_addr)=? THEN value ELSE 0 END),0) as bonus_out_all,
                 COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in,
                 COALESCE(SUM(CASE WHEN type='burn_stake' THEN value ELSE 0 END),0) as burn_stake,
-                COALESCE(SUM(CASE WHEN type='stake_out' THEN value ELSE 0 END),0) as stake_out_raw,
+                -- 赎回以质押池全部转出为基数，再排除本金永久质押。
+                COALESCE(SUM(CASE WHEN lower(from_addr)=? THEN value ELSE 0 END),0) as stake_out_all,
                 COALESCE(SUM(CASE WHEN type='permanent_bonus' THEN value ELSE 0 END),0) as permanent_bonus,
                 COALESCE(SUM(CASE WHEN type='permanent_stake' THEN value ELSE 0 END),0) as permanent_stake,
                 COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0) as static_burn,
@@ -178,17 +180,17 @@ class DailyAggregator:
                 COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0) as bonus_in
             FROM events
             WHERE timestamp >= ? AND timestamp < ?
-        """, (date_str + " 00:00:00", next_date + " 00:00:00")).fetchone()
+        """, (BONUS_POOL, STAKE_POOL, date_str + " 00:00:00", next_date + " 00:00:00")).fetchone()
         conn.close()
 
-        if not row or row["bonus_out_raw"] is None:
+        if not row or row["bonus_out_all"] is None:
             print("  [汇总]", date_str, "无数据")
             return
 
-        # 奖金池提取不包含 transfer_720；黑洞转账也从实际提取中排除。
-        bonus_out = max(float(row["bonus_out_raw"]) - float(row["permanent_bonus"]), 0)
+        # 奖金池提取不包含转 720 天和收益永久质押（奖金池 → 黑洞）。
+        bonus_out_all = float(row["bonus_out_all"])
         stake_in_val = float(row["stake_in"]) + float(row["burn_stake"])
-        stake_out = max(float(row["stake_out_raw"]), 0)
+        stake_out_all = float(row["stake_out_all"])
         permanent_bonus = float(row["permanent_bonus"])
         permanent_stake = float(row["permanent_stake"])
         static_burn = float(row["static_burn"])
@@ -196,6 +198,8 @@ class DailyAggregator:
         dynamic_release = float(row["dynamic_release"])
         transfer_720 = float(row["transfer_720"]) if row["transfer_720"] else 0
         bonus_in = float(row["bonus_in"]) if row["bonus_in"] else 0
+        bonus_out = max(bonus_out_all - permanent_bonus - transfer_720, 0)
+        stake_out = max(stake_out_all - permanent_stake, 0)
 
         # 前一日余额作为基准
         prev_date = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")

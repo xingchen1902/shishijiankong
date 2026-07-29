@@ -22,6 +22,7 @@ FIELD_MAP = {
     "bonus_balance": "奖金池余额",
     "bonus_withdraw": "奖金池提取",
     "static_burn": "静态释放",
+    "dynamic_release": "动态释放",
     "dynamic_in": "总涡轮",
     "transfer_720": "转720天",
     "stake_balance": "质押池余额",
