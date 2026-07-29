@@ -114,7 +114,7 @@ def get_today_trend():
     '''最近24小时逐小时趋势'''
     cutoff = (datetime.now(BJT) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     conn = get_conn()
-    q = '''SELECT SUBSTR(timestamp, 1, 13) as hour_label,
+    q = '''SELECT SUBSTR(REPLACE(timestamp, 'T', ' '), 1, 13) as hour_label,
         COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' THEN value ELSE 0 END),0) as bonus_out_all,
         COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0) as static_burn,
         COALESCE(SUM(CASE WHEN type='turbo_total' THEN value ELSE 0 END),0) as dynamic_in,
@@ -125,7 +125,9 @@ def get_today_trend():
         COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0) as permanent_stake,
         COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in_val,
         COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' THEN value ELSE 0 END),0) as stake_out_all
-        FROM events WHERE timestamp >= ? GROUP BY hour_label ORDER BY hour_label'''
+        FROM events
+        WHERE REPLACE(SUBSTR(timestamp, 1, 19), 'T', ' ') >= ?
+        GROUP BY hour_label ORDER BY hour_label'''
     rows = conn.execute(q, (cutoff,)).fetchall()
     conn.close()
     result = []
@@ -155,6 +157,7 @@ def get_today_trend():
                        'permanent_bonus': round(permanent_bonus2, 2),
                        'bonus_withdraw': round(bo, 2),
                        'static_burn': round(sb, 2),
+                       'dynamic_in': round(di, 2),
                        'dynamic_turbo': round(dynamic_release2, 2),
                        'dynamic_release': round(dynamic_release2, 2),
                        'transfer_720': round(t720, 2),

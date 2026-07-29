@@ -647,9 +647,10 @@ var trendChart = null;
 
 function updateTrend(data) {
   if (!data || !data.length) return;
-  var labels = [], turbo = [], sb = [], bo = [], si = [], so = [], t720 = [];
+  var labels = [], totalTurbo = [], turbo = [], sb = [], bo = [], si = [], so = [], t720 = [];
   for (var i = 0; i < data.length; i++) {
     labels.push(data[i].hour);
+    totalTurbo.push(data[i].dynamic_in || 0);
     turbo.push(data[i].dynamic_turbo);
     sb.push(data[i].static_burn);
     bo.push(data[i].bonus_withdraw);
@@ -664,6 +665,14 @@ function updateTrend(data) {
     data: {
       labels: labels,
       datasets: [{
+        label: "总涡轮",
+        data: totalTurbo,
+        borderColor: "#14b8a6",
+        backgroundColor: "rgba(20,184,166,0.1)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2
+      }, {
         label: "动态释放",
         data: turbo,
         borderColor: "#2dd4bf",
