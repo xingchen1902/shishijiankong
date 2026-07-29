@@ -172,7 +172,7 @@ class DailyAggregator:
                 COALESCE(SUM(CASE WHEN type='permanent_bonus' THEN value ELSE 0 END),0) as permanent_bonus,
                 COALESCE(SUM(CASE WHEN type='permanent_stake' THEN value ELSE 0 END),0) as permanent_stake,
                 COALESCE(SUM(CASE WHEN type='static_burn' THEN value ELSE 0 END),0) as static_burn,
-                COALESCE(SUM(CASE WHEN type='dynamic' THEN value ELSE 0 END),0) as dynamic_in,
+                COALESCE(SUM(CASE WHEN type='dynamic' AND lower(from_addr)='0x8366a748e02f730911cb5ab4fd049d2e1e0414b7' AND lower(to_addr)!='0x7dfad978e43d47bae564c2cbba88f280474a7c24' THEN value ELSE 0 END),0) as dynamic_in,
                 COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
                 COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0) as bonus_in
             FROM events
