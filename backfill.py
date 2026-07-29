@@ -55,6 +55,7 @@ DECIMALS = 18
 BONUS_POOL = "0x8501168656FcaC4628F6910CcABEA8B64Ebe5BD4".lower()
 STAKE_POOL = "0xd1D95292F450b665566df4c4255615eF4Ed9BD0B".lower()
 TARGET_DYNAMIC = "0x8366a748E02F730911Cb5AB4fd049d2E1e0414b7".lower()
+EXCLUDED_DYNAMIC_RECEIVERS = {"0x7dfad978e43d47bae564c2cbba88f280474a7c24"}
 BURN_ADDR = "0x0000000000000000000000000000000000000000"
 BURN_ADDR2 = "0x000000000000000000000000000000000000dead"
 EXCLUDED_BURN_SOURCES = {
@@ -110,9 +111,9 @@ def process_batch(from_block, to_block):
                 elif to == BURN_ADDR and fr not in EXCLUDED_BURN_SOURCES: etype = "burn_stake"
                 elif fr == BONUS_POOL and to == STAKE_POOL: etype = "transfer_720"
                 elif fr == BONUS_POOL: etype = "bonus_withdraw"
+                elif fr == TARGET_DYNAMIC and to not in EXCLUDED_DYNAMIC_RECEIVERS: etype = "dynamic"
                 elif to == STAKE_POOL: etype = "stake_in"
                 elif fr == STAKE_POOL: etype = "stake_out"
-                elif to == TARGET_DYNAMIC: etype = "dynamic"
                 else: continue
                 results.append((bn, log.get("transactionHash",""), etype, fr, to, val, ts))
 
