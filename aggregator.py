@@ -226,7 +226,7 @@ class DailyAggregator:
         }
 
         print("  奖金池提取: %.2f" % bonus_out)
-        print("  静态涡轮: %.2f" % static_burn)
+        print("  静态释放: %.2f" % static_burn)
         print("  动静态涡轮: %.2f" % dynamic_in)
         print("  新增质押: %.2f" % stake_in_val)
         print("  赎回: %.2f" % stake_out)

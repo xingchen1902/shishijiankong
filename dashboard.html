@@ -174,7 +174,7 @@ td.neg { color: #ef4444; }
       <div class="today-item info"><div class="label">收益永久质押</div><div class="value" id="tdPermanentBonus">--</div></div>
       <div class="today-item info"><div class="label">本金永久质押</div><div class="value" id="tdPermanentStake">--</div></div>
       <div class="today-item info"><div class="label">新增销毁质押</div><div class="value" id="tdBurnStake">--</div></div>
-      <div class="today-item info"><div class="label">静态涡轮</div><div class="value" id="tdStatic">--</div></div>
+      <div class="today-item info"><div class="label">静态释放</div><div class="value" id="tdStatic">--</div></div>
       <div class="today-item purple"><div class="label">动态涡轮</div><div class="value" id="tdTurbo">--</div></div>
       <div class="today-item info"><div class="label">转720天</div><div class="value" id="tdTransfer720">--</div></div>
       <div class="today-item pos"><div class="label">新增质押</div><div class="value" id="tdStakeIn">--</div></div>
@@ -197,7 +197,7 @@ td.neg { color: #ef4444; }
     <table>
       <thead>
         <tr>
-          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>动静态涡轮</th><th>静态涡轮</th><th>动态涡轮</th><th>转720天</th><th>收益永久质押</th><th>本金永久质押</th><th>新增销毁质押</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
+          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>动静态涡轮</th><th>静态释放</th><th>动态涡轮</th><th>转720天</th><th>收益永久质押</th><th>本金永久质押</th><th>新增销毁质押</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
         </tr>
       </thead>
       <tbody id="dailyBody">
@@ -288,7 +288,7 @@ td.neg { color: #ef4444; }
 <script>
 var TYPE_LABELS = {
   bonus_withdraw: "奖金池提取", stake_in: "新增质押", stake_out: "赎回",
-  static_burn: "静态涡轮", dynamic: "动态涡轮", transfer_720: "转720天",
+  static_burn: "静态释放", dynamic: "动态涡轮", transfer_720: "转720天",
   permanent_bonus: "奖金池永久质押", permanent_stake: "质押池永久质押"
 };
 var API_BASE = window.location.origin;
@@ -673,7 +673,7 @@ function updateTrend(data) {
         tension: 0.3,
         pointRadius: 2
       }, {
-        label: "静态涡轮",
+        label: "静态释放",
         data: sb,
         borderColor: "#a78bfa",
         backgroundColor: "rgba(167,139,250,0.1)",

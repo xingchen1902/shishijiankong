@@ -21,7 +21,7 @@ FEISHU_TABLE_ID = "tblVmNxjg8WjyXdw"
 FIELD_MAP = {
     "bonus_balance": "奖金池余额",
     "bonus_withdraw": "奖金池提取",
-    "static_burn": "静态涡轮",
+    "static_burn": "静态释放",
     "dynamic_in": "动静态涡轮",
     "transfer_720": "转720天",
     "stake_balance": "质押池余额",
@@ -158,7 +158,7 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
 收益永久质押：{f(record.get('permanent_bonus',0))} ARK
 
 <b>⚡ 涡轮</b>
-静态涡轮：{f(record.get('static_burn',0))} ARK
+静态释放：{f(record.get('static_burn',0))} ARK
 动态涡轮：{f(max(record.get('dynamic_in',0)-record.get('static_burn',0),0))} ARK
 动静态涡轮：{f(record.get('dynamic_in',0))} ARK
 
