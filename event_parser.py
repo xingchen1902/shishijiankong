@@ -15,6 +15,8 @@ TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523
 SWAP_TOPIC = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
 RELEASE_TOPIC = "0x3b528916c884f3594beeba6799acd20b08bbcacea83d72c44e00360ea67ea24a"
 TURBO_TOPIC = "0x106f923f993c2149d49b4255ff723acafa1f2d94393f561d3eda32ae348f7241"
+# 已在链上样本中确认：总涡轮调用的函数选择器。
+TURBO_SELECTOR = "0xc7084a38"
 
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()
 TOKEN_GARK = "0x911f12D137D74E5917877f87cf8A8bB2FDde557f".lower()
@@ -81,6 +83,31 @@ class RPCManager:
             self.index = (self.index + 1) % len(self.urls)
         raise Exception("RPC 均不可用")
 
+    def call_batch(self, method, params_list, retries=1):
+        """尽量用 JSON-RPC batch 获取同类数据，失败时回退到单笔调用。"""
+        params_list = list(params_list)
+        if not params_list:
+            return []
+        for _ in range(len(self.urls)):
+            url = self.urls[self.index]
+            payload = [
+                {"jsonrpc": "2.0", "method": method, "params": params, "id": i}
+                for i, params in enumerate(params_list)
+            ]
+            for _ in range(retries):
+                try:
+                    response = requests.post(url, json=payload, timeout=15)
+                    data = response.json()
+                    if isinstance(data, list):
+                        by_id = {item.get("id"): item.get("result") for item in data}
+                        return [by_id.get(i) for i in range(len(params_list))]
+                except:
+                    break
+            self.index = (self.index + 1) % len(self.urls)
+
+        # 兼容不支持 batch 的 RPC 节点；宁可慢一些也不能将未验证事件计入总涡轮。
+        return [self.call(method, params, retries) for params in params_list]
+
 _rpc = RPCManager(RPC_URLS)
 
 _time_ref_block = REF_BLOCK
@@ -92,6 +119,12 @@ def _rpc_call(method, params, retries=3):
         return _rpc.call(method, params, retries)
     except:
         return None
+
+def _rpc_batch_call(method, params_list, retries=1):
+    try:
+        return _rpc.call_batch(method, params_list, retries)
+    except:
+        return [None] * len(params_list)
 
 def _refresh_time_ref(force=False):
     global _time_ref_block, _time_ref_ts, _time_ref_updated
@@ -161,6 +194,24 @@ def _classify_logs(logs, from_block, to_block):
 def _topic_addr(topic):
     return "0x" + topic[-40:]
 
+def _ark_transfer_index(logs):
+    """按交易索引 ARK Transfer，保留 wei 精度供涡轮事件交叉校验。"""
+    transfers = {}
+    for log in logs or []:
+        topics = log.get("topics", [])
+        data = log.get("data", "0x")
+        if len(topics) < 3 or len(data) < 66:
+            continue
+        tx = log.get("transactionHash", "").lower()
+        if not tx:
+            continue
+        transfers.setdefault(tx, []).append((
+            _topic_addr(topics[1]).lower(),
+            _topic_addr(topics[2]).lower(),
+            int(data, 16),
+        ))
+    return transfers
+
 def _uint256_words(data):
     body = data[2:] if data.startswith("0x") else data
     return [int(body[i:i+64], 16) for i in range(0, len(body), 64) if body[i:i+64]]
@@ -208,6 +259,28 @@ class EventParser:
         self.events = []
         self._balance_cache = {}
 
+    def _turbo_transactions(self, tx_hashes):
+        """批量获取涡轮候选交易的输入数据。"""
+        txs = {}
+        hashes = list({tx_hash.lower() for tx_hash in tx_hashes if tx_hash})
+        # 控制每个 JSON-RPC batch 的大小，避免节点拒绝过大的请求体。
+        for start in range(0, len(hashes), 50):
+            chunk = hashes[start:start + 50]
+            responses = _rpc_batch_call(
+                "eth_getTransactionByHash", [[tx_hash] for tx_hash in chunk], retries=1
+            )
+            for tx_hash, tx in zip(chunk, responses):
+                if tx:
+                    txs[tx_hash] = tx
+            # 交易已在日志中出现，理论上必然存在；缺失时单笔重试，避免 RPC
+            # 的局部 batch 故障造成这批总涡轮永久漏记。
+            for tx_hash in chunk:
+                if tx_hash not in txs:
+                    tx = _rpc_call("eth_getTransactionByHash", [tx_hash], retries=2)
+                    if tx:
+                        txs[tx_hash] = tx
+        return txs
+
     def process_batch(self, from_block, to_block, query_gark=True):
         """批量 eth_getLogs，提取 ARK/gARK Transfer 事件"""
         results = []
@@ -219,6 +292,7 @@ class EventParser:
             "address": TOKEN_ARK,
             "topics": [TRANSFER_TOPIC]
         }])
+        ark_transfers = _ark_transfer_index(ark_logs)
         if ark_logs:
             classified, raw = _classify_logs(ark_logs, from_block, to_block)
             results.extend(classified)
@@ -285,16 +359,43 @@ class EventParser:
             "topics": [TURBO_TOPIC],
         }])
         if turbo_logs:
+            turbo_txs = self._turbo_transactions(
+                log.get("transactionHash", "") for log in turbo_logs
+            )
             for log in turbo_logs:
                 raw_data = log.get("data", "0x")[2:]
-                if len(raw_data) < 64:
+                topics = log.get("topics", [])
+                if len(raw_data) < 64 or len(topics) < 2:
                     continue
                 bn = int(log["blockNumber"], 16)
+                tx_hash = log.get("transactionHash", "").lower()
+                user = _topic_addr(topics[1]).lower()
+                amount_wei = int(raw_data[:64], 16)
+                tx = turbo_txs.get(tx_hash)
+
+                # 不能仅凭“动态合约转出 ARK”判为涡轮：
+                # 1) 必须使用已确认的涡轮调用方法；
+                # 2) Turbo 事件的用户和数量必须与同笔 ARK 转账完全一致。
+                valid_call = bool(
+                    tx
+                    and (tx.get("to") or "").lower() == TARGET_DYNAMIC
+                    and (tx.get("input") or "").lower().startswith(TURBO_SELECTOR)
+                )
+                valid_transfer = any(
+                    from_addr == TARGET_DYNAMIC and to_addr == user and value == amount_wei
+                    for from_addr, to_addr, value in ark_transfers.get(tx_hash, [])
+                )
+                if not (valid_call and valid_transfer):
+                    print(
+                        f"  [忽略未验证涡轮] {tx_hash[:12]} "
+                        f"selector={'ok' if valid_call else 'bad'} "
+                        f"transfer={'ok' if valid_transfer else 'bad'}"
+                    )
+                    continue
                 results.append({
-                    "block": bn, "tx": log.get("transactionHash", ""), "type": "turbo_total",
-                    "from": TARGET_DYNAMIC,
-                    "to": _topic_addr(log["topics"][1]) if len(log.get("topics", [])) > 1 else "",
-                    "value": int(raw_data[:64], 16) / 10**DECIMALS,
+                    "block": bn, "tx": tx_hash, "type": "turbo_total",
+                    "from": TARGET_DYNAMIC, "to": user,
+                    "value": amount_wei / 10**DECIMALS,
                     "timestamp": estimate_block_time(bn),
                 })
 
