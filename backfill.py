@@ -142,8 +142,23 @@ def backfill_today():
         return
 
     conn = sqlite3.connect("/app/data/ark_monitor.db")
+    has_state_table = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='monitor_state'"
+    ).fetchone()
+    checkpoint = None
+    if has_state_table:
+        row = conn.execute(
+            "SELECT state_value FROM monitor_state WHERE state_key='event_parser_last_block'"
+        ).fetchone()
+        checkpoint = int(row[0]) if row else None
     db_max = conn.execute("SELECT MAX(block) FROM events").fetchone()[0]
     conn.close()
+
+    # 精确检查点存在时，主监听器会从该点连续补齐全部事件类型；
+    # 启动脚本无需再按旧的 ARK/gARK 逻辑重复扫描。
+    if checkpoint:
+        print(f"[补齐] 使用监听检查点 #{checkpoint}，交由主监听连续补齐")
+        return
 
     start_block = REF_BLOCK
     if db_max and db_max >= start_block:

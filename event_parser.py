@@ -253,45 +253,61 @@ def _parse_lp_swap_logs(logs):
 
 
 class EventParser:
-    """解析批量 ARK Transfer 事件（每批调 2 次 eth_getLogs）"""
+    """解析批量链上事件（每 200 区块通常 3 次 eth_getLogs）"""
 
     def __init__(self):
         self.events = []
         self._balance_cache = {}
+        self._turbo_tx_cache = {}
 
     def _turbo_transactions(self, tx_hashes):
         """批量获取涡轮候选交易的输入数据。"""
-        txs = {}
+        if len(self._turbo_tx_cache) > 50000:
+            self._turbo_tx_cache.clear()
         hashes = list({tx_hash.lower() for tx_hash in tx_hashes if tx_hash})
+        missing_hashes = [tx_hash for tx_hash in hashes if tx_hash not in self._turbo_tx_cache]
         # 控制每个 JSON-RPC batch 的大小，避免节点拒绝过大的请求体。
-        for start in range(0, len(hashes), 50):
-            chunk = hashes[start:start + 50]
+        for start in range(0, len(missing_hashes), 50):
+            chunk = missing_hashes[start:start + 50]
             responses = _rpc_batch_call(
                 "eth_getTransactionByHash", [[tx_hash] for tx_hash in chunk], retries=1
             )
             for tx_hash, tx in zip(chunk, responses):
                 if tx:
-                    txs[tx_hash] = tx
+                    self._turbo_tx_cache[tx_hash] = tx
             # 交易已在日志中出现，理论上必然存在；缺失时单笔重试，避免 RPC
             # 的局部 batch 故障造成这批总涡轮永久漏记。
             for tx_hash in chunk:
-                if tx_hash not in txs:
+                if tx_hash not in self._turbo_tx_cache:
                     tx = _rpc_call("eth_getTransactionByHash", [tx_hash], retries=2)
                     if tx:
-                        txs[tx_hash] = tx
-        return txs
+                        self._turbo_tx_cache[tx_hash] = tx
+        return {tx_hash: self._turbo_tx_cache[tx_hash] for tx_hash in hashes if tx_hash in self._turbo_tx_cache}
 
     def process_batch(self, from_block, to_block, query_gark=True):
         """批量 eth_getLogs，提取 ARK/gARK Transfer 事件"""
         results = []
 
-        # 1. ARK 批量 getLogs
-        ark_logs = _rpc_call("eth_getLogs", [{
+        # 1. ARK/gARK 的 Transfer 事件可在同一 getLogs 过滤器中查询。
+        # 节点不支持地址数组时，回退为原来的两次查询，不改变解析结果。
+        token_transfer_logs = _rpc_call("eth_getLogs", [{
             "fromBlock": hex(from_block),
             "toBlock": hex(to_block),
-            "address": TOKEN_ARK,
+            "address": [TOKEN_ARK, TOKEN_GARK],
             "topics": [TRANSFER_TOPIC]
         }])
+        if token_transfer_logs is None:
+            ark_logs = _rpc_call("eth_getLogs", [{
+                "fromBlock": hex(from_block), "toBlock": hex(to_block),
+                "address": TOKEN_ARK, "topics": [TRANSFER_TOPIC]
+            }])
+            gark_logs = _rpc_call("eth_getLogs", [{
+                "fromBlock": hex(from_block), "toBlock": hex(to_block),
+                "address": TOKEN_GARK, "topics": [TRANSFER_TOPIC]
+            }]) if query_gark else []
+        else:
+            ark_logs = [log for log in token_transfer_logs if log.get("address", "").lower() == TOKEN_ARK]
+            gark_logs = [log for log in token_transfer_logs if log.get("address", "").lower() == TOKEN_GARK] if query_gark else []
         ark_transfers = _ark_transfer_index(ark_logs)
         if ark_logs:
             classified, raw = _classify_logs(ark_logs, from_block, to_block)
@@ -300,18 +316,8 @@ class EventParser:
                 from db import insert_raw_logs_batch
                 insert_raw_logs_batch(raw)
 
-        # 2. gARK 批量 getLogs（静态释放的识别依据）
-        gark_logs = None
+        # 2. gARK Transfer（静态释放的识别依据）
         static_release_txs = set()
-        if not query_gark:
-            pass
-        else:
-            gark_logs = _rpc_call("eth_getLogs", [{
-            "fromBlock": hex(from_block),
-            "toBlock": hex(to_block),
-            "address": TOKEN_GARK,
-            "topics": [TRANSFER_TOPIC]
-        }])
         if gark_logs and query_gark:
             for log in gark_logs:
                 to = "0x" + log["topics"][2][26:]
@@ -327,14 +333,27 @@ class EventParser:
                         "from": fr, "to": to, "value": val, "timestamp": ts,
                     })
 
-        # 3. 释放事件：data[0] 是本次释放的 ARK 数量。
-        # 同交易存在 gARK 销毁则为静态释放，否则为动态释放。
-        release_logs = _rpc_call("eth_getLogs", [{
+        # 3. Release 与 Turbo 都来自动态合约，可合并为一次日志查询。
+        dynamic_event_logs = _rpc_call("eth_getLogs", [{
             "fromBlock": hex(from_block),
             "toBlock": hex(to_block),
             "address": TARGET_DYNAMIC,
-            "topics": [RELEASE_TOPIC],
+            "topics": [[RELEASE_TOPIC, TURBO_TOPIC]],
         }])
+        if dynamic_event_logs is None:
+            release_logs = _rpc_call("eth_getLogs", [{
+                "fromBlock": hex(from_block), "toBlock": hex(to_block),
+                "address": TARGET_DYNAMIC, "topics": [RELEASE_TOPIC],
+            }])
+            turbo_logs = _rpc_call("eth_getLogs", [{
+                "fromBlock": hex(from_block), "toBlock": hex(to_block),
+                "address": TARGET_DYNAMIC, "topics": [TURBO_TOPIC],
+            }])
+        else:
+            release_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == RELEASE_TOPIC]
+            turbo_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == TURBO_TOPIC]
+
+        # Release 的 data[0] 是本次释放 ARK 数量；同交易有 gARK 销毁则为静态释放。
         if release_logs:
             for log in release_logs:
                 raw_data = log.get("data", "0x")[2:]
@@ -352,12 +371,6 @@ class EventParser:
                 })
 
         # 总涡轮是独立的涡轮事件，不等于静态/动态释放之和。
-        turbo_logs = _rpc_call("eth_getLogs", [{
-            "fromBlock": hex(from_block),
-            "toBlock": hex(to_block),
-            "address": TARGET_DYNAMIC,
-            "topics": [TURBO_TOPIC],
-        }])
         if turbo_logs:
             turbo_txs = self._turbo_transactions(
                 log.get("transactionHash", "") for log in turbo_logs

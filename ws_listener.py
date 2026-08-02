@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BSC 区块监听器（HTTP 轮询 0.45s/次）
+BSC 区块监听器（HTTP 轮询 6s/次）
 - safe_block = latest - 1 防重组
 - 每 10 块回调一次批量处理（省 CU）
 - gap 自动修复（补齐缺失范围）
@@ -24,7 +24,9 @@ RPC_URLS = [
 ]
 
 BATCH_SIZE = 200
-POLL_INTERVAL = 3
+# 事件按 200 区块批量处理，3 秒轮询不会缩短数据落库的批次等待；
+# 6 秒可减少一半最新区块查询，而不改变任何解析与分类规则。
+POLL_INTERVAL = 6
 SAFE_BLOCK_CONFIRMATIONS = 2
 
 class RPCManager:
@@ -72,8 +74,9 @@ class BlockListener:
             self.last_block = start_block
         else:
             self.last_block = self.get_latest_safe_block()
-        # 对齐到整批次边界
-        self.last_block = self.last_block - (self.last_block % BATCH_SIZE)
+        # 首次启动从批次边界开始；恢复时使用精确检查点，避免重复扫描。
+        if not start_block:
+            self.last_block = self.last_block - (self.last_block % BATCH_SIZE)
         self.running = True
         print(f"[监听] 从区块 #{self.last_block} 开始（每 {BATCH_SIZE} 块一批）")
 
@@ -82,13 +85,8 @@ class BlockListener:
                 safe = self.get_latest_safe_block()
                 safe_aligned = safe - (safe % BATCH_SIZE)
 
-                # gap 补齐（按批次）
-                if safe_aligned > self.last_block + BATCH_SIZE:
-                    gap = safe_aligned - self.last_block
-                    print(f"[追赶] 落后 {gap} 个区块...")
-                    self._backfill(self.last_block + BATCH_SIZE, safe_aligned)
-
-                # 顺序处理每批
+                # 顺序处理每批。即使停机产生 gap，也从精确检查点连续补齐，
+                # 避免旧逻辑在追赶时重复请求区块范围。
                 while self.last_block < safe_aligned:
                     start = self.last_block + 1
                     end = min(start + BATCH_SIZE - 1, safe_aligned)

@@ -110,11 +110,37 @@ def init_db():
             updated_at TEXT DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_dex_daily_snapshots_date ON dex_daily_snapshots(date);
+
+        CREATE TABLE IF NOT EXISTS monitor_state (
+            state_key TEXT PRIMARY KEY,
+            state_value TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
     for column in ("burn_stake", "dynamic_release", "permanent_bonus", "permanent_stake"):
         if column not in columns:
             conn.execute(f"ALTER TABLE daily_summary ADD COLUMN {column} REAL DEFAULT 0")
+    conn.commit()
+    conn.close()
+
+def get_monitor_state(state_key):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT state_value FROM monitor_state WHERE state_key=?", (state_key,)
+    ).fetchone()
+    conn.close()
+    return row["state_value"] if row else None
+
+def set_monitor_state(state_key, state_value):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO monitor_state (state_key, state_value, updated_at)
+        VALUES (?, ?, datetime('now'))
+        ON CONFLICT(state_key) DO UPDATE SET
+            state_value=excluded.state_value,
+            updated_at=datetime('now')
+    """, (state_key, str(state_value)))
     conn.commit()
     conn.close()
 

@@ -8,8 +8,7 @@ ARK 实时监控入口
 import os, sys, time, threading
 from datetime import datetime, timezone, timedelta
 
-from db import init_db
-from db import get_conn
+from db import init_db, get_conn, get_monitor_state, set_monitor_state
 from ws_listener import BlockListener
 from event_parser import EventParser
 from aggregator import DailyAggregator
@@ -34,6 +33,8 @@ def main():
             aggregator.add_events(events)
         # 每批写入数据库
         aggregator.flush_events()
+        # 仅在该区块范围已完成解析并落库后推进检查点；重启时无需按事件最大区块重扫。
+        set_monitor_state("event_parser_last_block", to_block)
         aggregator.check_date_change()
 
     listener = BlockListener(on_batch_callback=on_batch)
@@ -42,13 +43,17 @@ def main():
         if len(sys.argv) > 1:
             start = int(sys.argv[1])
         else:
-            # 默认从 DB 最大区块继续（避免重启时错过衔接区块）
-            conn = get_conn()
-            db_max = conn.execute("SELECT MAX(block) FROM events").fetchone()[0]
-            conn.close()
-            start = db_max if db_max else 0
+            # 优先使用已完整解析并落库的精确检查点；旧数据库没有检查点时兼容最大事件区块。
+            checkpoint = get_monitor_state("event_parser_last_block")
+            start = int(checkpoint) if checkpoint else 0
+            if not start:
+                conn = get_conn()
+                db_max = conn.execute("SELECT MAX(block) FROM events").fetchone()[0]
+                conn.close()
+                start = db_max if db_max else 0
             if start:
-                print(f"[启动] 从 DB 最大区块 #{start} 继续监听")
+                source = "检查点" if checkpoint else "DB 最大事件区块"
+                print(f"[启动] 从{source} #{start} 继续监听")
         listener.start(start_block=start)
     except KeyboardInterrupt:
         aggregator.flush_events()

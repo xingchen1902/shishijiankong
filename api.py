@@ -101,7 +101,8 @@ def get_today_data():
     # 事件公式保留用于校验；当前看板余额以链上 ARK balanceOf 为准，避免历史汇总基准误差累积。
     bonus_bal = base_bonus + bi - bo - permanent_bonus - tr720
     stake_bal = base_stake + si + tr720 - so - permanent_stake
-    if BONUS_BALANCE_CACHE["value"] is None or now_ts - BONUS_BALANCE_CACHE["ts"] >= 15:
+    # 页面 30 秒刷新一次；余额缓存同步延长到 30 秒，多个看板/机器人请求共用结果。
+    if BONUS_BALANCE_CACHE["value"] is None or now_ts - BONUS_BALANCE_CACHE["ts"] >= 30:
         try:
             BONUS_BALANCE_CACHE["value"] = get_balance(TOKEN_ARK, BONUS_POOL) / (10 ** DECIMALS)
             BONUS_BALANCE_CACHE["ts"] = now_ts
