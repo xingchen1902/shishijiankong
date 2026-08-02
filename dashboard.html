@@ -40,6 +40,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .today-item.warn .value { color: #f59e0b; }
 .today-item.info .value { color: #60a5fa; }
 .today-item.purple .value { color: #a78bfa; }
+.today-item.teal .value { color: #2dd4bf; }
 .today-item .sub { font-size: 11px; color: #475569; margin-top: 2px; }
 .dex-card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid #334155; }
 .dex-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -182,6 +183,7 @@ td.neg { color: #ef4444; }
       <div class="today-item info"><div class="label">本金永久质押</div><div class="value" id="tdPermanentStake">--</div></div>
       <div class="today-item info"><div class="label">新增销毁质押</div><div class="value" id="tdBurnStake">--</div></div>
       <div class="today-item info"><div class="label">静态释放</div><div class="value" id="tdStatic">--</div></div>
+      <div class="today-item teal"><div class="label">总涡轮</div><div class="value" id="tdTotalTurbo">--</div></div>
       <div class="today-item purple"><div class="label">动态释放</div><div class="value" id="tdTurbo">--</div></div>
       <div class="today-item info"><div class="label">转720天</div><div class="value" id="tdTransfer720">--</div></div>
       <div class="today-item pos"><div class="label">新增质押</div><div class="value" id="tdStakeIn">--</div></div>
@@ -406,6 +408,7 @@ function updateToday(data) {
   document.getElementById("tdStakeOut").textContent = fmt(data.stake_out);
   document.getElementById("tdNetStake").textContent = fmt(data.net_stake);
   document.getElementById("tdStatic").textContent = fmt(data.static_burn);
+  document.getElementById("tdTotalTurbo").textContent = fmt(data.dynamic_in);
 
   document.getElementById("tdTurbo").textContent = fmt(data.dynamic_turbo);
   document.getElementById("tdTransfer720").textContent = fmt(data.transfer_720);
