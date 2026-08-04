@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import os, threading, time, requests
+import os, threading, time, requests, json
 from datetime import datetime, timezone, timedelta
 from db import (
     get_all_daily_until_yesterday,
@@ -12,8 +12,10 @@ from db import (
     get_dex_daily_snapshots,
     init_db,
     upsert_dex_daily_snapshot,
+    get_monitor_state,
+    set_monitor_state,
 )
-from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance
+from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply
 from pusher import (
     get_telegram_chat_ids,
     push_to_feishu,
@@ -28,6 +30,14 @@ DEX_CACHE_TTL = 45
 DEX_MIN_LIQUIDITY_USD = 1000
 DEX_PRIMARY_PAIR = "0xcaaf3c41a40103a23eeaa4bba468af3cf5b0e0d8"
 TOKEN_USDT = "0x55d398326f99059ff775485246999027b3197955"
+ETH_RPC_URL = os.getenv("ETH_RPC_URL", "https://ethereum-rpc.publicnode.com")
+LIDO_STETH_CONTRACT = "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84".lower()
+LIDO_STAKE_ADDRESS = "0x7f2a963f6555755191b26d92d921ff8caf989b4b".lower()
+RESERVE_ADDRESSES = [
+    ("国库资金", "0x1b9f458773d18B4e1AAf5b896721697215C4a68b".lower()),
+    ("MBR资金", "0x100844Ccd4AF887D123c0AC4a9671E0AB5DD9De2".lower()),
+    ("RBS资金", "0x23876D9F06F8290F119Fb39B7FDCf93A08e2D616".lower()),
+]
 DEX_CACHE = {"ts": 0, "data": None}
 BONUS_BALANCE_CACHE = {"ts": 0, "value": None}
 # 看板每 30 秒轮询一次；短缓存可避免多个浏览器/机器人同时重复扫描大表。
@@ -35,6 +45,17 @@ TODAY_CACHE_TTL = 8
 TREND_CACHE_TTL = 45
 TODAY_CACHE = {"date": None, "ts": 0, "data": None}
 TREND_CACHE = {"ts": 0, "data": None}
+STAKING_OVERVIEW_URL = "https://0xfantasy.ark.pro/v1/bond-rebasing-config"
+BURNT_ARK_URL = "https://0xfantasy.ark.pro/v1/general-config/burned-ark"
+STAKING_OVERVIEW_CACHE_TTL = 60
+RESERVE_BALANCE_CACHE_TTL = 86400
+STAKING_OVERVIEW_CACHE = {"ts": 0, "data": None}
+STAKING_DAY_BASELINE = {"date": None, "data": None}
+STAKING_DAY_BASELINE_STATE_KEY = "staking_overview_day_baseline"
+BURNT_ARK_CACHE = {"ts": 0, "value": None}
+RESERVE_BALANCE_CACHE = {"ts": 0, "data": None}
+ARK_SUPPLY_CACHE = {"ts": 0, "value": None}
+LIDO_STETH_CACHE = {"ts": 0, "value": None}
 DEX_SNAPSHOT_LOCK = threading.Lock()
 app = FastAPI(title="ARK")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -119,6 +140,198 @@ def get_today_data():
             "event_count":ec,"last_block":lb}
     TODAY_CACHE.update({"date": today, "ts": now_ts, "data": result})
     return dict(result)
+
+
+def get_staking_overview():
+    """读取 ARK 官网的全网质押周期汇总，并短缓存避免重复请求。"""
+    now_ts = time.time()
+    cached = STAKING_OVERVIEW_CACHE.get("data")
+    if cached is not None and now_ts - STAKING_OVERVIEW_CACHE["ts"] < STAKING_OVERVIEW_CACHE_TTL:
+        burned_ark = BURNT_ARK_CACHE["value"]
+        if burned_ark is None or now_ts - BURNT_ARK_CACHE["ts"] >= STAKING_OVERVIEW_CACHE_TTL:
+            burned_ark = get_burned_ark()
+        return _add_staking_metrics(cached, burned_ark, get_reserve_balances(), True)
+
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://www.ark.pro",
+        "Referer": "https://www.ark.pro/",
+        "User-Agent": "Mozilla/5.0 (compatible; ARK-Monitor/1.0)",
+    }
+    try:
+        response = requests.get(STAKING_OVERVIEW_URL, headers=headers, timeout=15)
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError("质押接口返回格式不是数组")
+        rows = []
+        period_map = {
+            1: "30天", 2: "90天", 3: "180天", 4: "360天",
+            5: "540天", 6: "720天", 100: "永久质押",
+        }
+        for item in payload:
+            mode_id = int(item.get("modeId"))
+            staking_ark = _to_float(item.get("totalStakingArk"))
+            lp_bonded_ark = _to_float(item.get("totalLpBondedArk"))
+            rows.append({
+                "mode_id": mode_id,
+                "period": period_map.get(mode_id, f"周期 {mode_id}"),
+                "interest_rate": _to_float(item.get("interestRate")),
+                "staking_ark": round(staking_ark, 6),
+                "bond_ark": round(lp_bonded_ark, 6),
+                "total_ark": round(staking_ark + lp_bonded_ark, 6),
+                "updated_at": item.get("updatedAt"),
+                "is_active": bool(item.get("isActive", False)),
+            })
+        rows.sort(key=lambda row: (row["mode_id"] == 100, row["mode_id"]))
+
+        today = datetime.now(BJT).strftime("%Y-%m-%d")
+        if STAKING_DAY_BASELINE["date"] != today or STAKING_DAY_BASELINE["data"] is None:
+            persisted_baseline = None
+            try:
+                state = json.loads(get_monitor_state(STAKING_DAY_BASELINE_STATE_KEY) or "")
+                if state.get("date") == today and isinstance(state.get("data"), dict):
+                    persisted_baseline = {
+                        int(mode_id): dict(row) for mode_id, row in state["data"].items()
+                    }
+            except (TypeError, ValueError, AttributeError):
+                persisted_baseline = None
+            baseline_data = persisted_baseline or {row["mode_id"]: dict(row) for row in rows}
+            STAKING_DAY_BASELINE.update({"date": today, "data": baseline_data})
+            if persisted_baseline is None:
+                set_monitor_state(STAKING_DAY_BASELINE_STATE_KEY, json.dumps({
+                    "date": today,
+                    "data": baseline_data,
+                }, ensure_ascii=False))
+        baseline = STAKING_DAY_BASELINE["data"]
+        for row in rows:
+            start = baseline.get(row["mode_id"], {})
+            row["staking_change"] = round(row["staking_ark"] - _to_float(start.get("staking_ark")), 6)
+            row["bond_change"] = round(row["bond_ark"] - _to_float(start.get("bond_ark")), 6)
+            row["total_change"] = round(row["total_ark"] - _to_float(start.get("total_ark")), 6)
+
+        burned_ark = get_burned_ark()
+        reserve_balances = get_reserve_balances()
+        STAKING_OVERVIEW_CACHE.update({"ts": now_ts, "data": rows})
+        return _add_staking_metrics(rows, burned_ark, reserve_balances, False)
+    except Exception as exc:
+        print(f"[质押汇总] 官网接口读取失败: {exc}")
+        if cached is not None:
+            result = _add_staking_metrics(cached, BURNT_ARK_CACHE["value"], get_reserve_balances(), True)
+            result["stale"] = True
+            return result
+        return _add_staking_metrics([], BURNT_ARK_CACHE["value"], get_reserve_balances(), False, "官网质押数据暂时不可用")
+
+
+def _add_staking_metrics(rows, burned_ark, reserves, cached, error=None):
+    total_staked = round(sum(_to_float(row.get("total_ark")) for row in rows), 6)
+    permanent_staked = round(sum(
+        _to_float(row.get("total_ark")) for row in rows if int(row.get("mode_id", 0)) == 100
+    ), 6)
+    total_supply = get_ark_total_supply()
+    denominator = total_supply + permanent_staked
+    staking_rate = round(total_staked / denominator * 100, 6) if denominator > 0 else None
+    result = {
+        "data": [dict(row) for row in rows],
+        "burned_ark": burned_ark,
+        "ark_total_supply": total_supply,
+        "staked_total_ark": total_staked,
+        "permanent_staked_ark": permanent_staked,
+        "staking_rate": staking_rate,
+        "reserves": reserves,
+        "lido_steth": get_lido_steth_balance(),
+        "cached": cached,
+    }
+    if error:
+        result["error"] = error
+    return result
+
+
+def get_burned_ark():
+    """读取 ARK 官网总销毁量接口。该接口返回纯数字文本而非 JSON。"""
+    now_ts = time.time()
+    if (BURNT_ARK_CACHE["value"] is not None
+            and now_ts - BURNT_ARK_CACHE["ts"] < STAKING_OVERVIEW_CACHE_TTL):
+        return BURNT_ARK_CACHE["value"]
+    headers = {
+        "Accept": "text/plain, application/json, */*",
+        "Origin": "https://www.ark.pro",
+        "Referer": "https://www.ark.pro/",
+        "User-Agent": "Mozilla/5.0 (compatible; ARK-Monitor/1.0)",
+    }
+    try:
+        response = requests.get(BURNT_ARK_URL, headers=headers, timeout=15)
+        response.raise_for_status()
+        value = _to_float(response.text.strip())
+        BURNT_ARK_CACHE.update({"ts": now_ts, "value": round(value, 6)})
+        return BURNT_ARK_CACHE["value"]
+    except Exception as exc:
+        print(f"[总销毁] 官网接口读取失败: {exc}")
+        return BURNT_ARK_CACHE["value"]
+
+
+def get_reserve_balances():
+    """读取三个储备金地址当前持有的 USDT 余额。"""
+    now_ts = time.time()
+    if (RESERVE_BALANCE_CACHE["data"] is not None
+            and now_ts - RESERVE_BALANCE_CACHE["ts"] < RESERVE_BALANCE_CACHE_TTL):
+        return [dict(row) for row in RESERVE_BALANCE_CACHE["data"]]
+    try:
+        rows = []
+        for name, address in RESERVE_ADDRESSES:
+            raw_balance = get_balance(TOKEN_USDT, address)
+            rows.append({
+                "name": name,
+                "address": address,
+                "usdt": round(raw_balance / (10 ** DECIMALS), 6),
+            })
+        RESERVE_BALANCE_CACHE.update({"ts": now_ts, "data": rows})
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        print(f"[储备金] 查询 USDT 余额失败: {exc}")
+        return [dict(row) for row in (RESERVE_BALANCE_CACHE["data"] or [])]
+
+
+def get_ark_total_supply():
+    """读取 ARK 合约当前 totalSupply，并按 18 位精度换算。"""
+    now_ts = time.time()
+    if (ARK_SUPPLY_CACHE["value"] is not None
+            and now_ts - ARK_SUPPLY_CACHE["ts"] < 30):
+        return ARK_SUPPLY_CACHE["value"]
+    try:
+        value = get_total_supply(TOKEN_ARK) / (10 ** DECIMALS)
+        ARK_SUPPLY_CACHE.update({"ts": now_ts, "value": round(value, 6)})
+        return ARK_SUPPLY_CACHE["value"]
+    except Exception as exc:
+        print(f"[ARK发行量] 链上查询失败: {exc}")
+        return ARK_SUPPLY_CACHE["value"] or 0
+
+
+def get_lido_steth_balance():
+    """读取 Ethereum 主网上 Lido stETH 地址余额，stETH 数量按 ETH 展示。"""
+    now_ts = time.time()
+    if (LIDO_STETH_CACHE["value"] is not None
+            and now_ts - LIDO_STETH_CACHE["ts"] < RESERVE_BALANCE_CACHE_TTL):
+        return LIDO_STETH_CACHE["value"]
+    data = "0x70a08231" + LIDO_STAKE_ADDRESS[2:].zfill(64)
+    try:
+        response = requests.post(
+            ETH_RPC_URL,
+            json={"jsonrpc": "2.0", "method": "eth_call", "params": [
+                {"to": LIDO_STETH_CONTRACT, "data": data}, "latest"
+            ], "id": 1},
+            timeout=15,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("error"):
+            raise RuntimeError(payload["error"].get("message", "eth_call failed"))
+        value = int(payload.get("result") or "0x0", 16) / (10 ** 18)
+        LIDO_STETH_CACHE.update({"ts": now_ts, "value": round(value, 6)})
+        return LIDO_STETH_CACHE["value"]
+    except Exception as exc:
+        print(f"[Lido stETH] Ethereum 链上查询失败: {exc}")
+        return LIDO_STETH_CACHE["value"]
 
 
 def get_today_trend():
@@ -504,6 +717,11 @@ def get_today():
 @app.get("/api/today-trend")
 def get_today_trend_api():
     return {"data": get_today_trend()}
+
+
+@app.get("/api/staking-overview")
+def get_staking_overview_api():
+    return get_staking_overview()
 
 @app.get("/api/dex/ark")
 def get_ark_dex():

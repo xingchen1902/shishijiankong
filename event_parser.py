@@ -58,6 +58,8 @@ class RPCManager:
     def __init__(self, urls):
         self.urls = urls
         self.index = 0
+        # 记录节点是否支持 JSON-RPC batch，避免每个批次重复试错后再整批 fallback。
+        self._batch_capability = {}
 
     def call(self, method, params, retries=1):
         for _ in range(len(self.urls)):
@@ -90,6 +92,9 @@ class RPCManager:
             return []
         for _ in range(len(self.urls)):
             url = self.urls[self.index]
+            if self._batch_capability.get(url) is False:
+                self.index = (self.index + 1) % len(self.urls)
+                continue
             payload = [
                 {"jsonrpc": "2.0", "method": method, "params": params, "id": i}
                 for i, params in enumerate(params_list)
@@ -99,10 +104,12 @@ class RPCManager:
                     response = requests.post(url, json=payload, timeout=15)
                     data = response.json()
                     if isinstance(data, list):
+                        self._batch_capability[url] = True
                         by_id = {item.get("id"): item.get("result") for item in data}
                         return [by_id.get(i) for i in range(len(params_list))]
                 except:
                     break
+            self._batch_capability[url] = False
             self.index = (self.index + 1) % len(self.urls)
 
         # 兼容不支持 batch 的 RPC 节点；宁可慢一些也不能将未验证事件计入总涡轮。
@@ -146,6 +153,11 @@ def get_balance(token, address, block_hex="latest"):
     """eth_call 查余额（仅在汇总时需要，不高频调用）"""
     data = "0x70a08231" + address[2:].lower().zfill(64)
     r = _rpc_call("eth_call", [{"to": token, "data": data}, block_hex])
+    return int(r, 16) if r else 0
+
+def get_total_supply(token, block_hex="latest"):
+    """eth_call 查询 ERC-20 totalSupply。"""
+    r = _rpc_call("eth_call", [{"to": token, "data": "0x18160ddd"}, block_hex])
     return int(r, 16) if r else 0
 
 def _classify_logs(logs, from_block, to_block):
@@ -259,13 +271,22 @@ class EventParser:
         self.events = []
         self._balance_cache = {}
         self._turbo_tx_cache = {}
+        # RPC 临时查不到交易时，短时间内不要在重叠扫描/重试中重复请求。
+        # 交易已经过安全确认仍不存在时，后续新批次会自然重新校验。
+        self._turbo_tx_missing = {}
+        self._turbo_tx_missing_ttl = 600
 
     def _turbo_transactions(self, tx_hashes):
         """批量获取涡轮候选交易的输入数据。"""
+        now = time.time()
         if len(self._turbo_tx_cache) > 50000:
             self._turbo_tx_cache.clear()
         hashes = list({tx_hash.lower() for tx_hash in tx_hashes if tx_hash})
-        missing_hashes = [tx_hash for tx_hash in hashes if tx_hash not in self._turbo_tx_cache]
+        missing_hashes = [
+            tx_hash for tx_hash in hashes
+            if tx_hash not in self._turbo_tx_cache
+            and now - self._turbo_tx_missing.get(tx_hash, 0) >= self._turbo_tx_missing_ttl
+        ]
         # 控制每个 JSON-RPC batch 的大小，避免节点拒绝过大的请求体。
         for start in range(0, len(missing_hashes), 50):
             chunk = missing_hashes[start:start + 50]
@@ -282,6 +303,8 @@ class EventParser:
                     tx = _rpc_call("eth_getTransactionByHash", [tx_hash], retries=2)
                     if tx:
                         self._turbo_tx_cache[tx_hash] = tx
+                    else:
+                        self._turbo_tx_missing[tx_hash] = now
         return {tx_hash: self._turbo_tx_cache[tx_hash] for tx_hash in hashes if tx_hash in self._turbo_tx_cache}
 
     def process_batch(self, from_block, to_block, query_gark=True):
@@ -372,9 +395,26 @@ class EventParser:
 
         # 总涡轮是独立的涡轮事件，不等于静态/动态释放之和。
         if turbo_logs:
-            turbo_txs = self._turbo_transactions(
-                log.get("transactionHash", "") for log in turbo_logs
-            )
+            # 先利用本批已经取得的 ARK Transfer 日志筛选候选。
+            # 没有“动态涡轮地址 → Turbo 用户、金额完全一致”的交易，
+            # 不可能通过最终校验，因此无需额外查询交易 calldata。
+            turbo_candidates = []
+            for log in turbo_logs:
+                topics = log.get("topics", [])
+                raw_data = log.get("data", "0x")[2:]
+                if len(topics) < 2 or len(raw_data) < 64:
+                    continue
+                tx_hash = log.get("transactionHash", "").lower()
+                user = _topic_addr(topics[1]).lower()
+                amount_wei = int(raw_data[:64], 16)
+                if any(
+                    from_addr == TARGET_DYNAMIC
+                    and to_addr == user
+                    and value == amount_wei
+                    for from_addr, to_addr, value in ark_transfers.get(tx_hash, [])
+                ):
+                    turbo_candidates.append(tx_hash)
+            turbo_txs = self._turbo_transactions(turbo_candidates)
             for log in turbo_logs:
                 raw_data = log.get("data", "0x")[2:]
                 topics = log.get("topics", [])
