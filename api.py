@@ -273,8 +273,13 @@ def get_burned_ark():
 def get_reserve_balances():
     """读取三个储备金地址当前持有的 USDT 余额。"""
     now_ts = time.time()
+    try:
+        dirty_at = float(get_monitor_state("reserve_balance_dirty_at") or 0)
+    except (TypeError, ValueError):
+        dirty_at = 0
     if (RESERVE_BALANCE_CACHE["data"] is not None
-            and now_ts - RESERVE_BALANCE_CACHE["ts"] < RESERVE_BALANCE_CACHE_TTL):
+            and now_ts - RESERVE_BALANCE_CACHE["ts"] < RESERVE_BALANCE_CACHE_TTL
+            and dirty_at <= RESERVE_BALANCE_CACHE["ts"]):
         return [dict(row) for row in RESERVE_BALANCE_CACHE["data"]]
     try:
         rows = []

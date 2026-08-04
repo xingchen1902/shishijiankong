@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 
 from db import init_db, get_conn, get_monitor_state, set_monitor_state
 from ws_listener import BlockListener
-from event_parser import EventParser
+from event_parser import EventParser, reserve_usdt_transfer_detected
 from aggregator import DailyAggregator
 
 BJT = timezone(timedelta(hours=8))
@@ -31,6 +31,9 @@ def main():
         events = parser.process_batch(from_block, to_block, query_gark=query_gark)
         if events:
             aggregator.add_events(events)
+        # 储备金余额平时使用长缓存；仅在相关 USDT Transfer 出现后通知 API 刷新。
+        if reserve_usdt_transfer_detected(from_block, to_block):
+            set_monitor_state("reserve_balance_dirty_at", time.time())
         # 每批写入数据库
         aggregator.flush_events()
         # 仅在该区块范围已完成解析并落库后推进检查点；重启时无需按事件最大区块重扫。

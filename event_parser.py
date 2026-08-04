@@ -21,6 +21,12 @@ TURBO_SELECTOR = "0xc7084a38"
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()
 TOKEN_GARK = "0x911f12D137D74E5917877f87cf8A8bB2FDde557f".lower()
 TOKEN_USDT = "0x55d398326f99059fF775485246999027B3197955".lower()
+USDT_TRANSFER_TOPIC = TRANSFER_TOPIC
+RESERVE_USDT_ADDRESSES = {
+    "0x1b9f458773d18b4e1aaf5b896721697215c4a68b",
+    "0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2",
+    "0x23876d9f06f8290f119fb39b7fdcf93a08e2d616",
+}
 ARK_USDT_LP = "0xCAaF3c41a40103a23Eeaa4BbA468AF3cF5b0e0D8".lower()
 DECIMALS = 18
 
@@ -159,6 +165,35 @@ def get_total_supply(token, block_hex="latest"):
     """eth_call 查询 ERC-20 totalSupply。"""
     r = _rpc_call("eth_call", [{"to": token, "data": "0x18160ddd"}, block_hex])
     return int(r, 16) if r else 0
+
+
+def _topic_address(address):
+    return "0x" + address[2:].lower().zfill(64)
+
+
+def reserve_usdt_transfer_detected(from_block, to_block):
+    """检查储备金地址是否发生 USDT 转账，只返回是否需要刷新余额。"""
+    address_topics = [_topic_address(address) for address in RESERVE_USDT_ADDRESSES]
+    base = {
+        "fromBlock": hex(from_block),
+        "toBlock": hex(to_block),
+        "address": TOKEN_USDT,
+    }
+    outgoing = _rpc_call("eth_getLogs", [{
+        **base,
+        "topics": [USDT_TRANSFER_TOPIC, address_topics, None],
+    }], retries=1) or []
+    incoming = _rpc_call("eth_getLogs", [{
+        **base,
+        "topics": [USDT_TRANSFER_TOPIC, None, address_topics],
+    }], retries=1) or []
+    detected = bool(outgoing or incoming)
+    if detected:
+        print(
+            f"  [储备金监听] #{from_block}~#{to_block} "
+            f"检测到 {len(outgoing) + len(incoming)} 笔 USDT 转账"
+        )
+    return detected
 
 def _classify_logs(logs, from_block, to_block):
     """解析 ARK logs，按地址分类，返回 (已分类, 未分类原始log)"""
