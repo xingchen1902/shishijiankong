@@ -17,6 +17,7 @@ FEISHU_APP_ID = os.environ.get("FEISHU_APP_ID", "")
 FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET", "")
 FEISHU_APP_TOKEN = "B5lBbWgjXamRS6s1CcEcTvgtnQc"
 FEISHU_TABLE_ID = "tblVmNxjg8WjyXdw"
+FEISHU_STAKING_TABLE_ID = "tblOCpFwZ3a5LCJJ"
 
 FIELD_MAP = {
     "bonus_balance": "奖金池余额",
@@ -118,6 +119,67 @@ def push_to_feishu(record):
     else:
         print(f"  [飞书] 写入失败: {d}")
     return d.get("code") == 0
+
+
+def push_staking_snapshot_to_feishu(snapshot):
+    """写入官网周期质押每日快照表，同一天覆盖旧记录。"""
+    token = get_feishu_token()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    date_str = snapshot["date"]
+    url = (
+        f"https://open.feishu.cn/open-apis/bitable/v1/apps/{FEISHU_APP_TOKEN}"
+        f"/tables/{FEISHU_STAKING_TABLE_ID}/records"
+    )
+    date_ms = int(datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=BJT).timestamp() * 1000)
+
+    page_token = ""
+    while True:
+        params = {"page_size": 100}
+        if page_token:
+            params["page_token"] = page_token
+        existing = requests.get(url, headers=headers, params=params, timeout=15).json()
+        if existing.get("code") != 0:
+            print(f"  [飞书质押快照] 查询旧记录失败: {existing}")
+            return False
+        for item in existing.get("data", {}).get("items", []):
+            if item.get("fields", {}).get("日期") == date_ms:
+                deleted = requests.delete(f"{url}/{item['record_id']}", headers=headers, timeout=15).json()
+                if deleted.get("code") != 0:
+                    print(f"  [飞书质押快照] 删除旧记录失败: {deleted}")
+                    return False
+        if not existing.get("data", {}).get("has_more"):
+            break
+        page_token = existing.get("data", {}).get("page_token", "")
+
+    fields = {"日期": date_ms}
+    field_map = {
+        3: ("180天单币质押", "180天债券质押"),
+        4: ("360天单币质押", "360天债券质押"),
+        5: ("540天单币质押", "540天债券质押"),
+        6: ("720天单币质押", "720天债券质押"),
+        100: ("永久单币质押", "永久债券质押"),
+    }
+    use_baseline = date_str == "2026-08-04"
+    for row in snapshot.get("data", {}).get("data", []):
+        names = field_map.get(int(row.get("mode_id", 0)))
+        if names:
+            staking_key = "staking_ark" if use_baseline else "staking_change"
+            bond_key = "bond_ark" if use_baseline else "bond_change"
+            fields[names[0]] = round(float(row.get(staking_key) or 0), 6)
+            fields[names[1]] = round(float(row.get(bond_key) or 0), 6)
+    total_key = "staked_total_ark" if use_baseline else "total_change"
+    if use_baseline:
+        total = snapshot.get("data", {}).get(total_key, 0)
+    else:
+        total = sum(float(row.get(total_key) or 0) for row in snapshot.get("data", {}).get("data", []))
+    fields["总质押"] = round(float(total), 6)
+
+    result = requests.post(url, headers=headers, json={"fields": fields}, timeout=15).json()
+    if result.get("code") == 0:
+        print(f"  [飞书质押快照] 写入成功 {date_str}")
+        return True
+    print(f"  [飞书质押快照] 写入失败: {result}")
+    return False
 
 
 def _fmt_720(r):

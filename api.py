@@ -22,6 +22,7 @@ from pusher import (
     get_telegram_chat_ids,
     push_to_feishu,
     push_to_telegram,
+    push_staking_snapshot_to_feishu,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
 )
@@ -758,12 +759,37 @@ def staking_snapshot_worker():
             time.sleep(30)
 
 
+def staking_feishu_push_worker():
+    """每天北京时间 00:05 将前一日质押快照写入独立飞书表格。"""
+    pushed_key = "staking_feishu_last_pushed_date"
+    while True:
+        try:
+            now = datetime.now(BJT)
+            target = now.replace(hour=0, minute=5, second=0, microsecond=0)
+            if now >= target:
+                date_str = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+                if get_monitor_state(pushed_key) != date_str:
+                    snapshots = get_staking_daily_snapshots(365)
+                    snapshot = next((item for item in snapshots if item.get("date") == date_str), None)
+                    if snapshot and push_staking_snapshot_to_feishu(snapshot):
+                        set_monitor_state(pushed_key, date_str)
+                    elif not snapshot:
+                        print(f"[飞书质押快照] {date_str} 暂无 VPS 快照，稍后重试")
+                time.sleep(30)
+            else:
+                time.sleep(max(1, min(30, int((target - now).total_seconds()))))
+        except Exception as exc:
+            print(f"[飞书质押快照] 异常: {exc}")
+            time.sleep(30)
+
+
 @app.get("/api/staking-snapshots")
 def get_staking_snapshots_api(limit: int = 30):
     return {"data": get_staking_daily_snapshots(limit)}
 
 
 threading.Thread(target=staking_snapshot_worker, daemon=True).start()
+threading.Thread(target=staking_feishu_push_worker, daemon=True).start()
 
 @app.get("/api/dex/ark")
 def get_ark_dex():
