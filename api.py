@@ -10,6 +10,8 @@ from db import (
     get_conn,
     get_dex_daily_snapshot,
     get_dex_daily_snapshots,
+    get_staking_daily_snapshots,
+    insert_staking_daily_snapshot,
     init_db,
     upsert_dex_daily_snapshot,
     get_monitor_state,
@@ -142,11 +144,12 @@ def get_today_data():
     return dict(result)
 
 
-def get_staking_overview():
+def get_staking_overview(force_refresh=False):
     """读取 ARK 官网的全网质押周期汇总，并短缓存避免重复请求。"""
     now_ts = time.time()
     cached = STAKING_OVERVIEW_CACHE.get("data")
-    if cached is not None and now_ts - STAKING_OVERVIEW_CACHE["ts"] < STAKING_OVERVIEW_CACHE_TTL:
+    if (not force_refresh and cached is not None
+            and now_ts - STAKING_OVERVIEW_CACHE["ts"] < STAKING_OVERVIEW_CACHE_TTL):
         burned_ark = BURNT_ARK_CACHE["value"]
         if burned_ark is None or now_ts - BURNT_ARK_CACHE["ts"] >= STAKING_OVERVIEW_CACHE_TTL:
             burned_ark = get_burned_ark()
@@ -727,6 +730,40 @@ def get_today_trend_api():
 @app.get("/api/staking-overview")
 def get_staking_overview_api():
     return get_staking_overview()
+
+
+def staking_snapshot_worker():
+    """每天北京时间 23:59 保存一次完整的实时质押数据。"""
+    while True:
+        try:
+            now = datetime.now(BJT)
+            target = now.replace(hour=23, minute=59, second=0, microsecond=0)
+            if now >= target:
+                date_str = now.strftime("%Y-%m-%d")
+                existing = get_staking_daily_snapshots(365)
+                if not any(row.get("date") == date_str for row in existing):
+                    payload = get_staking_overview(force_refresh=True)
+                    if payload.get("data") and not payload.get("stale"):
+                        scheduled_at = target.strftime("%Y-%m-%d %H:%M:%S")
+                        insert_staking_daily_snapshot(date_str, scheduled_at, payload)
+                        print(f"[质押快照] 已保存 {scheduled_at}")
+                    else:
+                        print(f"[质押快照] {date_str} 数据为空，稍后重试")
+                time.sleep(30)
+            else:
+                wait_seconds = max(1, min(30, int((target - now).total_seconds())))
+                time.sleep(wait_seconds)
+        except Exception as exc:
+            print(f"[质押快照] 异常: {exc}")
+            time.sleep(30)
+
+
+@app.get("/api/staking-snapshots")
+def get_staking_snapshots_api(limit: int = 30):
+    return {"data": get_staking_daily_snapshots(limit)}
+
+
+threading.Thread(target=staking_snapshot_worker, daemon=True).start()
 
 @app.get("/api/dex/ark")
 def get_ark_dex():

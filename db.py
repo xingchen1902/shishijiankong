@@ -116,6 +116,13 @@ def init_db():
             state_value TEXT NOT NULL,
             updated_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS staking_daily_snapshots (
+            date TEXT PRIMARY KEY,
+            snapshot_at TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
     for column in ("burn_stake", "dynamic_release", "permanent_bonus", "permanent_stake"):
@@ -164,6 +171,44 @@ def ensure_dex_daily_snapshots_table():
     """)
     conn.commit()
     conn.close()
+
+
+def insert_staking_daily_snapshot(date_str, snapshot_at, payload):
+    """保存北京时间每日质押快照，同一天只保留一份。"""
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO staking_daily_snapshots
+            (date, snapshot_at, payload_json)
+        VALUES (?, ?, ?)
+        """,
+        (date_str, snapshot_at, json.dumps(payload, ensure_ascii=False)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_staking_daily_snapshots(limit=30):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT date, snapshot_at, payload_json, created_at "
+        "FROM staking_daily_snapshots ORDER BY date DESC LIMIT ?",
+        (max(1, min(int(limit or 30), 365)),),
+    ).fetchall()
+    conn.close()
+    result = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, ValueError):
+            payload = {}
+        result.append({
+            "date": row["date"],
+            "snapshot_at": row["snapshot_at"],
+            "data": payload,
+            "created_at": row["created_at"],
+        })
+    return result
 
 def insert_raw_logs_batch(records):
     if not records: return
