@@ -15,8 +15,6 @@ TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523
 SWAP_TOPIC = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
 RELEASE_TOPIC = "0x3b528916c884f3594beeba6799acd20b08bbcacea83d72c44e00360ea67ea24a"
 TURBO_TOPIC = "0x106f923f993c2149d49b4255ff723acafa1f2d94393f561d3eda32ae348f7241"
-# 已在链上样本中确认：总涡轮调用的函数选择器。
-TURBO_SELECTOR = "0xc7084a38"
 
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()
 TOKEN_GARK = "0x911f12D137D74E5917877f87cf8A8bB2FDde557f".lower()
@@ -132,12 +130,6 @@ def _rpc_call(method, params, retries=3):
         return _rpc.call(method, params, retries)
     except:
         return None
-
-def _rpc_batch_call(method, params_list, retries=1):
-    try:
-        return _rpc.call_batch(method, params_list, retries)
-    except:
-        return [None] * len(params_list)
 
 def _refresh_time_ref(force=False):
     global _time_ref_block, _time_ref_ts, _time_ref_updated
@@ -305,42 +297,6 @@ class EventParser:
     def __init__(self):
         self.events = []
         self._balance_cache = {}
-        self._turbo_tx_cache = {}
-        # RPC 临时查不到交易时，短时间内不要在重叠扫描/重试中重复请求。
-        # 交易已经过安全确认仍不存在时，后续新批次会自然重新校验。
-        self._turbo_tx_missing = {}
-        self._turbo_tx_missing_ttl = 600
-
-    def _turbo_transactions(self, tx_hashes):
-        """批量获取涡轮候选交易的输入数据。"""
-        now = time.time()
-        if len(self._turbo_tx_cache) > 50000:
-            self._turbo_tx_cache.clear()
-        hashes = list({tx_hash.lower() for tx_hash in tx_hashes if tx_hash})
-        missing_hashes = [
-            tx_hash for tx_hash in hashes
-            if tx_hash not in self._turbo_tx_cache
-            and now - self._turbo_tx_missing.get(tx_hash, 0) >= self._turbo_tx_missing_ttl
-        ]
-        # 控制每个 JSON-RPC batch 的大小，避免节点拒绝过大的请求体。
-        for start in range(0, len(missing_hashes), 50):
-            chunk = missing_hashes[start:start + 50]
-            responses = _rpc_batch_call(
-                "eth_getTransactionByHash", [[tx_hash] for tx_hash in chunk], retries=1
-            )
-            for tx_hash, tx in zip(chunk, responses):
-                if tx:
-                    self._turbo_tx_cache[tx_hash] = tx
-            # 交易已在日志中出现，理论上必然存在；缺失时单笔重试，避免 RPC
-            # 的局部 batch 故障造成这批总涡轮永久漏记。
-            for tx_hash in chunk:
-                if tx_hash not in self._turbo_tx_cache:
-                    tx = _rpc_call("eth_getTransactionByHash", [tx_hash], retries=2)
-                    if tx:
-                        self._turbo_tx_cache[tx_hash] = tx
-                    else:
-                        self._turbo_tx_missing[tx_hash] = now
-        return {tx_hash: self._turbo_tx_cache[tx_hash] for tx_hash in hashes if tx_hash in self._turbo_tx_cache}
 
     def process_batch(self, from_block, to_block, query_gark=True):
         """批量 eth_getLogs，提取 ARK/gARK Transfer 事件"""
@@ -430,26 +386,6 @@ class EventParser:
 
         # 总涡轮是独立的涡轮事件，不等于静态/动态释放之和。
         if turbo_logs:
-            # 先利用本批已经取得的 ARK Transfer 日志筛选候选。
-            # 没有“动态涡轮地址 → Turbo 用户、金额完全一致”的交易，
-            # 不可能通过最终校验，因此无需额外查询交易 calldata。
-            turbo_candidates = []
-            for log in turbo_logs:
-                topics = log.get("topics", [])
-                raw_data = log.get("data", "0x")[2:]
-                if len(topics) < 2 or len(raw_data) < 64:
-                    continue
-                tx_hash = log.get("transactionHash", "").lower()
-                user = _topic_addr(topics[1]).lower()
-                amount_wei = int(raw_data[:64], 16)
-                if any(
-                    from_addr == TARGET_DYNAMIC
-                    and to_addr == user
-                    and value == amount_wei
-                    for from_addr, to_addr, value in ark_transfers.get(tx_hash, [])
-                ):
-                    turbo_candidates.append(tx_hash)
-            turbo_txs = self._turbo_transactions(turbo_candidates)
             for log in turbo_logs:
                 raw_data = log.get("data", "0x")[2:]
                 topics = log.get("topics", [])
@@ -459,24 +395,16 @@ class EventParser:
                 tx_hash = log.get("transactionHash", "").lower()
                 user = _topic_addr(topics[1]).lower()
                 amount_wei = int(raw_data[:64], 16)
-                tx = turbo_txs.get(tx_hash)
-
-                # 不能仅凭“动态合约转出 ARK”判为涡轮：
-                # 1) 必须使用已确认的涡轮调用方法；
-                # 2) Turbo 事件的用户和数量必须与同笔 ARK 转账完全一致。
-                valid_call = bool(
-                    tx
-                    and (tx.get("to") or "").lower() == TARGET_DYNAMIC
-                    and (tx.get("input") or "").lower().startswith(TURBO_SELECTOR)
-                )
                 valid_transfer = any(
                     from_addr == TARGET_DYNAMIC and to_addr == user and value == amount_wei
                     for from_addr, to_addr, value in ark_transfers.get(tx_hash, [])
                 )
-                if not (valid_call and valid_transfer):
+                # 静态释放会经过固定接收地址 0x7df...，不计入总涡轮。
+                # Turbo 事件、动态合约转账路径和金额必须同时匹配。
+                if user in EXCLUDED_DYNAMIC_RECEIVERS or not valid_transfer:
                     print(
-                        f"  [忽略未验证涡轮] {tx_hash[:12]} "
-                        f"selector={'ok' if valid_call else 'bad'} "
+                        f"  [忽略非总涡轮] {tx_hash[:12]} "
+                        f"receiver={'static' if user in EXCLUDED_DYNAMIC_RECEIVERS else 'mismatch'} "
                         f"transfer={'ok' if valid_transfer else 'bad'}"
                     )
                     continue
