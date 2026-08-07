@@ -31,7 +31,7 @@ BURST_RULES = {
         "types": ("turbo_total",),
         "amount_levels": (10000, 20000, 50000),
         "count_levels": (200, 400, 1000),
-        "single_threshold": 2000,
+        "single_threshold": 400,
     },
     "redeem": {
         "title": "赎回",
@@ -45,7 +45,7 @@ BURST_RULES = {
         "types": ("release_static", "release_dynamic"),
         "amount_levels": (10000, 20000, 50000),
         "count_levels": (200, 400, 1000),
-        "single_threshold": 2000,
+        "single_threshold": 400,
     },
 }
 
