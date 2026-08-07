@@ -93,7 +93,7 @@ class DailyAggregator:
             for key, rule in BURST_RULES.items():
                 placeholders = ",".join("?" for _ in rule["types"])
                 rows = conn.execute(
-                    f"SELECT id, block, tx, type, value, timestamp FROM events "
+                    f"SELECT id, block, tx, type, from_addr, to_addr, value, timestamp FROM events "
                     f"WHERE timestamp >= ? AND timestamp <= ? AND type IN ({placeholders}) "
                     "ORDER BY block, id",
                     (start_str, end_str, *rule["types"]),
@@ -128,6 +128,7 @@ class DailyAggregator:
             "average": amount / count if count else 0,
             "largest": float(largest["value"] or 0) if largest else 0,
             "largest_tx": largest["tx"] if largest else "",
+            "largest_address": (largest["to_addr"] or largest["from_addr"]) if largest else "",
             "static_amount": static_amount,
             "dynamic_amount": dynamic_amount,
             "permanent_rows": permanent_rows,
@@ -174,7 +175,8 @@ class DailyAggregator:
                 f"数量：{value:,.2f} ARK\n"
                 f"时间：{row['timestamp'] or '--'}\n"
                 f"类型：{release_type or rule['title']}\n"
-                f"交易哈希：\n<code>{tx}</code>"
+                f"触发地址：{row['to_addr'] or row['from_addr'] or '--'}\n"
+                f"交易：{self._tx_link(tx)}"
             )
             if push_burst_alert(message):
                 seen[tx] = time.time()
@@ -191,7 +193,9 @@ class DailyAggregator:
                     f"持续时间：{self._duration_text(state.get('started_at'), end_str)}\n"
                     f"累计数量：{display['amount']:,.2f} ARK\n"
                     f"累计交易：{display['count']} 笔\n"
-                    f"最高等级：{state.get('highest_level', state.get('level', 1))}级"
+                    f"最高等级：{state.get('highest_level', state.get('level', 1))}级\n"
+                    f"触发地址：{display.get('largest_address') or '--'}\n"
+                    f"最大单笔交易：{self._tx_link(display.get('largest_tx'))}"
                 )
                 if display["static_amount"] or display["dynamic_amount"]:
                     message = message.replace(
@@ -220,6 +224,7 @@ class DailyAggregator:
                 "cumulative_dynamic": 0,
                 "cumulative_largest": 0,
                 "cumulative_largest_tx": "",
+                "cumulative_largest_address": "",
             })
             active = True
         self._accumulate_state(state, rule, summary, rows)
@@ -258,6 +263,7 @@ class DailyAggregator:
         if largest and float(largest["value"] or 0) > float(state.get("cumulative_largest") or 0):
             state["cumulative_largest"] = float(largest["value"] or 0)
             state["cumulative_largest_tx"] = largest["tx"]
+            state["cumulative_largest_address"] = largest["to_addr"] or largest["from_addr"] or ""
 
     @staticmethod
     def _cumulative_summary(state, current):
@@ -269,6 +275,7 @@ class DailyAggregator:
             "average": amount / count if count else 0,
             "largest": float(state.get("cumulative_largest") or current.get("largest", 0)),
             "largest_tx": state.get("cumulative_largest_tx") or current.get("largest_tx", ""),
+            "largest_address": state.get("cumulative_largest_address") or current.get("largest_address", ""),
             "static_amount": float(state.get("cumulative_static") or 0),
             "dynamic_amount": float(state.get("cumulative_dynamic") or 0),
         }
@@ -281,6 +288,13 @@ class DailyAggregator:
             return f"{max(0, int((end - start).total_seconds() // 60))}分钟"
         except (TypeError, ValueError):
             return "--"
+
+    @staticmethod
+    def _tx_link(tx):
+        tx = str(tx or "")
+        if not tx:
+            return "--"
+        return f'<a href="https://bscscan.com/tx/{tx}">🔗 bscscan.com/tx/...</a>'
 
     @staticmethod
     def _burst_message(icon, title, level, summary, started_at, start_str, end_str, status):
@@ -303,10 +317,11 @@ class DailyAggregator:
             f"累计交易：{summary['count']} 笔",
             f"平均单笔：{summary['average']:,.2f} ARK",
             f"最大单笔：{summary['largest']:,.2f} ARK",
+            f"触发地址：{summary['largest_address'] or '--'}",
             f"状态：{status}",
         ])
         if summary["largest_tx"]:
-            lines.extend(["", f"最大单笔交易：\n<code>{summary['largest_tx']}</code>"])
+            lines.extend(["", f"最大单笔交易：\n{DailyAggregator._tx_link(summary['largest_tx'])}"])
         return "\n".join(lines)
 
     def _check_yesterday_push(self):
