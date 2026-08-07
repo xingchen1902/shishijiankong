@@ -41,6 +41,8 @@ def main():
             set_monitor_state("reserve_balance_dirty_at", time.time())
         # 每批写入数据库
         aggregator.flush_events()
+        # 基于已落库事件计算集中提醒，不产生额外链上请求。
+        aggregator.process_burst_alerts()
         # 仅在该区块范围已完成解析并落库后推进检查点；重启时无需按事件最大区块重扫。
         set_monitor_state("event_parser_last_block", to_block)
         aggregator.check_date_change()

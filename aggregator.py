@@ -6,19 +6,48 @@
 - BJT 00:05 推送飞书 + Telegram
 """
 
-import time, threading, requests
+import json, os, time, threading, requests
 from datetime import datetime, timezone, timedelta
 from db import (
     get_conn,
     get_dex_daily_snapshot,
     insert_events_batch,
     upsert_daily_summary,
+    get_monitor_state,
+    set_monitor_state,
     get_all_daily_until_yesterday as get_all_daily,
 )
 from event_parser import EventParser, get_balance, BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
-from pusher import push_to_feishu, push_to_telegram
+from pusher import push_to_feishu, push_to_telegram, push_burst_alert
 
 BJT = timezone(timedelta(hours=8))
+
+BURST_WINDOW_SECONDS = int(os.environ.get("BURST_WINDOW_SECONDS", "600"))
+BURST_UPDATE_SECONDS = int(os.environ.get("BURST_UPDATE_SECONDS", "600"))
+BURST_STATE_KEY = "burst_alert_state"
+BURST_RULES = {
+    "turbo": {
+        "title": "涡轮",
+        "types": ("turbo_total",),
+        "amount_levels": (10000, 20000, 50000),
+        "count_levels": (200, 400, 1000),
+        "single_threshold": 2000,
+    },
+    "redeem": {
+        "title": "赎回",
+        "types": ("stake_out",),
+        "amount_levels": (10000, 20000, 50000),
+        "count_levels": (50, 100, 250),
+        "single_threshold": 2000,
+    },
+    "release": {
+        "title": "释放",
+        "types": ("release_static", "release_dynamic"),
+        "amount_levels": (10000, 20000, 50000),
+        "count_levels": (200, 400, 1000),
+        "single_threshold": 2000,
+    },
+}
 
 class DailyAggregator:
     def __init__(self):
@@ -51,6 +80,234 @@ class DailyAggregator:
             insert_events_batch(self.event_buffer)
             print("  [存储] 写入", len(self.event_buffer), "条事件")
             self.event_buffer = []
+
+    def process_burst_alerts(self):
+        """根据最近窗口内已落库事件发送集中/单笔 Telegram 提醒。"""
+        now = datetime.now(BJT)
+        window_start = now - timedelta(seconds=BURST_WINDOW_SECONDS)
+        start_str = window_start.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        conn = get_conn()
+        try:
+            states = self._load_burst_state()
+            for key, rule in BURST_RULES.items():
+                placeholders = ",".join("?" for _ in rule["types"])
+                rows = conn.execute(
+                    f"SELECT id, block, tx, type, value, timestamp FROM events "
+                    f"WHERE timestamp >= ? AND timestamp <= ? AND type IN ({placeholders}) "
+                    "ORDER BY block, id",
+                    (start_str, end_str, *rule["types"]),
+                ).fetchall()
+                summary = self._burst_summary(rule, rows, conn, start_str, end_str)
+                self._send_single_alerts(key, rule, rows, states)
+                self._handle_burst_state(key, rule, summary, rows, states, start_str, end_str)
+            self._save_burst_state(states)
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _burst_summary(rule, rows, conn, start_str, end_str):
+        values = [float(row["value"] or 0) for row in rows]
+        count = len(rows)
+        amount = sum(values)
+        if rule["title"] == "赎回":
+            permanent_rows = conn.execute(
+                "SELECT id, block, tx, type, value, timestamp FROM events "
+                "WHERE timestamp >= ? AND timestamp <= ? AND type='permanent_stake'",
+                (start_str, end_str),
+            ).fetchall()
+            amount = max(amount - sum(float(row["value"] or 0) for row in permanent_rows), 0)
+        else:
+            permanent_rows = []
+        largest = max(rows, key=lambda row: float(row["value"] or 0), default=None)
+        static_amount = sum(float(row["value"] or 0) for row in rows if row["type"] == "release_static")
+        dynamic_amount = sum(float(row["value"] or 0) for row in rows if row["type"] == "release_dynamic")
+        return {
+            "amount": amount,
+            "count": count,
+            "average": amount / count if count else 0,
+            "largest": float(largest["value"] or 0) if largest else 0,
+            "largest_tx": largest["tx"] if largest else "",
+            "static_amount": static_amount,
+            "dynamic_amount": dynamic_amount,
+            "permanent_rows": permanent_rows,
+        }
+
+    @staticmethod
+    def _level(rule, summary):
+        level = 0
+        for index, (amount_limit, count_limit) in enumerate(zip(rule["amount_levels"], rule["count_levels"]), 1):
+            if summary["amount"] >= amount_limit or summary["count"] >= count_limit:
+                level = index
+        return level
+
+    def _load_burst_state(self):
+        try:
+            state = json.loads(get_monitor_state(BURST_STATE_KEY) or "{}")
+            if isinstance(state, dict):
+                return state
+        except (TypeError, ValueError):
+            pass
+        return {}
+
+    @staticmethod
+    def _save_burst_state(state):
+        set_monitor_state(BURST_STATE_KEY, json.dumps(state, ensure_ascii=False))
+
+    def _send_single_alerts(self, key, rule, rows, states):
+        alert_state = states.setdefault("single", {})
+        seen = alert_state.setdefault(key, {})
+        cutoff = time.time() - 86400
+        for tx, alerted_at in list(seen.items()):
+            if float(alerted_at or 0) < cutoff:
+                del seen[tx]
+        for row in rows:
+            value = float(row["value"] or 0)
+            tx = row["tx"]
+            if value < rule["single_threshold"] or tx in seen:
+                continue
+            release_type = ""
+            if key == "release":
+                release_type = "静态释放" if row["type"] == "release_static" else "动态释放"
+            message = (
+                f"🔔 <b>单笔{rule['title']}异常提醒</b>\n\n"
+                f"数量：{value:,.2f} ARK\n"
+                f"时间：{row['timestamp'] or '--'}\n"
+                f"类型：{release_type or rule['title']}\n"
+                f"交易哈希：\n<code>{tx}</code>"
+            )
+            if push_burst_alert(message):
+                seen[tx] = time.time()
+
+    def _handle_burst_state(self, key, rule, summary, rows, states, start_str, end_str):
+        state = states.setdefault(key, {})
+        level = self._level(rule, summary)
+        active = bool(state.get("active"))
+        if level == 0:
+            if active:
+                display = self._cumulative_summary(state, summary)
+                message = (
+                    f"✅ <b>集中{rule['title']}已结束</b>\n\n"
+                    f"持续时间：{self._duration_text(state.get('started_at'), end_str)}\n"
+                    f"累计数量：{display['amount']:,.2f} ARK\n"
+                    f"累计交易：{display['count']} 笔\n"
+                    f"最高等级：{state.get('highest_level', state.get('level', 1))}级"
+                )
+                if display["static_amount"] or display["dynamic_amount"]:
+                    message = message.replace(
+                        f"累计数量：{display['amount']:,.2f} ARK\n",
+                        f"静态释放：{display['static_amount']:,.2f} ARK\n"
+                        f"动态释放：{display['dynamic_amount']:,.2f} ARK\n"
+                        f"释放合计：{display['amount']:,.2f} ARK\n",
+                    )
+                if push_burst_alert(message):
+                    state.clear()
+            return
+
+        now_ts = time.time()
+        started_at = state.get("started_at") or end_str
+        if not active:
+            state.update({
+                "active": True,
+                "started_at": started_at,
+                "last_push_at": 0,
+                "level": 0,
+                "highest_level": 0,
+                "seen_ids": [],
+                "cumulative_amount": 0,
+                "cumulative_count": 0,
+                "cumulative_static": 0,
+                "cumulative_dynamic": 0,
+                "cumulative_largest": 0,
+                "cumulative_largest_tx": "",
+            })
+            active = True
+        self._accumulate_state(state, rule, summary, rows)
+        previous_level = int(state.get("level") or 0)
+        title = "集中%s提醒" % rule["title"]
+        if level > previous_level:
+            prefix = "⚠️" if level == 1 else ("🚨" if level == 2 else "🆘")
+            message = self._burst_message(prefix, title, level, self._cumulative_summary(state, summary), started_at, start_str, end_str, "事件开始" if previous_level == 0 else "等级升级")
+            if push_burst_alert(message):
+                state["last_push_at"] = now_ts
+        elif active and now_ts - float(state.get("last_push_at") or 0) >= BURST_UPDATE_SECONDS:
+            message = self._burst_message("📊", f"{title}持续中", level, self._cumulative_summary(state, summary), started_at, start_str, end_str, "持续更新")
+            if push_burst_alert(message):
+                state["last_push_at"] = now_ts
+        state["level"] = level
+        state["highest_level"] = max(int(state.get("highest_level") or 0), level)
+
+    @staticmethod
+    def _accumulate_state(state, rule, summary, rows):
+        seen = {int(item) for item in state.get("seen_ids", [])}
+        new_rows = [row for row in rows if int(row["id"]) not in seen]
+        new_permanent = [row for row in summary["permanent_rows"] if int(row["id"]) not in seen]
+        state["seen_ids"] = list(seen | {int(row["id"]) for row in rows} | {int(row["id"]) for row in new_permanent})[-5000:]
+        delta = sum(float(row["value"] or 0) for row in new_rows)
+        if rule["title"] == "赎回":
+            delta -= sum(float(row["value"] or 0) for row in new_permanent)
+        state["cumulative_amount"] = max(float(state.get("cumulative_amount") or 0) + delta, 0)
+        state["cumulative_count"] = int(state.get("cumulative_count") or 0) + len(new_rows)
+        state["cumulative_static"] = float(state.get("cumulative_static") or 0) + sum(
+            float(row["value"] or 0) for row in new_rows if row["type"] == "release_static"
+        )
+        state["cumulative_dynamic"] = float(state.get("cumulative_dynamic") or 0) + sum(
+            float(row["value"] or 0) for row in new_rows if row["type"] == "release_dynamic"
+        )
+        largest = max(new_rows, key=lambda row: float(row["value"] or 0), default=None)
+        if largest and float(largest["value"] or 0) > float(state.get("cumulative_largest") or 0):
+            state["cumulative_largest"] = float(largest["value"] or 0)
+            state["cumulative_largest_tx"] = largest["tx"]
+
+    @staticmethod
+    def _cumulative_summary(state, current):
+        amount = float(state.get("cumulative_amount") or 0)
+        count = int(state.get("cumulative_count") or 0)
+        return {
+            "amount": amount,
+            "count": count,
+            "average": amount / count if count else 0,
+            "largest": float(state.get("cumulative_largest") or current.get("largest", 0)),
+            "largest_tx": state.get("cumulative_largest_tx") or current.get("largest_tx", ""),
+            "static_amount": float(state.get("cumulative_static") or 0),
+            "dynamic_amount": float(state.get("cumulative_dynamic") or 0),
+        }
+
+    @staticmethod
+    def _duration_text(started_at, end_str):
+        try:
+            start = datetime.strptime(started_at, "%Y-%m-%d %H:%M:%S")
+            end = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
+            return f"{max(0, int((end - start).total_seconds() // 60))}分钟"
+        except (TypeError, ValueError):
+            return "--"
+
+    @staticmethod
+    def _burst_message(icon, title, level, summary, started_at, start_str, end_str, status):
+        lines = [
+            f"{icon} <b>{title} · {level}级</b>",
+            "",
+            f"统计时间：{start_str} - {end_str}",
+            f"持续时间：{DailyAggregator._duration_text(started_at, end_str)}",
+        ]
+        if summary["static_amount"] or summary["dynamic_amount"]:
+            lines.extend([
+                "",
+                f"静态释放：{summary['static_amount']:,.2f} ARK",
+                f"动态释放：{summary['dynamic_amount']:,.2f} ARK",
+                f"释放合计：{summary['amount']:,.2f} ARK",
+            ])
+        else:
+            lines.extend(["", f"累计数量：{summary['amount']:,.2f} ARK"])
+        lines.extend([
+            f"累计交易：{summary['count']} 笔",
+            f"平均单笔：{summary['average']:,.2f} ARK",
+            f"最大单笔：{summary['largest']:,.2f} ARK",
+            f"状态：{status}",
+        ])
+        if summary["largest_tx"]:
+            lines.extend(["", f"最大单笔交易：\n<code>{summary['largest_tx']}</code>"])
+        return "\n".join(lines)
 
     def _check_yesterday_push(self):
         now = datetime.now(BJT)

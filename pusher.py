@@ -287,3 +287,38 @@ ARK价格：${_fmt_price(record)}
             ok = False
             print(f"  [Telegram] 推送失败 chat_id={chat_id}: {d.get('description', d)}")
     return ok
+
+
+def push_burst_alert(message):
+    """向已配置的 Telegram 会话发送集中事件提醒，不发送飞书。"""
+    if not TELEGRAM_BOT_TOKEN:
+        print("  [Telegram集中提醒] 跳过: 未配置 BOT_TOKEN")
+        return False
+    chat_ids = get_telegram_chat_ids()
+    if not chat_ids:
+        print("  [Telegram集中提醒] 跳过: 未配置 CHAT_ID")
+        return False
+    ok = True
+    for chat_id in chat_ids:
+        payload = {
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        try:
+            response = requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json=payload,
+                timeout=15,
+            )
+            data = response.json()
+            if data.get("ok"):
+                print(f"  [Telegram集中提醒] 推送成功 chat_id={chat_id}")
+            else:
+                ok = False
+                print(f"  [Telegram集中提醒] 推送失败 chat_id={chat_id}: {data.get('description', data)}")
+        except Exception as exc:
+            ok = False
+            print(f"  [Telegram集中提醒] 请求失败 chat_id={chat_id}: {exc}")
+    return ok
