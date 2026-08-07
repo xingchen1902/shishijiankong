@@ -38,7 +38,7 @@ BURST_RULES = {
         "types": ("stake_out",),
         "amount_levels": (10000, 20000, 50000),
         "count_levels": (50, 100, 250),
-        "single_threshold": 2000,
+        "single_threshold": 500,
     },
     "release": {
         "title": "释放",
