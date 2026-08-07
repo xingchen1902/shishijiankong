@@ -52,6 +52,8 @@ _chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 TELEGRAM_CHAT_ID = int(_chat) if _chat.lstrip("-").isdigit() else _chat
 _chat_ids = os.environ.get("TELEGRAM_CHAT_IDS", "")
 _no_button_chat_ids = os.environ.get("TELEGRAM_NO_BUTTON_CHAT_IDS", "")
+# 集中涡轮/赎回/释放提醒固定只发送到“正能量小组”。
+BURST_ALERT_CHAT_ID = -1003936488413
 
 def _parse_chat_id(value):
     value = str(value).strip()
@@ -294,10 +296,7 @@ def push_burst_alert(message):
     if not TELEGRAM_BOT_TOKEN:
         print("  [Telegram集中提醒] 跳过: 未配置 BOT_TOKEN")
         return False
-    chat_ids = get_telegram_chat_ids()
-    if not chat_ids:
-        print("  [Telegram集中提醒] 跳过: 未配置 CHAT_ID")
-        return False
+    chat_ids = [BURST_ALERT_CHAT_ID]
     ok = True
     for chat_id in chat_ids:
         payload = {
