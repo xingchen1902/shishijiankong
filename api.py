@@ -12,6 +12,9 @@ from db import (
     get_dex_daily_snapshots,
     get_staking_daily_snapshots,
     insert_staking_daily_snapshot,
+    get_pool_address_daily_summaries,
+    get_pool_address_summary,
+    save_pool_address_daily_summary,
     init_db,
     upsert_dex_daily_snapshot,
     get_monitor_state,
@@ -41,6 +44,12 @@ RESERVE_ADDRESSES = [
     ("MBR资金", "0x100844Ccd4AF887D123c0AC4a9671E0AB5DD9De2".lower()),
     ("RBS资金", "0x23876D9F06F8290F119Fb39B7FDCf93A08e2D616".lower()),
 ]
+POOL_MONITOR_ADDRESSES = [
+    ("MBR资金", "0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2"),
+    ("RBS资金", "0x23876d9f06f8290f119fb39b7fdcf93a08e2d616"),
+    ("国库资金", "0x1b9f458773d18b4e1aaf5b896721697215c4a68b"),
+    ("手续费", "0xd9d1c7dcf7cb6181a61ed0e70f64fe7ddd4b9495"),
+]
 DEX_CACHE = {"ts": 0, "data": None}
 BONUS_BALANCE_CACHE = {"ts": 0, "value": None}
 # 看板每 30 秒轮询一次；短缓存可避免多个浏览器/机器人同时重复扫描大表。
@@ -52,11 +61,13 @@ STAKING_OVERVIEW_URL = "https://0xfantasy.ark.pro/v1/bond-rebasing-config"
 BURNT_ARK_URL = "https://0xfantasy.ark.pro/v1/general-config/burned-ark"
 STAKING_OVERVIEW_CACHE_TTL = 60
 RESERVE_BALANCE_CACHE_TTL = 86400
+POOL_ADDRESS_BALANCE_CACHE_TTL = 60
 STAKING_OVERVIEW_CACHE = {"ts": 0, "data": None}
 STAKING_DAY_BASELINE = {"date": None, "data": None}
 STAKING_DAY_BASELINE_STATE_KEY = "staking_overview_day_baseline"
 BURNT_ARK_CACHE = {"ts": 0, "value": None}
 RESERVE_BALANCE_CACHE = {"ts": 0, "data": None}
+POOL_ADDRESS_BALANCE_CACHE = {"ts": 0, "data": None}
 ARK_SUPPLY_CACHE = {"ts": 0, "value": None}
 LIDO_STETH_CACHE = {"ts": 0, "value": None}
 DEX_SNAPSHOT_LOCK = threading.Lock()
@@ -227,6 +238,31 @@ def get_staking_overview(force_refresh=False):
         return _add_staking_metrics([], BURNT_ARK_CACHE["value"], get_reserve_balances(), False, "官网质押数据暂时不可用")
 
 
+def get_pool_address_summary_response(date_str):
+    rows = {row["address"]: row for row in get_pool_address_summary(date_str)}
+    balances = get_pool_address_balances()
+    addresses = []
+    total = {
+        "usdt_to_pool": 0,
+        "usdt_from_pool": 0,
+    }
+    for name, address in POOL_MONITOR_ADDRESSES:
+        row = rows.get(address, {})
+        item = {
+            "name": name,
+            "address": address,
+            "usdt_to_pool": round(_to_float(row.get("usdt_to_pool")), 6),
+            "usdt_from_pool": round(_to_float(row.get("usdt_from_pool")), 6),
+            "usdt_balance": round(_to_float(balances.get(address)), 6),
+        }
+        addresses.append(item)
+        for key in total:
+            total[key] += item[key]
+    for key in ("usdt_to_pool", "usdt_from_pool"):
+        total[key] = round(total[key], 6)
+    return {"date": date_str, "addresses": addresses, "total": total}
+
+
 def _add_staking_metrics(rows, burned_ark, reserves, cached, error=None):
     total_staked = round(sum(_to_float(row.get("total_ark")) for row in rows), 6)
     permanent_staked = round(sum(
@@ -299,6 +335,24 @@ def get_reserve_balances():
     except Exception as exc:
         print(f"[储备金] 查询 USDT 余额失败: {exc}")
         return [dict(row) for row in (RESERVE_BALANCE_CACHE["data"] or [])]
+
+
+def get_pool_address_balances():
+    """读取底池监控地址当前持有的 USDT 余额，并短缓存以控制 CU。"""
+    now_ts = time.time()
+    cached = POOL_ADDRESS_BALANCE_CACHE.get("data")
+    if cached is not None and now_ts - POOL_ADDRESS_BALANCE_CACHE["ts"] < POOL_ADDRESS_BALANCE_CACHE_TTL:
+        return dict(cached)
+    try:
+        balances = {}
+        for _, address in POOL_MONITOR_ADDRESSES:
+            raw_balance = get_balance(TOKEN_USDT, address)
+            balances[address] = round(raw_balance / (10 ** DECIMALS), 6)
+        POOL_ADDRESS_BALANCE_CACHE.update({"ts": now_ts, "data": balances})
+        return dict(balances)
+    except Exception as exc:
+        print(f"[底池地址余额] 查询 USDT 余额失败: {exc}")
+        return dict(cached or {})
 
 
 def get_ark_total_supply():
@@ -678,6 +732,39 @@ def _send_chat_id(chat_id, title=""):
         timeout=15,
     )
 
+
+POOL_ADDRESS_COMMAND_CHAT_ID = -1003936488413
+
+
+def _pool_address_realtime_text():
+    date_str = datetime.now(BJT).strftime("%Y-%m-%d")
+    payload = get_pool_address_summary_response(date_str)
+    rows = {row["name"]: row for row in payload.get("addresses", [])}
+    sections = ["<b>💱 当日底池地址实时数据</b>", f"📅 日期：{date_str}", ""]
+    for name in ("MBR资金", "RBS资金", "国库资金", "手续费"):
+        row = rows.get(name, {})
+        to_pool = _to_float(row.get("usdt_to_pool"))
+        from_pool = _to_float(row.get("usdt_from_pool"))
+        address = row.get("address", "")
+        sections.extend([f"<b>🏦 {name}</b>", f"🔗 地址：...{address[-5:]}"])
+        if name != "国库资金":
+            sections.extend([f"🟢 买入：{to_pool:,.2f} USDT", f"🔴 卖出：{from_pool:,.2f} USDT"])
+        sections.extend([
+            f"📊 净变化：{to_pool - from_pool:,.2f} USDT",
+            f"💰 当前余额：{_to_float(row.get('usdt_balance')):,.2f} USDT",
+            "",
+        ])
+    return "\n".join(sections).rstrip()
+
+
+def _send_pool_address_realtime(chat_id):
+    text = _pool_address_realtime_text()
+    requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        json={"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True},
+        timeout=15,
+    )
+
 def telegram_poll():
     """后台轮询 Telegram 消息，响应 /today 命令"""
     if not TELEGRAM_BOT_TOKEN:
@@ -704,6 +791,10 @@ def telegram_poll():
                 if command == "/id":
                     print(f"[Telegram Poll] 收到 /id 命令 chat_id={chat_id}")
                     _send_chat_id(chat_id, chat.get("title", ""))
+                    continue
+                if chat_id == POOL_ADDRESS_COMMAND_CHAT_ID and command == "/address":
+                    print(f"[Telegram Poll] 收到 /address 命令")
+                    _send_pool_address_realtime(chat_id)
                     continue
                 # 只响应来自已配置推送群组的 /today 命令
                 if chat_id in get_telegram_chat_ids() and command == "/today":
@@ -750,6 +841,13 @@ def staking_snapshot_worker():
                         print(f"[质押快照] 已保存 {scheduled_at}")
                     else:
                         print(f"[质押快照] {date_str} 数据为空，稍后重试")
+                pool_existing = get_pool_address_daily_summaries(365)
+                if not any(row.get("date") == date_str for row in pool_existing):
+                    pool_payload = get_pool_address_summary_response(date_str)
+                    snapshot_at = target.strftime("%Y-%m-%d %H:%M:%S")
+                    rows = [dict(row, name=row["name"]) for row in pool_payload["addresses"]]
+                    save_pool_address_daily_summary(date_str, snapshot_at, rows)
+                    print(f"[底池地址快照] 已保存 {snapshot_at}")
                 time.sleep(30)
             else:
                 wait_seconds = max(1, min(30, int((target - now).total_seconds())))
@@ -786,6 +884,16 @@ def staking_feishu_push_worker():
 @app.get("/api/staking-snapshots")
 def get_staking_snapshots_api(limit: int = 30):
     return {"data": get_staking_daily_snapshots(limit)}
+
+
+@app.get("/api/pool-address/today")
+def get_pool_address_today_api():
+    return get_pool_address_summary_response(datetime.now(BJT).strftime("%Y-%m-%d"))
+
+
+@app.get("/api/pool-address/daily")
+def get_pool_address_daily_api(limit: int = 30):
+    return {"data": get_pool_address_daily_summaries(limit)}
 
 
 threading.Thread(target=staking_snapshot_worker, daemon=True).start()

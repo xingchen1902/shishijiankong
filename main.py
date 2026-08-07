@@ -32,7 +32,12 @@ def main():
         if events:
             aggregator.add_events(events)
         # 储备金余额平时使用长缓存；仅在相关 USDT Transfer 出现后通知 API 刷新。
-        if reserve_usdt_transfer_detected(from_block, to_block):
+        reserve_dirty, pool_usdt_records = reserve_usdt_transfer_detected(from_block, to_block)
+        if pool_usdt_records:
+            from db import insert_pool_address_events_batch
+            insert_pool_address_events_batch(pool_usdt_records)
+            print(f"  [底池监控] #{from_block}~#{to_block} 记录 {len(pool_usdt_records)} 笔 USDT 交互")
+        if reserve_dirty:
             set_monitor_state("reserve_balance_dirty_at", time.time())
         # 每批写入数据库
         aggregator.flush_events()

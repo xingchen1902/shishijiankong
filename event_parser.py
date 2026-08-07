@@ -25,6 +25,12 @@ RESERVE_USDT_ADDRESSES = {
     "0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2",
     "0x23876d9f06f8290f119fb39b7fdcf93a08e2d616",
 }
+POOL_MONITOR_ADDRESSES = {
+    "0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2": "MBR资金",
+    "0x23876d9f06f8290f119fb39b7fdcf93a08e2d616": "RBS资金",
+    "0x1b9f458773d18b4e1aaf5b896721697215c4a68b": "国库资金",
+    "0xd9d1c7dcf7cb6181a61ed0e70f64fe7ddd4b9495": "手续费",
+}
 ARK_USDT_LP = "0xCAaF3c41a40103a23Eeaa4BbA468AF3cF5b0e0D8".lower()
 DECIMALS = 18
 
@@ -163,9 +169,45 @@ def _topic_address(address):
     return "0x" + address[2:].lower().zfill(64)
 
 
+def _pool_transfer_records(logs, token):
+    """提取监控地址与 ARK/USDT 底池的直接交互。"""
+    records = []
+    seen = set()
+    for log in logs or []:
+        topics = log.get("topics", [])
+        if len(topics) < 3 or len(log.get("data", "0x")) < 66:
+            continue
+        fr = _topic_addr(topics[1]).lower()
+        to = _topic_addr(topics[2]).lower()
+        if fr in POOL_MONITOR_ADDRESSES and to == ARK_USDT_LP:
+            address, direction = fr, "to_pool"
+        elif fr == ARK_USDT_LP and to in POOL_MONITOR_ADDRESSES:
+            address, direction = to, "from_pool"
+        else:
+            continue
+        tx = log.get("transactionHash", "").lower()
+        log_index = int(log.get("logIndex", "0x0"), 16)
+        key = (tx, log_index, token, address)
+        if key in seen:
+            continue
+        seen.add(key)
+        records.append({
+            "block": int(log["blockNumber"], 16),
+            "tx": tx,
+            "log_index": log_index,
+            "address": address,
+            "token": token,
+            "direction": direction,
+            "value": int(log["data"], 16) / 10**DECIMALS,
+            "timestamp": estimate_block_time(int(log["blockNumber"], 16)),
+        })
+    return records
+
+
 def reserve_usdt_transfer_detected(from_block, to_block):
-    """检查储备金地址是否发生 USDT 转账，只返回是否需要刷新余额。"""
-    address_topics = [_topic_address(address) for address in RESERVE_USDT_ADDRESSES]
+    """监听储备金和资金地址的 USDT 转账，并提取底池交互记录。"""
+    watched_addresses = set(RESERVE_USDT_ADDRESSES) | set(POOL_MONITOR_ADDRESSES)
+    address_topics = [_topic_address(address) for address in watched_addresses]
     base = {
         "fromBlock": hex(from_block),
         "toBlock": hex(to_block),
@@ -179,13 +221,21 @@ def reserve_usdt_transfer_detected(from_block, to_block):
         **base,
         "topics": [USDT_TRANSFER_TOPIC, None, address_topics],
     }], retries=1) or []
-    detected = bool(outgoing or incoming)
-    if detected:
+    all_logs = outgoing + incoming
+    records = _pool_transfer_records(all_logs, "USDT")
+    reserve_dirty = any(
+        len(log.get("topics", [])) >= 3 and (
+            _topic_addr(log["topics"][1]).lower() in RESERVE_USDT_ADDRESSES
+            or _topic_addr(log["topics"][2]).lower() in RESERVE_USDT_ADDRESSES
+        )
+        for log in all_logs
+    )
+    if all_logs:
         print(
             f"  [储备金监听] #{from_block}~#{to_block} "
-            f"检测到 {len(outgoing) + len(incoming)} 笔 USDT 转账"
+            f"检测到 {len(all_logs)} 笔 USDT 转账"
         )
-    return detected
+    return reserve_dirty, records
 
 def _classify_logs(logs, from_block, to_block):
     """解析 ARK logs，按地址分类，返回 (已分类, 未分类原始log)"""

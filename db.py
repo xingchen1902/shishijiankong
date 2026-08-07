@@ -123,6 +123,40 @@ def init_db():
             payload_json TEXT NOT NULL,
             created_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS pool_address_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            block INTEGER NOT NULL,
+            tx TEXT NOT NULL,
+            log_index INTEGER NOT NULL,
+            address TEXT NOT NULL,
+            token TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            value REAL NOT NULL,
+            timestamp TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(tx, log_index, token, address)
+        );
+        CREATE INDEX IF NOT EXISTS idx_pool_address_events_timestamp
+            ON pool_address_events(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_pool_address_events_address
+            ON pool_address_events(address, token, timestamp);
+
+        CREATE TABLE IF NOT EXISTS pool_address_daily_summary (
+            date TEXT NOT NULL,
+            address TEXT NOT NULL,
+            name TEXT NOT NULL,
+            ark_to_pool REAL DEFAULT 0,
+            ark_from_pool REAL DEFAULT 0,
+            usdt_to_pool REAL DEFAULT 0,
+            usdt_from_pool REAL DEFAULT 0,
+            transaction_count INTEGER DEFAULT 0,
+            snapshot_at TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY(date, address)
+        );
+        CREATE INDEX IF NOT EXISTS idx_pool_address_daily_date
+            ON pool_address_daily_summary(date);
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
     for column in ("burn_stake", "dynamic_release", "permanent_bonus", "permanent_stake"):
@@ -209,6 +243,85 @@ def get_staking_daily_snapshots(limit=30):
             "created_at": row["created_at"],
         })
     return result
+
+
+def insert_pool_address_events_batch(records):
+    if not records:
+        return
+    conn = get_conn()
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO pool_address_events
+            (block, tx, log_index, address, token, direction, value, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [(
+            row["block"], row["tx"], row["log_index"], row["address"],
+            row["token"], row["direction"], row["value"], row.get("timestamp", ""),
+        ) for row in records],
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_pool_address_summary(date_str):
+    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT address,
+               COALESCE(SUM(CASE WHEN token='ARK' AND direction='to_pool' THEN value ELSE 0 END), 0) AS ark_to_pool,
+               COALESCE(SUM(CASE WHEN token='ARK' AND direction='from_pool' THEN value ELSE 0 END), 0) AS ark_from_pool,
+               COALESCE(SUM(CASE WHEN token='USDT' AND direction='to_pool' THEN value ELSE 0 END), 0) AS usdt_to_pool,
+               COALESCE(SUM(CASE WHEN token='USDT' AND direction='from_pool' THEN value ELSE 0 END), 0) AS usdt_from_pool,
+               COUNT(DISTINCT tx) AS transaction_count
+        FROM pool_address_events
+        WHERE timestamp >= ? AND timestamp < ?
+        GROUP BY address
+        """,
+        (date_str + " 00:00:00", next_date + " 00:00:00"),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def save_pool_address_daily_summary(date_str, snapshot_at, rows):
+    if not rows:
+        return
+    conn = get_conn()
+    conn.executemany(
+        """
+        INSERT INTO pool_address_daily_summary
+            (date, address, name, ark_to_pool, ark_from_pool,
+             usdt_to_pool, usdt_from_pool, transaction_count, snapshot_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(date, address) DO UPDATE SET
+            name=excluded.name,
+            ark_to_pool=excluded.ark_to_pool,
+            ark_from_pool=excluded.ark_from_pool,
+            usdt_to_pool=excluded.usdt_to_pool,
+            usdt_from_pool=excluded.usdt_from_pool,
+            transaction_count=excluded.transaction_count,
+            snapshot_at=excluded.snapshot_at
+        """,
+        [(
+            date_str, row["address"], row["name"], row.get("ark_to_pool", 0),
+            row.get("ark_from_pool", 0), row.get("usdt_to_pool", 0),
+            row.get("usdt_from_pool", 0), row.get("transaction_count", 0), snapshot_at,
+        ) for row in rows],
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_pool_address_daily_summaries(limit=30):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM pool_address_daily_summary ORDER BY date DESC, name LIMIT ?",
+        (max(1, min(int(limit or 30) * 3, 1095)),),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 def insert_raw_logs_batch(records):
     if not records: return

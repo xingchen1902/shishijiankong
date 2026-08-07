@@ -7,6 +7,8 @@
 import os, sys, json, time, requests
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
+from db import get_pool_address_daily_summaries
+from event_parser import get_balance, TOKEN_USDT, DECIMALS
 
 load_dotenv()
 
@@ -173,6 +175,23 @@ def push_staking_snapshot_to_feishu(snapshot):
     else:
         total = sum(float(row.get(total_key) or 0) for row in snapshot.get("data", {}).get("data", []))
     fields["总质押"] = round(float(total), 6)
+
+    address_rows = {
+        row["name"]: row
+        for row in get_pool_address_daily_summaries(365)
+        if row.get("date") == date_str
+    }
+    for name, field_name in (("MBR资金", "MBR变化"), ("RBS资金", "RBS变化")):
+        row = address_rows.get(name)
+        if row:
+            fields[field_name] = round(
+                float(row.get("usdt_to_pool") or 0) - float(row.get("usdt_from_pool") or 0), 6
+            )
+    treasury_address = "0x1b9f458773d18b4e1aaf5b896721697215c4a68b"
+    fields["国库"] = round(get_balance(TOKEN_USDT, treasury_address) / (10 ** DECIMALS), 6)
+    fee_row = address_rows.get("手续费")
+    if fee_row:
+        fields["手续费卖出"] = round(float(fee_row.get("usdt_from_pool") or 0), 6)
 
     result = requests.post(url, headers=headers, json={"fields": fields}, timeout=15).json()
     if result.get("code") == 0:
