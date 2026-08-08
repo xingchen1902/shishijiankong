@@ -537,13 +537,16 @@ function updatePoolAddressOverview(payload) {
   container.innerHTML = payload.addresses.filter(function(row) {
     return row.name !== "国库资金";
   }).map(function(row) {
-    var usdtNet = Number(row.usdt_to_pool || 0) - Number(row.usdt_from_pool || 0);
+    // 按监控地址自身余额计算：底池转入地址为增加，地址转入底池为减少。
+    var usdtNet = Number(row.usdt_from_pool || 0) - Number(row.usdt_to_pool || 0);
+    var usdtNetClass = usdtNet > 0 ? 'positive' : (usdtNet < 0 ? 'negative' : '');
+    var usdtNetText = (usdtNet > 0 ? '+' : '') + fmt(usdtNet);
     return '<div class="pool-address-card">' +
       '<div class="pool-address-title">' + esc(row.name) + '</div>' +
       '<div class="pool-address-subtitle">' + esc(shortAddr(row.address)) + '</div>' +
       '<div class="pool-address-row"><span class="label">买入</span><span class="value usdt">' + fmt(row.usdt_to_pool) + ' USDT</span></div>' +
       '<div class="pool-address-row"><span class="label">卖出</span><span class="value usdt">' + fmt(row.usdt_from_pool) + ' USDT</span></div>' +
-      '<div class="pool-address-row"><span class="label">USDT 净变化</span><span class="value net ' + (usdtNet >= 0 ? 'positive' : 'negative') + '">' + fmt(usdtNet) + '</span></div>' +
+      '<div class="pool-address-row"><span class="label">USDT 净变化</span><span class="value net ' + usdtNetClass + '">' + usdtNetText + '</span></div>' +
       '<div class="pool-address-row"><span class="label">地址 USDT 余额</span><span class="value usdt">' + fmt(row.usdt_balance) + ' USDT</span></div>' +
       '</div>';
   }).join("");
