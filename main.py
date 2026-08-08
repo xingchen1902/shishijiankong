@@ -5,15 +5,31 @@ ARK 实时监控入口
 - 余额缓存，不高频调 eth_call
 """
 
-import os, sys, time, threading
+import json, os, sys, time, threading
 from datetime import datetime, timezone, timedelta
 
 from db import init_db, get_conn, get_monitor_state, set_monitor_state
 from ws_listener import BlockListener
-from event_parser import EventParser, reserve_usdt_transfer_detected
+from event_parser import EventParser, reserve_usdt_transfer_detected, get_balance, TOKEN_USDT, DECIMALS
 from aggregator import DailyAggregator
+from pusher import push_mbr_transaction_alert
 
 BJT = timezone(timedelta(hours=8))
+MBR_ADDRESS = "0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2"
+MBR_ALERT_STATE_KEY = "mbr_alerted_transactions"
+
+
+def _load_mbr_alerted_transactions():
+    try:
+        value = get_monitor_state(MBR_ALERT_STATE_KEY)
+        data = json.loads(value or "[]")
+        return set(data if isinstance(data, list) else [])
+    except (TypeError, ValueError):
+        return set()
+
+
+def _save_mbr_alerted_transactions(transactions):
+    set_monitor_state(MBR_ALERT_STATE_KEY, json.dumps(list(transactions)[-5000:]))
 
 def main():
     print("=" * 50)
@@ -25,6 +41,7 @@ def main():
 
     aggregator = DailyAggregator()
     parser = EventParser()
+    mbr_alerted_transactions = _load_mbr_alerted_transactions()
 
     def on_batch(from_block, to_block):
         query_gark = True
@@ -37,6 +54,22 @@ def main():
             from db import insert_pool_address_events_batch
             insert_pool_address_events_batch(pool_usdt_records)
             print(f"  [底池监控] #{from_block}~#{to_block} 记录 {len(pool_usdt_records)} 笔 USDT 交互")
+            mbr_records = [
+                record for record in pool_usdt_records
+                if record.get("address") == MBR_ADDRESS
+                and record.get("token") == "USDT"
+                and record.get("tx") not in mbr_alerted_transactions
+            ]
+            if mbr_records:
+                try:
+                    mbr_balance = get_balance(TOKEN_USDT, MBR_ADDRESS) / (10 ** DECIMALS)
+                except Exception as exc:
+                    print(f"  [MBR交易提醒] 查询余额失败: {exc}")
+                    mbr_balance = 0
+                for record in mbr_records:
+                    if push_mbr_transaction_alert(record, mbr_balance):
+                        mbr_alerted_transactions.add(record["tx"])
+                _save_mbr_alerted_transactions(mbr_alerted_transactions)
         if reserve_dirty:
             set_monitor_state("reserve_balance_dirty_at", time.time())
         # 每批写入数据库

@@ -321,3 +321,45 @@ def push_burst_alert(message):
             ok = False
             print(f"  [Telegram集中提醒] 请求失败 chat_id={chat_id}: {exc}")
     return ok
+
+
+def push_mbr_transaction_alert(record, current_usdt):
+    """将 MBR 地址的单笔 USDT 买入/卖出交易推送到正能量小组。"""
+    if not TELEGRAM_BOT_TOKEN:
+        print("  [MBR交易提醒] 跳过: 未配置 BOT_TOKEN")
+        return False
+    tx = str(record.get("tx") or "")
+    direction = record.get("direction")
+    is_buy = direction == "to_pool"
+    title = "💰 MBR资金买入提醒" if is_buy else "💸 MBR资金卖出提醒"
+    trade_type = "买入" if is_buy else "卖出"
+    address = str(record.get("address") or "")
+    short_address = f"{address[:6]}...{address[-4:]}" if len(address) >= 10 else address
+    message = (
+        f"<b>{title}</b>\n\n"
+        f"交易类型：{trade_type}\n"
+        f"交易数量：{float(record.get('value') or 0):,.2f} USDT\n"
+        f"交易时间：{record.get('timestamp') or '--'}\n\n"
+        f"MBR地址：\n<code>{short_address}</code>\n\n"
+        f"当前USDT余额：\n{float(current_usdt or 0):,.2f} USDT\n\n"
+        f"交易详情：\n<a href=\"https://bscscan.com/tx/{tx}\">🔗 bscscan.com/tx/...</a>"
+    )
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": BURST_ALERT_CHAT_ID,
+                "text": message,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
+            timeout=15,
+        )
+        data = response.json()
+        if data.get("ok"):
+            print(f"  [MBR交易提醒] 推送成功 tx={tx}")
+            return True
+        print(f"  [MBR交易提醒] 推送失败: {data.get('description', data)}")
+    except Exception as exc:
+        print(f"  [MBR交易提醒] 请求失败: {exc}")
+    return False
