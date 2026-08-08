@@ -17,7 +17,10 @@ from db import (
     set_monitor_state,
     get_all_daily_until_yesterday as get_all_daily,
 )
-from event_parser import EventParser, get_balance, BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS
+from event_parser import (
+    EventParser, get_balance, get_transaction_by_hash,
+    BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS,
+)
 from pusher import push_to_feishu, push_to_telegram, push_burst_alert
 
 BJT = timezone(timedelta(hours=8))
@@ -25,6 +28,14 @@ BJT = timezone(timedelta(hours=8))
 BURST_WINDOW_SECONDS = int(os.environ.get("BURST_WINDOW_SECONDS", "600"))
 BURST_UPDATE_SECONDS = int(os.environ.get("BURST_UPDATE_SECONDS", "600"))
 BURST_STATE_KEY = "burst_alert_state"
+RELEASE_PERIOD_CACHE = {}
+RELEASE_PERIOD_SECONDS = {
+    0: "0天（立即释放）",
+    864000: "10天",
+    1728000: "20天",
+    2592000: "30天",
+    5184000: "60天",
+}
 BURST_RULES = {
     "turbo": {
         "title": "涡轮",
@@ -170,14 +181,25 @@ class DailyAggregator:
             release_type = ""
             if key == "release":
                 release_type = "静态释放" if row["type"] == "release_static" else "动态释放"
-            message = (
-                f"🔔 <b>单笔{rule['title']}异常提醒</b>\n\n"
-                f"数量：{value:,.2f} ARK\n"
-                f"时间：{row['timestamp'] or '--'}\n"
-                f"类型：{release_type or rule['title']}\n"
-                f"触发地址：{row['to_addr'] or row['from_addr'] or '--'}\n"
-                f"交易：{self._tx_link(tx)}"
-            )
+            if key == "release":
+                message = (
+                    "🔔 <b>单笔释放异常提醒</b>\n\n"
+                    f"释放数量：{value:,.2f} ARK\n"
+                    f"释放类型：{release_type}\n"
+                    f"释放周期：{self._release_period(tx)}\n"
+                    f"交易时间：{row['timestamp'] or '--'}\n"
+                    f"触发地址：{row['to_addr'] or row['from_addr'] or '--'}\n"
+                    f"交易：{self._tx_link(tx)}"
+                )
+            else:
+                message = (
+                    f"🔔 <b>单笔{rule['title']}异常提醒</b>\n\n"
+                    f"数量：{value:,.2f} ARK\n"
+                    f"时间：{row['timestamp'] or '--'}\n"
+                    f"类型：{release_type or rule['title']}\n"
+                    f"触发地址：{row['to_addr'] or row['from_addr'] or '--'}\n"
+                    f"交易：{self._tx_link(tx)}"
+                )
             if push_burst_alert(message):
                 seen[tx] = time.time()
 
@@ -295,6 +317,26 @@ class DailyAggregator:
         if not tx:
             return "--"
         return f'<a href="https://bscscan.com/tx/{tx}">🔗 bscscan.com/tx/...</a>'
+
+    @staticmethod
+    def _release_period(tx):
+        if tx in RELEASE_PERIOD_CACHE:
+            return RELEASE_PERIOD_CACHE[tx]
+        period = "未知"
+        try:
+            transaction = get_transaction_by_hash(tx) or {}
+            input_data = transaction.get("input") or transaction.get("data") or ""
+            body = input_data[2:] if input_data.startswith("0x") else input_data
+            words = [int(body[index:index + 64], 16) for index in range(0, len(body) - 63, 64)]
+            # ABI 参数中经常包含 0 填充字，优先匹配非零周期，最后再判断立即释放。
+            for seconds in sorted(RELEASE_PERIOD_SECONDS, key=lambda value: value == 0):
+                if seconds in words:
+                    period = RELEASE_PERIOD_SECONDS[seconds]
+                    break
+        except Exception as exc:
+            print(f"  [释放周期] 查询失败 {tx}: {exc}")
+        RELEASE_PERIOD_CACHE[tx] = period
+        return period
 
     @staticmethod
     def _burst_message(icon, title, level, summary, started_at, start_str, end_str, status):

@@ -137,6 +137,12 @@ def _rpc_call(method, params, retries=3):
     except:
         return None
 
+def get_transaction_by_hash(tx_hash):
+    """读取单笔交易详情；仅用于异常释放提醒解析释放周期。"""
+    if not tx_hash:
+        return None
+    return _rpc_call("eth_getTransactionByHash", [tx_hash], retries=1)
+
 def _refresh_time_ref(force=False):
     global _time_ref_block, _time_ref_ts, _time_ref_updated
     now = time.time()
