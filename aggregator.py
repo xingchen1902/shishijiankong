@@ -19,7 +19,7 @@ from db import (
 )
 from event_parser import (
     EventParser, get_balance, get_transaction_by_hash,
-    BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS,
+    BONUS_POOL, STAKE_POOL, BURN_ADDR, BURN_ADDR2, TOKEN_ARK, DECIMALS,
 )
 from pusher import push_to_feishu, push_to_telegram, push_burst_alert
 
@@ -102,13 +102,22 @@ class DailyAggregator:
         try:
             states = self._load_burst_state()
             for key, rule in BURST_RULES.items():
-                placeholders = ",".join("?" for _ in rule["types"])
-                rows = conn.execute(
-                    f"SELECT id, block, tx, type, from_addr, to_addr, value, timestamp FROM events "
-                    f"WHERE timestamp >= ? AND timestamp <= ? AND type IN ({placeholders}) "
-                    "ORDER BY block, id",
-                    (start_str, end_str, *rule["types"]),
-                ).fetchall()
+                if key == "redeem":
+                    # 赎回只统计质押池转给用户的 ARK；转入黑洞的是本金永久质押，不能算赎回。
+                    rows = conn.execute(
+                        "SELECT id, block, tx, type, from_addr, to_addr, value, timestamp FROM events "
+                        "WHERE timestamp >= ? AND timestamp <= ? AND lower(from_addr)=? "
+                        "AND lower(COALESCE(to_addr, '')) NOT IN (?, ?) ORDER BY block, id",
+                        (start_str, end_str, STAKE_POOL, BURN_ADDR, BURN_ADDR2),
+                    ).fetchall()
+                else:
+                    placeholders = ",".join("?" for _ in rule["types"])
+                    rows = conn.execute(
+                        f"SELECT id, block, tx, type, from_addr, to_addr, value, timestamp FROM events "
+                        f"WHERE timestamp >= ? AND timestamp <= ? AND type IN ({placeholders}) "
+                        "ORDER BY block, id",
+                        (start_str, end_str, *rule["types"]),
+                    ).fetchall()
                 summary = self._burst_summary(rule, rows, conn, start_str, end_str)
                 self._send_single_alerts(key, rule, rows, states)
                 self._handle_burst_state(key, rule, summary, rows, states, start_str, end_str)
@@ -121,15 +130,7 @@ class DailyAggregator:
         values = [float(row["value"] or 0) for row in rows]
         count = len(rows)
         amount = sum(values)
-        if rule["title"] == "赎回":
-            permanent_rows = conn.execute(
-                "SELECT id, block, tx, type, value, timestamp FROM events "
-                "WHERE timestamp >= ? AND timestamp <= ? AND type='permanent_stake'",
-                (start_str, end_str),
-            ).fetchall()
-            amount = max(amount - sum(float(row["value"] or 0) for row in permanent_rows), 0)
-        else:
-            permanent_rows = []
+        permanent_rows = []
         largest = max(rows, key=lambda row: float(row["value"] or 0), default=None)
         static_amount = sum(float(row["value"] or 0) for row in rows if row["type"] == "release_static")
         dynamic_amount = sum(float(row["value"] or 0) for row in rows if row["type"] == "release_dynamic")
