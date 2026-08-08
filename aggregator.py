@@ -327,8 +327,14 @@ class DailyAggregator:
         try:
             transaction = get_transaction_by_hash(tx) or {}
             input_data = transaction.get("input") or transaction.get("data") or ""
-            # 交易 input 前 4 字节是函数选择器，必须先移除，否则 ABI 参数会错位。
-            body = input_data[10:] if input_data.startswith("0x") else input_data[8:]
+            # 交易可能由 EOA/代理外层封装，先定位真正的释放函数选择器。
+            raw_input = input_data[2:] if input_data.startswith("0x") else input_data
+            selector_pos = raw_input.rfind("4399333d")
+            if selector_pos >= 0:
+                body = raw_input[selector_pos + 8:]
+            else:
+                # 兼容直接调用释放合约的交易。
+                body = raw_input[8:]
             words = [int(body[index:index + 64], 16) for index in range(0, len(body) - 63, 64)]
             # 该释放合约的周期固定在 ABI 第 6 个参数（下标 5）。
             # 不能在所有参数中搜索，否则会把偏移量或填充字 0 误当成周期。
