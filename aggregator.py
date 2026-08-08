@@ -217,6 +217,7 @@ class DailyAggregator:
                     f"累计数量：{display['amount']:,.2f} ARK\n"
                     f"累计交易：{display['count']} 笔\n"
                     f"最高等级：{state.get('highest_level', state.get('level', 1))}级\n"
+                    f"最大单笔：{display['largest']:,.2f} ARK\n"
                     f"触发地址：{display.get('largest_address') or '--'}\n"
                     f"最大单笔交易：{self._tx_link(display.get('largest_tx'))}"
                 )
