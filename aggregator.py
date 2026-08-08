@@ -232,11 +232,17 @@ class DailyAggregator:
             return
 
         now_ts = time.time()
-        started_at = state.get("started_at") or end_str
+        started_at = state.get("started_at") or self._earliest_event_time(rows, start_str)
+        if active and not state.get("started_at_from_event"):
+            # 兼容修复前已持久化的状态：原状态把触发时刻误当成开始时间。
+            started_at = self._earliest_event_time(rows, started_at)
+            state["started_at"] = started_at
+            state["started_at_from_event"] = True
         if not active:
             state.update({
                 "active": True,
                 "started_at": started_at,
+                "started_at_from_event": True,
                 "last_push_at": 0,
                 "level": 0,
                 "highest_level": 0,
@@ -311,6 +317,11 @@ class DailyAggregator:
             return f"{max(0, int((end - start).total_seconds() // 60))}分钟"
         except (TypeError, ValueError):
             return "--"
+
+    @staticmethod
+    def _earliest_event_time(rows, fallback):
+        timestamps = [row["timestamp"] for row in rows if row["timestamp"]]
+        return min(timestamps) if timestamps else fallback
 
     @staticmethod
     def _tx_link(tx):
