@@ -186,9 +186,13 @@ def push_staking_snapshot_to_feishu(snapshot):
     for name, field_name in (("MBR资金", "MBR变化"), ("RBS资金", "RBS变化")):
         row = address_rows.get(name)
         if row:
-            fields[field_name] = round(
-                float(row.get("usdt_to_pool") or 0) - float(row.get("usdt_from_pool") or 0), 6
-            )
+            usdt_to_pool = float(row.get("usdt_to_pool") or 0)
+            usdt_from_pool = float(row.get("usdt_from_pool") or 0)
+            if name == "MBR资金":
+                # 按 MBR 自身余额方向记录：流入为正，流出为负。
+                fields[field_name] = round(usdt_from_pool - usdt_to_pool, 6)
+            else:
+                fields[field_name] = round(usdt_to_pool - usdt_from_pool, 6)
     treasury_address = "0x1b9f458773d18b4e1aaf5b896721697215c4a68b"
     fields["国库"] = round(get_balance(TOKEN_USDT, treasury_address) / (10 ** DECIMALS), 6)
     fee_row = address_rows.get("手续费")
