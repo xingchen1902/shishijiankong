@@ -32,6 +32,7 @@ def init_db():
             to_addr TEXT,
             value REAL NOT NULL,
             timestamp TEXT,
+            release_period TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_events_block ON events(block);
@@ -162,6 +163,10 @@ def init_db():
     for column in ("burn_stake", "dynamic_release", "permanent_bonus", "permanent_stake"):
         if column not in columns:
             conn.execute(f"ALTER TABLE daily_summary ADD COLUMN {column} REAL DEFAULT 0")
+    # 兼容已有 VPS 数据库：为历史 events 表补充释放周期字段。
+    event_columns = {row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
+    if "release_period" not in event_columns:
+        conn.execute("ALTER TABLE events ADD COLUMN release_period TEXT")
     conn.commit()
     conn.close()
 
@@ -352,6 +357,23 @@ def insert_events_batch(events):
     conn.executemany(
         "INSERT INTO events (block, tx, type, from_addr, to_addr, value, timestamp) VALUES (?,?,?,?,?,?,?)",
         data
+    )
+    conn.commit()
+    conn.close()
+
+def update_release_period(tx, period):
+    """把异常释放解析出的周期写回对应的释放事件记录。"""
+    if not tx:
+        return
+    conn = get_conn()
+    conn.execute(
+        """
+        UPDATE events
+        SET release_period = ?
+        WHERE lower(tx) = lower(?)
+          AND type IN ('release_static', 'release_dynamic')
+        """,
+        (period, tx),
     )
     conn.commit()
     conn.close()

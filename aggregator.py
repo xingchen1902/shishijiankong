@@ -12,6 +12,7 @@ from db import (
     get_conn,
     get_dex_daily_snapshot,
     insert_events_batch,
+    update_release_period,
     upsert_daily_summary,
     get_monitor_state,
     set_monitor_state,
@@ -334,7 +335,9 @@ class DailyAggregator:
     @staticmethod
     def _release_period(tx):
         if tx in RELEASE_PERIOD_CACHE:
-            return RELEASE_PERIOD_CACHE[tx]
+            period = RELEASE_PERIOD_CACHE[tx]
+            update_release_period(tx, period)
+            return period
         period = "未知"
         try:
             transaction = get_transaction_by_hash(tx) or {}
@@ -356,6 +359,7 @@ class DailyAggregator:
         except Exception as exc:
             print(f"  [释放周期] 查询失败 {tx}: {exc}")
         RELEASE_PERIOD_CACHE[tx] = period
+        update_release_period(tx, period)
         return period
 
     @staticmethod
