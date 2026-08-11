@@ -46,6 +46,10 @@ EXCLUDED_BURN_SOURCES = {
     BONUS_POOL,
     STAKE_POOL,
 }
+# 该地址的黑洞转账是普通销毁，不代表新增质押或销毁质押。
+OTHER_BURN_SOURCES = {
+    "0xff36f722a311b266471baf3e3e9d7a0eab757361",
+}
 
 BATCH_SIZE = 200
 # 基准：105553753 (BJT 2026-06-22 00:00:01)
@@ -259,6 +263,8 @@ def _classify_logs(logs, from_block, to_block):
             etype = "permanent_bonus"
         elif fr == STAKE_POOL and to == BURN_ADDR:
             etype = "permanent_stake"
+        elif to == BURN_ADDR and fr in OTHER_BURN_SOURCES:
+            etype = "burn_other"
         elif to == BURN_ADDR and fr not in EXCLUDED_BURN_SOURCES:
             etype = "burn_stake"
         elif fr == TOKEN_ARK and to == BONUS_POOL:

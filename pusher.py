@@ -31,6 +31,7 @@ FIELD_MAP = {
     "stake_balance": "质押池余额",
     "stake_in": "新增质押",
     "burn_stake": "销毁质押",
+    "burn_other": "其他销毁",
     "stake_out": "赎回",
     "net_stake": "净质押量",
     "permanent_stake": "本金永久质押",
