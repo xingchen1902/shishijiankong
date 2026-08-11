@@ -20,7 +20,6 @@ FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET", "")
 FEISHU_APP_TOKEN = "B5lBbWgjXamRS6s1CcEcTvgtnQc"
 FEISHU_TABLE_ID = "tblVmNxjg8WjyXdw"
 FEISHU_STAKING_TABLE_ID = "tblOCpFwZ3a5LCJJ"
-FEISHU_AI_FIELD_NAME = os.environ.get("FEISHU_AI_FIELD_NAME", "AI日报")
 
 FIELD_MAP = {
     "bonus_balance": "奖金池余额",
@@ -205,47 +204,6 @@ def push_staking_snapshot_to_feishu(snapshot):
         print(f"  [飞书质押快照] 写入成功 {date_str}")
         return True
     print(f"  [飞书质押快照] 写入失败: {result}")
-    return False
-
-
-def push_ai_daily_report_to_feishu(date_str, report_text):
-    """把 AI 日报写入现有飞书日报记录的 AI 日报字段。"""
-    if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-        print("  [AI飞书] 跳过: 未配置飞书应用")
-        return False
-    try:
-        token = get_feishu_token()
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records"
-        date_ms = int(datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=BJT).timestamp() * 1000)
-        page_token = ""
-        record_id = None
-        while True:
-            params = {"page_size": 100}
-            if page_token:
-                params["page_token"] = page_token
-            existing = requests.get(url, headers=headers, params=params, timeout=15).json()
-            if existing.get("code") != 0:
-                print(f"  [AI飞书] 查询日报记录失败: {existing}")
-                return False
-            for item in existing.get("data", {}).get("items", []):
-                if item.get("fields", {}).get("日期") == date_ms:
-                    record_id = item["record_id"]
-                    break
-            if record_id or not existing.get("data", {}).get("has_more"):
-                break
-            page_token = existing.get("data", {}).get("page_token", "")
-        fields = {"日期": date_ms, FEISHU_AI_FIELD_NAME: report_text}
-        if record_id:
-            result = requests.patch(f"{url}/{record_id}", headers=headers, json={"fields": fields}, timeout=15).json()
-        else:
-            result = requests.post(url, headers=headers, json={"fields": fields}, timeout=15).json()
-        if result.get("code") == 0:
-            print(f"  [AI飞书] 写入成功 {date_str}")
-            return True
-        print(f"  [AI飞书] 写入失败: {result}")
-    except Exception as exc:
-        print(f"  [AI飞书] 请求失败: {exc}")
     return False
 
 

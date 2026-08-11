@@ -16,7 +16,7 @@ from db import (
     get_staking_daily_snapshots,
     save_ai_daily_report,
 )
-from pusher import push_ai_daily_report_to_feishu, push_ai_daily_report_to_telegram
+from pusher import push_ai_daily_report_to_telegram
 
 load_dotenv()
 
@@ -175,12 +175,10 @@ def generate_and_push_daily_report(date_str, record):
             return False
 
     telegram_ok = bool(existing and existing.get("telegram_pushed")) or push_ai_daily_report_to_telegram(date_str, report_text)
-    feishu_ok = bool(existing and existing.get("feishu_pushed")) or push_ai_daily_report_to_feishu(date_str, report_text)
     save_ai_daily_report(
         date_str,
-        status="pushed" if telegram_ok and feishu_ok else "push_partial",
+        status="pushed" if telegram_ok else "push_failed",
         telegram_pushed=int(telegram_ok),
-        feishu_pushed=int(feishu_ok),
-        error="" if telegram_ok and feishu_ok else "Telegram 或飞书推送未全部成功",
+        error="" if telegram_ok else "Telegram 推送未成功",
     )
-    return telegram_ok and feishu_ok
+    return telegram_ok
