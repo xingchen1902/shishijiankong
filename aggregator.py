@@ -23,6 +23,7 @@ from event_parser import (
     BONUS_POOL, STAKE_POOL, BURN_ADDR, BURN_ADDR2, TOKEN_ARK, DECIMALS,
 )
 from pusher import push_to_feishu, push_to_telegram, push_burst_alert
+from ai_analyzer import generate_and_push_daily_report
 
 BJT = timezone(timedelta(hours=8))
 
@@ -585,6 +586,7 @@ class DailyAggregator:
             record = self._attach_dex_snapshot(record)
             push_to_feishu(record)
             push_to_telegram(record)
+            generate_and_push_daily_report(date_str, record)
             if not hasattr(self, "_pushed_dates"):
                 self._pushed_dates = set()
             self._pushed_dates.add(date_str)

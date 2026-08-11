@@ -158,6 +158,20 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_pool_address_daily_date
             ON pool_address_daily_summary(date);
+
+        CREATE TABLE IF NOT EXISTS ai_daily_reports (
+            date TEXT PRIMARY KEY,
+            model TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            report_text TEXT,
+            report_json TEXT,
+            source_json TEXT,
+            generated_at TEXT,
+            telegram_pushed INTEGER DEFAULT 0,
+            feishu_pushed INTEGER DEFAULT 0,
+            error TEXT,
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
     for column in ("burn_stake", "dynamic_release", "permanent_bonus", "permanent_stake"):
@@ -187,6 +201,39 @@ def set_monitor_state(state_key, state_value):
             state_value=excluded.state_value,
             updated_at=datetime('now')
     """, (state_key, str(state_value)))
+    conn.commit()
+    conn.close()
+
+def get_ai_daily_report(date_str):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM ai_daily_reports WHERE date=?", (date_str,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def save_ai_daily_report(date_str, **kwargs):
+    """保存或更新每日 AI 日报状态，支持失败后重试推送。"""
+    allowed = {
+        "model", "status", "report_text", "report_json", "source_json",
+        "generated_at", "telegram_pushed", "feishu_pushed", "error",
+    }
+    fields = {key: value for key, value in kwargs.items() if key in allowed}
+    conn = get_conn()
+    existing = conn.execute("SELECT date FROM ai_daily_reports WHERE date=?", (date_str,)).fetchone()
+    if existing:
+        if fields:
+            assignments = ", ".join(f"{key}=?" for key in fields)
+            conn.execute(
+                f"UPDATE ai_daily_reports SET {assignments}, updated_at=datetime('now') WHERE date=?",
+                list(fields.values()) + [date_str],
+            )
+    else:
+        fields.setdefault("status", "pending")
+        columns = ["date"] + list(fields.keys())
+        placeholders = ", ".join("?" for _ in columns)
+        conn.execute(
+            f"INSERT INTO ai_daily_reports ({', '.join(columns)}) VALUES ({placeholders})",
+            [date_str] + list(fields.values()),
+        )
     conn.commit()
     conn.close()
 
