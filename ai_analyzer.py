@@ -105,6 +105,7 @@ def _call_deepseek(payload):
                 },
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
+            "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"},
             "max_tokens": 2500,
         },
@@ -117,7 +118,15 @@ def _call_deepseek(payload):
         content = content.strip().strip("`")
         if content.startswith("json"):
             content = content[4:].lstrip()
-    return json.loads(content)
+    report = json.loads(content)
+    required = ("risk_level", "summary", "key_findings", "anomalies", "recommendations")
+    if not report or any(key not in report for key in required):
+        raise ValueError("DeepSeek 返回的日报 JSON 不完整")
+    if not report.get("summary") and not any(report.get(key) for key in required[2:]):
+        raise ValueError("DeepSeek 返回了空日报")
+    risk_map = {"low": "正常", "medium": "关注", "high": "警告", "critical": "高风险"}
+    report["risk_level"] = risk_map.get(report.get("risk_level"), report.get("risk_level", "关注"))
+    return report
 
 
 def _format_report(report):
