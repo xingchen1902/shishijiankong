@@ -195,7 +195,7 @@ def get_staking_overview(force_refresh=False):
                 "interest_rate": _to_float(item.get("interestRate")),
                 # 先由下面的持久化快照冻结，来源是 ARK 官网 API 的 updatedAt。
                 "rate_updated_at": item.get("updatedAt"),
-                "rate_updated_at_source": "api_updated_at_pending_chain_backfill",
+                "rate_updated_at_source": "api_updated_at_snapshot",
                 "staking_ark": round(staking_ark, 6),
                 "bond_ark": round(lp_bonded_ark, 6),
                 "total_ark": round(staking_ark + lp_bonded_ark, 6),
