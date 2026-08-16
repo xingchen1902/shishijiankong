@@ -219,9 +219,10 @@ def get_staking_overview(force_refresh=False):
             saved = rate_time_state.get(mode_key)
             if isinstance(saved, dict) and saved.get("value"):
                 row["rate_updated_at"] = saved["value"]
-                row["rate_updated_at_source"] = saved.get(
-                    "source", "api_updated_at_snapshot"
-                )
+                row["rate_updated_at_source"] = "api_updated_at_snapshot"
+                if saved.get("source") != "api_updated_at_snapshot":
+                    rate_time_state[mode_key]["source"] = "api_updated_at_snapshot"
+                    state_changed = True
             elif row.get("rate_updated_at"):
                 rate_time_state[mode_key] = {
                     "value": row["rate_updated_at"],
