@@ -192,6 +192,7 @@ def get_staking_overview(force_refresh=False):
                 "mode_id": mode_id,
                 "period": period_map.get(mode_id, f"周期 {mode_id}"),
                 "interest_rate": _to_float(item.get("interestRate")),
+                "rate_updated_at": item.get("updatedAt"),
                 "staking_ark": round(staking_ark, 6),
                 "bond_ark": round(lp_bonded_ark, 6),
                 "total_ark": round(staking_ark + lp_bonded_ark, 6),
