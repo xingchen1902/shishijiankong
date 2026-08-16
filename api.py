@@ -65,6 +65,7 @@ POOL_ADDRESS_BALANCE_CACHE_TTL = 60
 STAKING_OVERVIEW_CACHE = {"ts": 0, "data": None}
 STAKING_DAY_BASELINE = {"date": None, "data": None}
 STAKING_DAY_BASELINE_STATE_KEY = "staking_overview_day_baseline"
+STAKING_RATE_TIME_STATE_KEY = "staking_rate_time_snapshot"
 BURNT_ARK_CACHE = {"ts": 0, "value": None}
 RESERVE_BALANCE_CACHE = {"ts": 0, "data": None}
 POOL_ADDRESS_BALANCE_CACHE = {"ts": 0, "data": None}
@@ -192,7 +193,9 @@ def get_staking_overview(force_refresh=False):
                 "mode_id": mode_id,
                 "period": period_map.get(mode_id, f"周期 {mode_id}"),
                 "interest_rate": _to_float(item.get("interestRate")),
+                # 先由下面的持久化快照冻结，后续再替换为链上真实变更时间。
                 "rate_updated_at": item.get("updatedAt"),
+                "rate_updated_at_source": "api_updated_at_pending_chain_backfill",
                 "staking_ark": round(staking_ark, 6),
                 "bond_ark": round(lp_bonded_ark, 6),
                 "total_ark": round(staking_ark + lp_bonded_ark, 6),
@@ -200,6 +203,36 @@ def get_staking_overview(force_refresh=False):
                 "is_active": bool(item.get("isActive", False)),
             })
         rows.sort(key=lambda row: (row["mode_id"] == 100, row["mode_id"]))
+
+        # 官网 updatedAt 是接口数据更新时间，不是收益率修改时间。
+        # 第一版先固定首次采集值，避免页面刷新时这个临时值不断漂移；
+        # 后续扫描链上 setMode 交易后，可直接回填同一个 state key。
+        try:
+            rate_time_state = json.loads(get_monitor_state(STAKING_RATE_TIME_STATE_KEY) or "")
+            if not isinstance(rate_time_state, dict):
+                rate_time_state = {}
+        except (TypeError, ValueError):
+            rate_time_state = {}
+        state_changed = False
+        for row in rows:
+            mode_key = str(row["mode_id"])
+            saved = rate_time_state.get(mode_key)
+            if isinstance(saved, dict) and saved.get("value"):
+                row["rate_updated_at"] = saved["value"]
+                row["rate_updated_at_source"] = saved.get(
+                    "source", "api_updated_at_pending_chain_backfill"
+                )
+            elif row.get("rate_updated_at"):
+                rate_time_state[mode_key] = {
+                    "value": row["rate_updated_at"],
+                    "source": "api_updated_at_pending_chain_backfill",
+                }
+                state_changed = True
+        if state_changed:
+            set_monitor_state(
+                STAKING_RATE_TIME_STATE_KEY,
+                json.dumps(rate_time_state, ensure_ascii=False),
+            )
 
         today = datetime.now(BJT).strftime("%Y-%m-%d")
         if STAKING_DAY_BASELINE["date"] != today or STAKING_DAY_BASELINE["data"] is None:

@@ -538,7 +538,7 @@ function updateStakingOverview(payload) {
       '<div class="staking-period-row total"><span class="label">合计</span><span class="value">' + fmt(row.total_ark) + changeMarkup(row.total_change) + '</span></div>' +
       '<div class="staking-period-row rate"><span class="label">占总质押</span><span class="value">' + share + '</span></div>' +
       '<div class="staking-period-row rebase"><span class="label">单次Rebase收益</span><span class="value">' + rateMarkup(row.interest_rate) + '</span></div>' +
-      '<div class="staking-period-row updated"><span class="label">收益率更新时间</span><span class="value">' + updatedAtMarkup(row.rate_updated_at || row.updated_at) + '</span></div>' +
+      '<div class="staking-period-row updated"><span class="label">收益率时间（待链上回填）</span><span class="value">' + updatedAtMarkup(row.rate_updated_at || row.updated_at) + '</span></div>' +
       '</div>';
   }).join("") + reserveCards;
 }
