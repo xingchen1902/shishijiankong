@@ -26,6 +26,7 @@ from pusher import (
     push_to_feishu,
     push_to_telegram,
     push_staking_snapshot_to_feishu,
+    push_staking_rate_change_to_telegram,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
 )
@@ -193,9 +194,9 @@ def get_staking_overview(force_refresh=False):
                 "mode_id": mode_id,
                 "period": period_map.get(mode_id, f"周期 {mode_id}"),
                 "interest_rate": _to_float(item.get("interestRate")),
-                # 先由下面的持久化快照冻结，来源是 ARK 官网 API 的 updatedAt。
-                "rate_updated_at": item.get("updatedAt"),
-                "rate_updated_at_source": "api_updated_at_snapshot",
+                # 由下面的监控状态记录“发现收益率变化”的时间。
+                "rate_updated_at": None,
+                "rate_updated_at_source": "monitor_detected_at",
                 "staking_ark": round(staking_ark, 6),
                 "bond_ark": round(lp_bonded_ark, 6),
                 "total_ark": round(staking_ark + lp_bonded_ark, 6),
@@ -204,9 +205,8 @@ def get_staking_overview(force_refresh=False):
             })
         rows.sort(key=lambda row: (row["mode_id"] == 100, row["mode_id"]))
 
-        # 收益率及其更新时间均以 ARK 官网 API 为准。
-        # 第一版先固定首次采集值，避免页面刷新时更新时间不断漂移；
-        # 后续 API 识别到收益率调整时，再更新同一个 state key。
+        # 收益率数值以 ARK 官网 API 为准；更新时间记录监控程序发现
+        # interestRate 变化的北京时间，而不是官网接口的 updatedAt。
         try:
             rate_time_state = json.loads(get_monitor_state(STAKING_RATE_TIME_STATE_KEY) or "")
             if not isinstance(rate_time_state, dict):
@@ -217,18 +217,30 @@ def get_staking_overview(force_refresh=False):
         for row in rows:
             mode_key = str(row["mode_id"])
             saved = rate_time_state.get(mode_key)
-            if isinstance(saved, dict) and saved.get("value"):
-                row["rate_updated_at"] = saved["value"]
-                row["rate_updated_at_source"] = "api_updated_at_snapshot"
-                if saved.get("source") != "api_updated_at_snapshot":
-                    rate_time_state[mode_key]["source"] = "api_updated_at_snapshot"
-                    state_changed = True
-            elif row.get("rate_updated_at"):
+            current_rate = row.get("interest_rate")
+            # 旧版保存的是 API updatedAt，没有保存当时的收益率，不能继续
+            # 冒充监控发现时间；升级后以当前 API 值建立新的监控基线。
+            if not isinstance(saved, dict) or "interest_rate" not in saved:
+                detected_at = datetime.now(BJT).isoformat(timespec="seconds")
                 rate_time_state[mode_key] = {
-                    "value": row["rate_updated_at"],
-                    "source": "api_updated_at_snapshot",
+                    "interest_rate": current_rate,
+                    "value": detected_at,
+                    "source": "monitor_detected_at",
                 }
                 state_changed = True
+                row["rate_updated_at"] = detected_at
+            elif saved.get("interest_rate") != current_rate:
+                detected_at = datetime.now(BJT).isoformat(timespec="seconds")
+                rate_time_state[mode_key] = {
+                    "interest_rate": current_rate,
+                    "value": detected_at,
+                    "source": "monitor_detected_at",
+                }
+                state_changed = True
+                row["rate_updated_at"] = detected_at
+            else:
+                row["rate_updated_at"] = saved.get("value")
+            row["rate_updated_at_source"] = "monitor_detected_at"
         if state_changed:
             set_monitor_state(
                 STAKING_RATE_TIME_STATE_KEY,
@@ -892,6 +904,45 @@ def staking_snapshot_worker():
             time.sleep(30)
 
 
+def staking_rate_monitor_worker():
+    """监控官网单次 Rebase 收益率，变化后推送日收益率。"""
+    state_key = "staking_rate_monitor_snapshot"
+    while True:
+        try:
+            payload = get_staking_overview(force_refresh=True)
+            rows = payload.get("data", []) if payload and not payload.get("stale") else []
+            if rows:
+                current = {
+                    str(row["mode_id"]): {
+                        "period": row.get("period", ""),
+                        "rate": float(row.get("interest_rate") or 0),
+                    }
+                    for row in rows
+                }
+                try:
+                    previous = json.loads(get_monitor_state(state_key) or "")
+                    if not isinstance(previous, dict):
+                        previous = {}
+                except (TypeError, ValueError):
+                    previous = {}
+                changes = []
+                if previous:
+                    for mode_id, item in current.items():
+                        old = previous.get(mode_id)
+                        if isinstance(old, dict) and abs(float(old.get("rate", 0)) - item["rate"]) > 1e-12:
+                            changes.append({
+                                "period": item["period"],
+                                "old_rate": float(old.get("rate", 0)),
+                                "new_rate": item["rate"],
+                            })
+                if not changes or push_staking_rate_change_to_telegram(changes):
+                    set_monitor_state(state_key, json.dumps(current, ensure_ascii=False))
+            time.sleep(60)
+        except Exception as exc:
+            print(f"[收益率监控] 异常: {exc}")
+            time.sleep(60)
+
+
 def staking_feishu_push_worker():
     """每天北京时间 00:05 将前一日质押快照写入独立飞书表格。"""
     pushed_key = "staking_feishu_last_pushed_date"
@@ -933,6 +984,7 @@ def get_pool_address_daily_api(limit: int = 30):
 
 threading.Thread(target=staking_snapshot_worker, daemon=True).start()
 threading.Thread(target=staking_feishu_push_worker, daemon=True).start()
+threading.Thread(target=staking_rate_monitor_worker, daemon=True).start()
 
 @app.get("/api/dex/ark")
 def get_ark_dex():
