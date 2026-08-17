@@ -20,6 +20,7 @@ FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET", "")
 FEISHU_APP_TOKEN = "B5lBbWgjXamRS6s1CcEcTvgtnQc"
 FEISHU_TABLE_ID = "tblVmNxjg8WjyXdw"
 FEISHU_STAKING_TABLE_ID = "tblOCpFwZ3a5LCJJ"
+STAKING_RATE_CHAT_ID = -1003936488413
 
 FIELD_MAP = {
     "bonus_balance": "奖金池余额",
@@ -194,7 +195,7 @@ def push_staking_snapshot_to_feishu(snapshot):
                 # 按 MBR 自身余额方向记录：流入为正，流出为负。
                 fields[field_name] = round(usdt_from_pool - usdt_to_pool, 6)
             else:
-                fields[field_name] = round(usdt_to_pool - usdt_from_pool, 6)
+                fields[field_name] = round(usdt_from_pool - usdt_to_pool, 6)
     treasury_address = "0x1b9f458773d18b4e1aaf5b896721697215c4a68b"
     fields["国库"] = round(get_balance(TOKEN_USDT, treasury_address) / (10 ** DECIMALS), 6)
     fee_row = address_rows.get("手续费")
@@ -234,6 +235,51 @@ def push_ai_daily_report_to_telegram(date_str, report_text):
     if ok:
         print(f"  [AI Telegram] 推送成功 {date_str}")
     return ok
+
+
+def push_staking_rate_change_to_telegram(changes):
+    """收益率变化后只推送正能量小组。"""
+    if not TELEGRAM_BOT_TOKEN or not changes:
+        return False
+
+    def daily_rate(rate):
+        return ((1 + float(rate)) ** 2 - 1) * 100
+
+    lines = [
+        "<b>📈 质押日收益率变更提醒</b>",
+        "",
+        f"⏰ 检测时间：{datetime.now(BJT).strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "🔔 检测到质押日收益率发生变化：",
+        "",
+    ]
+    for change in changes:
+        lines.extend([
+            f"🏦 质押周期：{change['period']}",
+            f"⬅️ 修改前日收益率：{daily_rate(change['old_rate']):.4f}%",
+            f"➡️ 当前日收益率：{daily_rate(change['new_rate']):.4f}%",
+            "",
+        ])
+    lines.extend([
+        "━━━━━━━━━━━━━━",
+        "📌 计算方式：单次 Rebase 收益率每日复利 2 次",
+        "⚡️ 收益率变更后自动推送",
+    ])
+    result = requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        json={
+            "chat_id": STAKING_RATE_CHAT_ID,
+            "text": "\n".join(lines),
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        },
+        timeout=15,
+    ).json()
+    if result.get("ok"):
+        print("  [Telegram] 收益率变更推送成功")
+        return True
+    print(f"  [Telegram] 收益率变更推送失败: {result}")
+    return False
 
 
 def _fmt_720(r):

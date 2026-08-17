@@ -770,7 +770,7 @@ def _pool_address_realtime_text():
         if name != "国库资金":
             sections.extend([f"🟢 买入：{to_pool:,.2f} USDT", f"🔴 卖出：{from_pool:,.2f} USDT"])
         sections.extend([
-            f"📊 净变化：{to_pool - from_pool:,.2f} USDT",
+            f"📊 净变化：{from_pool - to_pool:,.2f} USDT",
             f"💰 当前余额：{_to_float(row.get('usdt_balance')):,.2f} USDT",
             "",
         ])
