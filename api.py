@@ -213,39 +213,12 @@ def get_staking_overview(force_refresh=False):
                 rate_time_state = {}
         except (TypeError, ValueError):
             rate_time_state = {}
-        state_changed = False
         for row in rows:
             mode_key = str(row["mode_id"])
             saved = rate_time_state.get(mode_key)
-            current_rate = row.get("interest_rate")
-            # 旧版保存的是 API updatedAt，没有保存当时的收益率，不能继续
-            # 冒充监控发现时间；升级后以当前 API 值建立新的监控基线。
-            if not isinstance(saved, dict) or "interest_rate" not in saved:
-                detected_at = datetime.now(BJT).isoformat(timespec="seconds")
-                rate_time_state[mode_key] = {
-                    "interest_rate": current_rate,
-                    "value": detected_at,
-                    "source": "monitor_detected_at",
-                }
-                state_changed = True
-                row["rate_updated_at"] = detected_at
-            elif saved.get("interest_rate") != current_rate:
-                detected_at = datetime.now(BJT).isoformat(timespec="seconds")
-                rate_time_state[mode_key] = {
-                    "interest_rate": current_rate,
-                    "value": detected_at,
-                    "source": "monitor_detected_at",
-                }
-                state_changed = True
-                row["rate_updated_at"] = detected_at
-            else:
+            if isinstance(saved, dict) and saved.get("value"):
                 row["rate_updated_at"] = saved.get("value")
             row["rate_updated_at_source"] = "monitor_detected_at"
-        if state_changed:
-            set_monitor_state(
-                STAKING_RATE_TIME_STATE_KEY,
-                json.dumps(rate_time_state, ensure_ascii=False),
-            )
 
         today = datetime.now(BJT).strftime("%Y-%m-%d")
         if STAKING_DAY_BASELINE["date"] != today or STAKING_DAY_BASELINE["data"] is None:
@@ -931,11 +904,43 @@ def staking_rate_monitor_worker():
                         old = previous.get(mode_id)
                         if isinstance(old, dict) and abs(float(old.get("rate", 0)) - item["rate"]) > 1e-12:
                             changes.append({
+                                "mode_id": mode_id,
                                 "period": item["period"],
                                 "old_rate": float(old.get("rate", 0)),
                                 "new_rate": item["rate"],
                             })
-                if not changes or push_staking_rate_change_to_telegram(changes):
+                if changes and push_staking_rate_change_to_telegram(changes):
+                    detected_at = datetime.now(BJT).isoformat(timespec="seconds")
+                    try:
+                        rate_time_state = json.loads(get_monitor_state(STAKING_RATE_TIME_STATE_KEY) or "")
+                        if not isinstance(rate_time_state, dict):
+                            rate_time_state = {}
+                    except (TypeError, ValueError):
+                        rate_time_state = {}
+                    for change in changes:
+                        rate_time_state[change["mode_id"]] = {
+                            "interest_rate": change["new_rate"],
+                            "value": detected_at,
+                            "source": "monitor_detected_at",
+                        }
+                    set_monitor_state(
+                        STAKING_RATE_TIME_STATE_KEY,
+                        json.dumps(rate_time_state, ensure_ascii=False),
+                    )
+                    set_monitor_state(state_key, json.dumps(current, ensure_ascii=False))
+                elif not previous:
+                    detected_at = datetime.now(BJT).isoformat(timespec="seconds")
+                    set_monitor_state(
+                        STAKING_RATE_TIME_STATE_KEY,
+                        json.dumps({
+                            mode_id: {
+                                "interest_rate": item["rate"],
+                                "value": detected_at,
+                                "source": "monitor_detected_at",
+                            }
+                            for mode_id, item in current.items()
+                        }, ensure_ascii=False),
+                    )
                     set_monitor_state(state_key, json.dumps(current, ensure_ascii=False))
             time.sleep(60)
         except Exception as exc:
