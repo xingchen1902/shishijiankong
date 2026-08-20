@@ -53,6 +53,7 @@ POOL_MONITOR_ADDRESSES = [
 ]
 DEX_CACHE = {"ts": 0, "data": None}
 BONUS_BALANCE_CACHE = {"ts": 0, "value": None}
+STAKE_BALANCE_CACHE = {"ts": 0, "value": None}
 # 看板每 30 秒轮询一次；短缓存可避免多个浏览器/机器人同时重复扫描大表。
 TODAY_CACHE_TTL = 8
 TREND_CACHE_TTL = 45
@@ -138,7 +139,18 @@ def get_today_data():
     # 事件公式保留用于校验；当前看板余额以链上 ARK balanceOf 为准，避免历史汇总基准误差累积。
     bonus_bal = base_bonus + bi - bo - permanent_bonus - tr720
     stake_bal = base_stake + si + tr720 - so - permanent_stake
-    # 页面 30 秒刷新一次；余额缓存同步延长到 30 秒，多个看板/机器人请求共用结果。
+    # 页面刷新时优先读取链上质押池余额；缓存 60 秒，多个请求共用结果。
+    displayed_stake_bal = stake_bal
+    if STAKE_BALANCE_CACHE["value"] is None or now_ts - STAKE_BALANCE_CACHE["ts"] >= 60:
+        try:
+            STAKE_BALANCE_CACHE["value"] = get_balance(TOKEN_ARK, STAKE_POOL) / (10 ** DECIMALS)
+            STAKE_BALANCE_CACHE["ts"] = now_ts
+        except Exception as exc:
+            print(f"[链上余额] 查询质押池失败，使用事件公式: {exc}")
+    if STAKE_BALANCE_CACHE["value"] is not None:
+        displayed_stake_bal = STAKE_BALANCE_CACHE["value"]
+
+    # 奖金池余额同样优先使用链上余额；当前缓存 30 秒。
     if BONUS_BALANCE_CACHE["value"] is None or now_ts - BONUS_BALANCE_CACHE["ts"] >= 30:
         try:
             BONUS_BALANCE_CACHE["value"] = get_balance(TOKEN_ARK, BONUS_POOL) / (10 ** DECIMALS)
@@ -151,7 +163,7 @@ def get_today_data():
             "static_burn":round(sb,2),"dynamic_in":round(di,2),
             "burn_stake":round(burn_stake,2),
             "permanent_bonus":round(permanent_bonus,2),"permanent_stake":round(permanent_stake,2),
-            "dynamic_turbo":round(dynamic_release,2),"dynamic_release":round(dynamic_release,2),"transfer_720":round(tr720,2),"stake_balance":round(max(stake_bal,0),2),
+            "dynamic_turbo":round(dynamic_release,2),"dynamic_release":round(dynamic_release,2),"transfer_720":round(tr720,2),"stake_balance":round(max(displayed_stake_bal,0),2),
             "stake_in_raw":round(si,2),"stake_in":round(real_stake_in,2),"burn_stake":round(burn_stake,2),"stake_out":round(so,2),"net_stake":round(real_stake_in-so,2),
             "event_count":ec,"last_block":lb}
     TODAY_CACHE.update({"date": today, "ts": now_ts, "data": result})
