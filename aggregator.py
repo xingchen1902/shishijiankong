@@ -38,6 +38,14 @@ RELEASE_PERIOD_SECONDS = {
     2592000: "30天",
     5184000: "60天",
 }
+# 2026-08-20 的历史校正点：奖金池按用户确认的链上余额；质押池按
+# BJT 2026-08-20 23:59:59 附近的链上区块 #117068407 查询。
+HISTORICAL_CHAIN_BALANCE_OVERRIDES = {
+    "2026-08-20": {
+        "bonus_balance": 8423127.65,
+        "stake_balance": 16515108.40133734,
+    },
+}
 BURST_RULES = {
     "turbo": {
         "title": "涡轮",
@@ -540,18 +548,21 @@ class DailyAggregator:
         bonus_out = max(bonus_out_all - permanent_bonus - transfer_720, 0)
         stake_out = max(stake_out_all - permanent_stake, 0)
 
-        # 前一日余额作为基准
-        prev_date = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-        from db import get_conn as gc
-        pc = gc()
-        prev = pc.execute("SELECT * FROM daily_summary WHERE date=?", (prev_date,)).fetchone()
-        pc.close()
-        base_bonus = float(prev["bonus_balance"]) if prev else 0
-        base_stake = float(prev["stake_balance"]) if prev else 0
-
-        # 公式推算余额（0 RPC 依赖）
-        bonus_bal = base_bonus + bonus_in - bonus_out - permanent_bonus - transfer_720
-        stake_bal = base_stake + float(row["stake_in"]) + transfer_720 - stake_out - permanent_stake
+        # 余额以链上 ARK balanceOf 为准，不再用上一日余额和事件公式累计。
+        # 8 月 20 日保留历史校正点；之后每次汇总都读取当前链上余额。
+        chain_override = HISTORICAL_CHAIN_BALANCE_OVERRIDES.get(date_str)
+        if chain_override:
+            bonus_bal = float(chain_override["bonus_balance"])
+            stake_bal = float(chain_override["stake_balance"])
+            print("  使用历史链上余额校正点")
+        else:
+            try:
+                bonus_bal = get_balance(TOKEN_ARK, BONUS_POOL) / (10 ** DECIMALS)
+                stake_bal = get_balance(TOKEN_ARK, STAKE_POOL) / (10 ** DECIMALS)
+            except Exception as exc:
+                # 不允许 RPC 失败时回退到旧公式，避免把错误余额写入历史汇总和飞书。
+                print(f"  [汇总] 链上余额读取失败，暂不写入 {date_str}: {exc}")
+                return
         net_stake = stake_in_val - stake_out
 
         record = {
