@@ -15,6 +15,7 @@ services:
       - ./aggregator.py:/app/aggregator.py
       - ./api.py:/app/api.py
       - ./pusher.py:/app/pusher.py
+      - ./static_release_report.py:/app/static_release_report.py
       - ./dashboard.html:/app/dashboard.html
       - ./db.py:/app/db.py
     environment:
