@@ -64,12 +64,16 @@ def build_xlsx(date_str, rows):
             + _cell(round(amount, 2), excel_row, "C")
         )
     last_row = max(1, len(sheet_rows))
+    sheet_data = "".join(
+        '<row r="%s">%s</row>' % (i, content)
+        for i, content in enumerate(sheet_rows, 1)
+    )
     sheet_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
         f'<dimension ref="A1:C{last_row}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
         '<cols><col min="1" max="1" width="8"/><col min="2" max="2" width="48"/><col min="3" max="3" width="18"/></cols>'
-        f'<sheetData>{"".join(f"<row r=\"{i}\">{content}</row>" for i, content in enumerate(sheet_rows, 1))}</sheetData>'
+        f'<sheetData>{sheet_data}</sheetData>'
         f'<autoFilter ref="A1:C{last_row}"/>'
         '</worksheet>'
     )
