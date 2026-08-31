@@ -237,6 +237,39 @@ def push_ai_daily_report_to_telegram(date_str, report_text):
     return ok
 
 
+def push_static_release_top30_excel(date_str):
+    """生成并把当日静态释放地址前30名 Excel 发到正能量小组。"""
+    if not TELEGRAM_BOT_TOKEN:
+        print("  [静态释放排名] 跳过: 未配置 BOT_TOKEN")
+        return False
+    from static_release_report import build_xlsx, get_top_static_release_rows
+
+    rows = get_top_static_release_rows(date_str)
+    if not rows:
+        print(f"  [静态释放排名] {date_str} 无静态释放数据，跳过文件发送")
+        return True
+    filename = f"静态释放前30名_{date_str}.xlsx"
+    caption = (
+        f"📊 {date_str} 静态释放地址前30名\n"
+        "按地址当日合计排名；同一地址的多笔释放逐笔列出并连续展示。"
+    )
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument",
+            data={"chat_id": -1003936488413, "caption": caption},
+            files={"document": (filename, build_xlsx(date_str, rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            timeout=60,
+        )
+        result = response.json()
+        if result.get("ok"):
+            print(f"  [静态释放排名] 推送成功 {date_str} rows={len(rows)}")
+            return True
+        print(f"  [静态释放排名] 推送失败: {result}")
+    except Exception as exc:
+        print(f"  [静态释放排名] 请求失败: {exc}")
+    return False
+
+
 def push_staking_rate_change_to_telegram(changes):
     """收益率变化后只推送正能量小组。"""
     if not TELEGRAM_BOT_TOKEN or not changes:
