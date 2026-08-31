@@ -57,6 +57,15 @@ REF_BLOCK = 105553753
 BASE_TS = 1782057600.0
 BLOCK_SEC = 0.45
 
+RELEASE_PERIOD_SECONDS = {
+    0: "0天（立即释放）",
+    864000: "10天",
+    1728000: "20天",
+    2592000: "30天",
+    5184000: "60天",
+}
+RELEASE_PERIOD_CACHE = {}
+
 RPC_URLS = [
     "https://bsc-mainnet.nodereal.io/v1/70208501917a413bab46cb281fc0997f",
     "https://bsc-mainnet.nodereal.io/v1/1ad9525366ba4b56a0a2b4fef2b2fef7",
@@ -142,10 +151,37 @@ def _rpc_call(method, params, retries=3):
         return None
 
 def get_transaction_by_hash(tx_hash):
-    """读取单笔交易详情；仅用于异常释放提醒解析释放周期。"""
+    """读取单笔交易详情。"""
     if not tx_hash:
         return None
     return _rpc_call("eth_getTransactionByHash", [tx_hash], retries=1)
+
+def _parse_release_period_from_input(input_data):
+    """按释放合约 ABI 第 6 个参数解析释放周期。"""
+    raw_input = (input_data or "").lower()
+    if raw_input.startswith("0x"):
+        raw_input = raw_input[2:]
+    selector_pos = raw_input.rfind("4399333d")
+    body = raw_input[selector_pos + 8:] if selector_pos >= 0 else raw_input[8:]
+    words = [int(body[index:index + 64], 16) for index in range(0, len(body) - 63, 64)]
+    return RELEASE_PERIOD_SECONDS.get(words[5], "未知") if len(words) > 5 else "未知"
+
+def get_release_periods(tx_hashes):
+    """批量解析释放交易周期，供所有静态/动态释放入库使用。"""
+    unique = [tx for tx in dict.fromkeys(tx_hashes) if tx]
+    missing = [tx for tx in unique if tx not in RELEASE_PERIOD_CACHE]
+    if missing:
+        transactions = _rpc.call_batch(
+            "eth_getTransactionByHash", [[tx] for tx in missing], retries=1
+        )
+        for tx, transaction in zip(missing, transactions):
+            try:
+                input_data = (transaction or {}).get("input") or (transaction or {}).get("data") or ""
+                RELEASE_PERIOD_CACHE[tx] = _parse_release_period_from_input(input_data)
+            except Exception as exc:
+                print(f"  [释放周期] 解析失败 {tx}: {exc}")
+                RELEASE_PERIOD_CACHE[tx] = "未知"
+    return {tx: RELEASE_PERIOD_CACHE.get(tx, "未知") for tx in unique}
 
 def _refresh_time_ref(force=False):
     global _time_ref_block, _time_ref_ts, _time_ref_updated
@@ -429,6 +465,10 @@ class EventParser:
             release_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == RELEASE_TOPIC]
             turbo_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == TURBO_TOPIC]
 
+        release_periods = get_release_periods([
+            log.get("transactionHash", "") for log in release_logs
+        ]) if release_logs else {}
+
         # Release 的 data[0] 是本次释放 ARK 数量；同交易有 gARK 销毁则为静态释放。
         if release_logs:
             for log in release_logs:
@@ -444,6 +484,7 @@ class EventParser:
                     "from": TARGET_DYNAMIC,
                     "to": _topic_addr(log["topics"][1]) if len(log.get("topics", [])) > 1 else "",
                     "value": val, "timestamp": estimate_block_time(bn),
+                    "release_period": release_periods.get(tx, "未知"),
                 })
 
         # 总涡轮是独立的涡轮事件，不等于静态/动态释放之和。

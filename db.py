@@ -390,8 +390,8 @@ def insert_raw_logs_batch(records):
 def insert_event(block, tx, event_type, from_addr, to_addr, value, timestamp):
     conn = get_conn()
     conn.execute(
-        "INSERT INTO events (block, tx, type, from_addr, to_addr, value, timestamp) VALUES (?,?,?,?,?,?,?)",
-        (block, tx, event_type, from_addr, to_addr, value, timestamp)
+        "INSERT INTO events (block, tx, type, from_addr, to_addr, value, timestamp, release_period) VALUES (?,?,?,?,?,?,?,?)",
+        (block, tx, event_type, from_addr, to_addr, value, timestamp, None)
     )
     conn.commit()
     conn.close()
@@ -400,9 +400,9 @@ def insert_events_batch(events):
     if not events: return
     conn = get_conn()
     data = [(e["block"], e["tx"], e["type"], e.get("from",""), e.get("to",""),
-             e["value"], e.get("timestamp","")) for e in events]
+             e["value"], e.get("timestamp",""), e.get("release_period")) for e in events]
     conn.executemany(
-        "INSERT INTO events (block, tx, type, from_addr, to_addr, value, timestamp) VALUES (?,?,?,?,?,?,?)",
+        "INSERT INTO events (block, tx, type, from_addr, to_addr, value, timestamp, release_period) VALUES (?,?,?,?,?,?,?,?)",
         data
     )
     conn.commit()
