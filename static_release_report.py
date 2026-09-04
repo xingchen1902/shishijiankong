@@ -17,7 +17,7 @@ def get_top_static_release_rows(date_str, limit=30):
     conn = get_conn()
     rows = conn.execute(
         """
-        SELECT id, to_addr, value
+        SELECT id, to_addr, value, release_period
         FROM events
         WHERE type='release_static'
           AND timestamp >= ? AND timestamp < ?
@@ -31,17 +31,19 @@ def get_top_static_release_rows(date_str, limit=30):
     for row in rows:
         address = (row["to_addr"] or "").strip().lower()
         if address:
-            grouped[address].append(float(row["value"] or 0))
+            grouped[address].append(
+                (float(row["value"] or 0), row["release_period"] or "未知")
+            )
 
     ranked = sorted(
         grouped.items(),
-        key=lambda item: (-sum(item[1]), item[0]),
+        key=lambda item: (-sum(amount for amount, _period in item[1]), item[0]),
     )[:limit]
 
     result = []
     for rank, (address, amounts) in enumerate(ranked, 1):
-        for amount in amounts:
-            result.append((rank, address, amount))
+        for amount, period in amounts:
+            result.append((rank, address, amount, period))
     return result
 
 
@@ -56,12 +58,18 @@ def _cell(value, row, col, style=None):
 
 def build_xlsx(date_str, rows):
     """生成无额外颜色填充的标准 xlsx 文件。"""
-    sheet_rows = [_cell("排名", 1, "A", 1) + _cell("用户地址", 1, "B", 1) + _cell("静态释放数量", 1, "C", 1)]
-    for excel_row, (rank, address, amount) in enumerate(rows, 2):
+    sheet_rows = [
+        _cell("排名", 1, "A", 1)
+        + _cell("用户地址", 1, "B", 1)
+        + _cell("静态释放数量", 1, "C", 1)
+        + _cell("释放周期", 1, "D", 1)
+    ]
+    for excel_row, (rank, address, amount, period) in enumerate(rows, 2):
         sheet_rows.append(
             _cell(rank, excel_row, "A")
             + _cell(address, excel_row, "B")
             + _cell(round(amount, 2), excel_row, "C")
+            + _cell(period, excel_row, "D")
         )
     last_row = max(1, len(sheet_rows))
     sheet_data = "".join(
@@ -71,10 +79,10 @@ def build_xlsx(date_str, rows):
     sheet_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        f'<dimension ref="A1:C{last_row}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
-        '<cols><col min="1" max="1" width="8"/><col min="2" max="2" width="48"/><col min="3" max="3" width="18"/></cols>'
+        f'<dimension ref="A1:D{last_row}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+        '<cols><col min="1" max="1" width="8"/><col min="2" max="2" width="48"/><col min="3" max="3" width="18"/><col min="4" max="4" width="20"/></cols>'
         f'<sheetData>{sheet_data}</sheetData>'
-        f'<autoFilter ref="A1:C{last_row}"/>'
+        f'<autoFilter ref="A1:D{last_row}"/>'
         '</worksheet>'
     )
     styles_xml = (
