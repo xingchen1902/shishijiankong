@@ -82,11 +82,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .pool-address-row .value.net.positive { color: #22c55e; }
 .pool-address-row .value.net.negative { color: #ef4444; }
 .pool-address-status { color: #64748b; font-size: 11px; margin-top: 10px; }
-.pending-list { display: grid; gap: 8px; }
-.pending-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; }
-.pending-address { color: #cbd5e1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pending-amount { color: #2dd4bf; font-size: 15px; font-weight: 700; white-space: nowrap; }
-.pending-total { color: #94a3b8; font-size: 12px; margin-top: 10px; text-align: right; }
+.pending-total { color: #2dd4bf; font-size: 28px; font-weight: 700; text-align: center; padding: 18px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; }
 .staking-overview-status { color: #64748b; font-size: 11px; margin-top: 10px; }
 .dex-card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid #334155; }
 .dex-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -255,8 +251,8 @@ td.neg { color: #ef4444; }
   <!-- 当前待领取涡轮 -->
   <div class="today-card">
     <div class="today-title">🎁 当前待领取 ARK</div>
-    <div class="pending-list" id="turboPendingList">
-      <div class="pool-address-status">加载中...</div>
+    <div id="turboPendingList">
+      <div class="pending-total">加载中...</div>
     </div>
   </div>
 
@@ -503,18 +499,8 @@ function updateToday(data) {
 function updateTurboPending(payload) {
   var container = document.getElementById("turboPendingList");
   if (!container) return;
-  var rows = payload && Array.isArray(payload.data) ? payload.data : [];
-  if (!rows.length) {
-    container.innerHTML = '<div class="pool-empty">暂无待领取 ARK</div>';
-    return;
-  }
-  var html = rows.map(function(row) {
-    return '<div class="pending-row"><span class="pending-address" title="' + esc(row.user_address) + '">' +
-      esc(shortAddr(row.user_address)) + '</span><span class="pending-amount">' +
-      fmt(row.pending_total) + ' ARK</span></div>';
-  }).join("");
-  html += '<div class="pending-total">合计 ' + fmt(payload.total || 0) + ' ARK</div>';
-  container.innerHTML = html;
+  var total = payload && payload.total != null ? payload.total : 0;
+  container.innerHTML = '<div class="pending-total">' + fmt(total) + ' ARK</div>';
 }
 
 function updateStakingOverview(payload) {
