@@ -172,6 +172,19 @@ def init_db():
             error TEXT,
             updated_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS turbo_pending (
+            user_address TEXT PRIMARY KEY,
+            eligible_turbo_total REAL DEFAULT 0,
+            claimed_total REAL DEFAULT 0,
+            pending_total REAL DEFAULT 0,
+            over_claimed REAL DEFAULT 0,
+            turbo_count INTEGER DEFAULT 0,
+            claim_count INTEGER DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_turbo_pending_amount
+            ON turbo_pending(pending_total);
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
     for column in ("burn_stake", "dynamic_release", "permanent_bonus", "permanent_stake"):
@@ -209,6 +222,85 @@ def get_ai_daily_report(date_str):
     row = conn.execute("SELECT * FROM ai_daily_reports WHERE date=?", (date_str,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+def refresh_turbo_pending():
+    """按地址重算已满足12小时的涡轮与奖金池实际提取余额。"""
+    now = datetime.now(BJT)
+    eligible_before = (now - timedelta(hours=12)).strftime("%Y-%m-%d %H:%M:%S")
+    bonus_pool = "0x8501168656fcac4628f6910ccabea8b64ebe5bd4"
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        WITH turbo AS (
+            SELECT lower(to_addr) AS user_address,
+                   SUM(value) AS eligible_turbo_total,
+                   COUNT(*) AS turbo_count
+            FROM events
+            WHERE type='turbo_total'
+              AND timestamp IS NOT NULL
+              AND timestamp <= ?
+              AND to_addr IS NOT NULL
+            GROUP BY lower(to_addr)
+        ), claims AS (
+            SELECT lower(to_addr) AS user_address,
+                   SUM(value) AS claimed_total,
+                   COUNT(*) AS claim_count
+            FROM events
+            WHERE type='bonus_withdraw'
+              AND lower(from_addr)=?
+              AND to_addr IS NOT NULL
+            GROUP BY lower(to_addr)
+        )
+        SELECT COALESCE(t.user_address, c.user_address) AS user_address,
+               COALESCE(t.eligible_turbo_total, 0) AS eligible_turbo_total,
+               COALESCE(c.claimed_total, 0) AS claimed_total,
+               COALESCE(t.turbo_count, 0) AS turbo_count,
+               COALESCE(c.claim_count, 0) AS claim_count
+        FROM turbo t
+        LEFT JOIN claims c ON c.user_address=t.user_address
+        UNION ALL
+        SELECT c.user_address, 0, c.claimed_total, 0, c.claim_count
+        FROM claims c
+        LEFT JOIN turbo t ON t.user_address=c.user_address
+        WHERE t.user_address IS NULL
+        """,
+        (eligible_before, bonus_pool),
+    ).fetchall()
+    conn.execute("DELETE FROM turbo_pending")
+    conn.executemany(
+        """
+        INSERT INTO turbo_pending
+            (user_address, eligible_turbo_total, claimed_total, pending_total,
+             over_claimed, turbo_count, claim_count, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        """,
+        [
+            (
+                row["user_address"],
+                float(row["eligible_turbo_total"] or 0),
+                float(row["claimed_total"] or 0),
+                max(float(row["eligible_turbo_total"] or 0) - float(row["claimed_total"] or 0), 0),
+                max(float(row["claimed_total"] or 0) - float(row["eligible_turbo_total"] or 0), 0),
+                int(row["turbo_count"] or 0),
+                int(row["claim_count"] or 0),
+            )
+            for row in rows
+        ],
+    )
+    conn.commit()
+    result = conn.execute(
+        """
+        SELECT user_address, pending_total
+        FROM turbo_pending
+        WHERE pending_total > 0.00000001
+        ORDER BY pending_total DESC, user_address
+        """
+    ).fetchall()
+    total = conn.execute(
+        "SELECT COALESCE(SUM(pending_total), 0) FROM turbo_pending WHERE pending_total > 0.00000001"
+    ).fetchone()[0]
+    conn.close()
+    return [dict(row) for row in result], float(total or 0)
 
 def save_ai_daily_report(date_str, **kwargs):
     """保存或更新每日 AI 日报状态，支持失败后重试推送。"""

@@ -19,6 +19,7 @@ from db import (
     upsert_dex_daily_snapshot,
     get_monitor_state,
     set_monitor_state,
+    refresh_turbo_pending,
 )
 from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply
 from pusher import (
@@ -844,6 +845,13 @@ threading.Thread(target=dex_daily_snapshot_worker, daemon=True).start()
 @app.get("/api/today")
 def get_today():
     return {"data": get_today_data()}
+
+
+@app.get("/api/turbo-pending")
+def get_turbo_pending():
+    """只返回当前已经超过12小时且尚未被奖金池提取核销的地址余额。"""
+    rows, total = refresh_turbo_pending()
+    return {"data": rows, "total": round(total, 8)}
 
 
 @app.get("/api/today-trend")
