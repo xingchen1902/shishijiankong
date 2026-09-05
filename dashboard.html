@@ -82,7 +82,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .pool-address-row .value.net.positive { color: #22c55e; }
 .pool-address-row .value.net.negative { color: #ef4444; }
 .pool-address-status { color: #64748b; font-size: 11px; margin-top: 10px; }
-.pending-total { color: #2dd4bf; font-size: 28px; font-weight: 700; text-align: center; padding: 18px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; }
 .staking-overview-status { color: #64748b; font-size: 11px; margin-top: 10px; }
 .dex-card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid #334155; }
 .dex-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -226,6 +225,7 @@ td.neg { color: #ef4444; }
   <div class="realtime-grid">
     <div class="rt-card blue"><div class="label">奖金池余额</div><div class="value" id="bonusBal">--</div></div>
     <div class="rt-card green"><div class="label">质押池余额</div><div class="value" id="stakeBal">--</div></div>
+    <div class="rt-card teal"><div class="label">当前待领取 ARK</div><div class="value" id="turboPendingList">--</div></div>
     <div class="rt-card purple"><div class="label">今日事件</div><div class="value" id="eventCount">--</div><div class="sub">条</div></div>
     <div class="rt-card orange"><div class="label">最新区块</div><div class="value" id="lastBlock">--</div></div>
   </div>
@@ -245,14 +245,6 @@ td.neg { color: #ef4444; }
       <div class="today-item pos"><div class="label">新增质押</div><div class="value" id="tdStakeIn">--</div></div>
       <div class="today-item neg"><div class="label">赎回</div><div class="value" id="tdStakeOut">--</div></div>
       <div class="today-item" id="tdNetStakeCard"><div class="label">净质押量</div><div class="value" id="tdNetStake">--</div></div>
-    </div>
-  </div>
-
-  <!-- 当前待领取涡轮 -->
-  <div class="today-card">
-    <div class="today-title">🎁 当前待领取 ARK</div>
-    <div id="turboPendingList">
-      <div class="pending-total">加载中...</div>
     </div>
   </div>
 
@@ -500,7 +492,7 @@ function updateTurboPending(payload) {
   var container = document.getElementById("turboPendingList");
   if (!container) return;
   var total = payload && payload.total != null ? payload.total : 0;
-  container.innerHTML = '<div class="pending-total">' + fmt(total) + ' ARK</div>';
+  container.textContent = fmt(total);
 }
 
 function updateStakingOverview(payload) {
