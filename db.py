@@ -277,6 +277,21 @@ def refresh_turbo_pending():
     # 在同一事务中替换汇总，读请求不会看到清空后的中间状态。
     conn.execute("BEGIN IMMEDIATE")
     conn.execute("DELETE FROM turbo_pending")
+    normalized_rows = []
+    anomaly_count = 0
+    anomaly_total = 0.0
+    for row in rows:
+        turbo_total = float(row["eligible_turbo_total"] or 0)
+        claimed_total = float(row["claimed_total"] or 0)
+        pending_total = max(turbo_total - claimed_total, 0.0)
+        over_claimed = max(claimed_total - turbo_total, 0.0)
+        if over_claimed > 0.00000001:
+            anomaly_count += 1
+            anomaly_total += over_claimed
+        normalized_rows.append((
+            row["user_address"], turbo_total, claimed_total, pending_total,
+            over_claimed, int(row["turbo_count"] or 0), int(row["claim_count"] or 0),
+        ))
     conn.executemany(
         """
         INSERT INTO turbo_pending
@@ -284,18 +299,7 @@ def refresh_turbo_pending():
              over_claimed, turbo_count, claim_count, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
         """,
-        [
-            (
-                row["user_address"],
-                float(row["eligible_turbo_total"] or 0),
-                float(row["claimed_total"] or 0),
-                max(float(row["eligible_turbo_total"] or 0) - float(row["claimed_total"] or 0), 0),
-                max(float(row["claimed_total"] or 0) - float(row["eligible_turbo_total"] or 0), 0),
-                int(row["turbo_count"] or 0),
-                int(row["claim_count"] or 0),
-            )
-            for row in rows
-        ],
+        normalized_rows,
     )
     conn.commit()
     result = conn.execute(
@@ -310,6 +314,8 @@ def refresh_turbo_pending():
         "SELECT COALESCE(SUM(pending_total), 0) FROM turbo_pending WHERE pending_total > 0.00000001"
     ).fetchone()[0]
     conn.close()
+    if anomaly_count:
+        print(f"[涡轮待领取][异常] {anomaly_count} 个地址提取超过已到期涡轮，超额 {anomaly_total:.8f} ARK；待领取已按0封顶")
     return [dict(row) for row in result], float(total or 0)
 
 def get_turbo_pending_snapshot():
