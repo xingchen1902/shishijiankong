@@ -226,11 +226,7 @@ def get_ai_daily_report(date_str):
 def refresh_turbo_pending():
     """按地址重算已满足12小时的涡轮与奖金池实际提取余额。"""
     now = datetime.now(BJT)
-    start_key = "turbo_pending_start_at"
-    start_at = get_monitor_state(start_key)
-    if not start_at:
-        start_at = now.strftime("%Y-%m-%d %H:%M:%S")
-        set_monitor_state(start_key, start_at)
+    window_start = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     eligible_before = (now - timedelta(hours=12)).strftime("%Y-%m-%d %H:%M:%S")
     bonus_pool = "0x8501168656fcac4628f6910ccabea8b64ebe5bd4"
     conn = get_conn()
@@ -271,7 +267,7 @@ def refresh_turbo_pending():
         LEFT JOIN turbo t ON t.user_address=c.user_address
         WHERE t.user_address IS NULL
         """,
-        (start_at, eligible_before, bonus_pool, start_at),
+        (window_start, eligible_before, bonus_pool, window_start),
     ).fetchall()
     conn.execute("DELETE FROM turbo_pending")
     conn.executemany(
