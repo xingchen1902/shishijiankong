@@ -302,6 +302,23 @@ def refresh_turbo_pending():
     conn.close()
     return [dict(row) for row in result], float(total or 0)
 
+def get_turbo_pending_snapshot():
+    """快速读取待领取汇总；不在 HTTP 请求内扫描历史事件。"""
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT user_address, pending_total
+        FROM turbo_pending
+        WHERE pending_total > 0.00000001
+        ORDER BY pending_total DESC, user_address
+        """
+    ).fetchall()
+    total = conn.execute(
+        "SELECT COALESCE(SUM(pending_total), 0) FROM turbo_pending WHERE pending_total > 0.00000001"
+    ).fetchone()[0]
+    conn.close()
+    return [dict(row) for row in rows], float(total or 0)
+
 def save_ai_daily_report(date_str, **kwargs):
     """保存或更新每日 AI 日报状态，支持失败后重试推送。"""
     allowed = {

@@ -20,6 +20,7 @@ from db import (
     get_monitor_state,
     set_monitor_state,
     refresh_turbo_pending,
+    get_turbo_pending_snapshot,
 )
 from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply
 from pusher import (
@@ -838,9 +839,21 @@ def telegram_poll():
             print(f"[Telegram Poll] 异常: {e}")
             time.sleep(5)
 
+def turbo_pending_refresh_worker():
+    """后台低频重算待领取汇总，避免历史大表扫描阻塞看板请求。"""
+    time.sleep(15)
+    while True:
+        try:
+            refresh_turbo_pending()
+            print("[涡轮待领取] 汇总已刷新")
+        except Exception as exc:
+            print(f"[涡轮待领取] 刷新失败: {exc}")
+        time.sleep(300)
+
 # 启动后台轮询
 threading.Thread(target=telegram_poll, daemon=True).start()
 threading.Thread(target=dex_daily_snapshot_worker, daemon=True).start()
+threading.Thread(target=turbo_pending_refresh_worker, daemon=True).start()
 
 @app.get("/api/today")
 def get_today():
@@ -850,7 +863,7 @@ def get_today():
 @app.get("/api/turbo-pending")
 def get_turbo_pending():
     """只返回当前已经超过12小时且尚未被奖金池提取核销的地址余额。"""
-    rows, total = refresh_turbo_pending()
+    rows, total = get_turbo_pending_snapshot()
     return {"data": rows, "total": round(total, 8)}
 
 
