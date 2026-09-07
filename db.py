@@ -312,7 +312,9 @@ def refresh_turbo_pending():
             GROUP BY lower(to_addr)
         ), turbo AS (
             SELECT lower(to_addr) AS user_address,
-                   SUM(COALESCE(actual_value, 0)) AS eligible_turbo_total,
+                   -- 新版事件有实际涡轮量；历史补扫尚未补齐字段时，回退到旧事件的 value，
+                   -- 避免系数迁移期间把真实涡轮错误统计为 0。
+                   SUM(COALESCE(actual_value, value)) AS eligible_turbo_total,
                    COUNT(*) AS turbo_count
             FROM events
             WHERE type='turbo_total'

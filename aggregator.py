@@ -527,7 +527,7 @@ class DailyAggregator:
                 COALESCE(SUM(CASE WHEN type='permanent_stake' THEN value ELSE 0 END),0) as permanent_stake,
                 COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0) as static_burn,
                 COALESCE(SUM(CASE WHEN type='turbo_total' THEN value ELSE 0 END),0) as dynamic_in,
-                COALESCE(SUM(CASE WHEN type='turbo_total' THEN COALESCE(actual_value, 0) ELSE 0 END),0) as actual_turbo,
+                COALESCE(SUM(CASE WHEN type='turbo_total' THEN COALESCE(actual_value, value) ELSE 0 END),0) as actual_turbo,
                 COALESCE(SUM(CASE WHEN type='release_dynamic' THEN value ELSE 0 END),0) as dynamic_release,
                 COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
                 COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0) as bonus_in

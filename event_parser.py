@@ -508,6 +508,15 @@ class EventParser:
                     coefficient_raw = words[1]
                     actual_amount_wei = words[2]
                     consensus_coefficient = coefficient_raw / 10000
+                    # 系数是万分比：实际涡轮量 = 原始量 × coefficient / 10000。
+                    # actual_amount_wei 仍以合约事件写出的实际值为准，同时校验公式，
+                    # 防止 ABI/字段顺序变化时把原始量误当成实际量。
+                    formula_actual_wei = amount_wei * coefficient_raw // 10000
+                    if formula_actual_wei != actual_amount_wei:
+                        print(
+                            f"  [涡轮系数异常] {tx_hash[:12]} "
+                            f"formula={formula_actual_wei} event={actual_amount_wei}"
+                        )
                 else:
                     amount_wei = words[0] if words else 0
                     actual_amount_wei = amount_wei
