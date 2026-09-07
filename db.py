@@ -207,6 +207,12 @@ def init_db():
         conn.execute("ALTER TABLE events ADD COLUMN actual_value REAL")
     if "consensus_coefficient" not in event_columns:
         conn.execute("ALTER TABLE events ADD COLUMN consensus_coefficient REAL")
+    # 系数卡片只查新版涡轮事件中的最新记录；专用索引避免每次页面刷新扫描/排序整张 events 表。
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_events_turbo_coefficient
+        ON events(block DESC, id DESC, consensus_coefficient)
+        WHERE type='turbo_total' AND consensus_coefficient IS NOT NULL
+    """)
     conn.commit()
     conn.close()
 

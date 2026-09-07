@@ -950,8 +950,20 @@ function loadToday() {
 
 function loadTurboPending() {
   return fetchAPI("/api/turbo-pending").then(function(payload) {
+    if (!payload) throw new Error("empty turbo pending response");
     updateTurboPending(payload);
-  }).catch(function(err) { logLoadError("turbo pending", err); });
+  }).catch(function(err) {
+    logLoadError("turbo pending", err);
+    // 网络或后台刷新短暂繁忙时保留旧值，并快速重试，避免卡片一直显示 --。
+    setTimeout(function() {
+      fetchAPI("/api/turbo-pending").then(function(payload) {
+        if (payload) updateTurboPending(payload);
+        else throw new Error("empty turbo pending retry response");
+      }).catch(function(retryErr) {
+        logLoadError("turbo pending retry", retryErr);
+      });
+    }, 1500);
+  });
 }
 
 function loadStakingOverview() {
