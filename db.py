@@ -288,6 +288,21 @@ def refresh_turbo_pending():
         WITH carry AS (
             SELECT user_address, pending_total
             FROM turbo_pending_carry
+        ), legacy_future AS (
+            SELECT lower(to_addr) AS user_address,
+                   SUM(value) AS eligible_turbo_total,
+                   COUNT(*) AS turbo_count
+            FROM events
+            WHERE type='turbo_total'
+              AND timestamp IS NOT NULL
+              AND timestamp > datetime(
+                    (SELECT state_value FROM monitor_state
+                     WHERE state_key='turbo_pending_actual_carry_initialized_v1'), '-12 hours')
+              AND timestamp < (SELECT state_value FROM monitor_state
+                               WHERE state_key='turbo_pending_actual_carry_initialized_v1')
+              AND timestamp <= ?
+              AND to_addr IS NOT NULL
+            GROUP BY lower(to_addr)
         ), turbo AS (
             SELECT lower(to_addr) AS user_address,
                    SUM(COALESCE(actual_value, 0)) AS eligible_turbo_total,
@@ -310,28 +325,36 @@ def refresh_turbo_pending():
               AND to_addr IS NOT NULL
             GROUP BY lower(to_addr)
         )
-        SELECT COALESCE(ca.user_address, t.user_address, c.user_address) AS user_address,
-               COALESCE(ca.pending_total, 0) + COALESCE(t.eligible_turbo_total, 0) AS eligible_turbo_total,
+        SELECT COALESCE(ca.user_address, lf.user_address, t.user_address, c.user_address) AS user_address,
+               COALESCE(ca.pending_total, 0) + COALESCE(lf.eligible_turbo_total, 0)
+                   + COALESCE(t.eligible_turbo_total, 0) AS eligible_turbo_total,
                COALESCE(c.claimed_total, 0) AS claimed_total,
-               COALESCE(t.turbo_count, 0) AS turbo_count,
+               COALESCE(lf.turbo_count, 0) + COALESCE(t.turbo_count, 0) AS turbo_count,
                COALESCE(c.claim_count, 0) AS claim_count
         FROM carry ca
+        LEFT JOIN legacy_future lf ON lf.user_address=ca.user_address
         LEFT JOIN turbo t ON t.user_address=ca.user_address
         LEFT JOIN claims c ON c.user_address=ca.user_address
         UNION ALL
-        SELECT t.user_address, t.eligible_turbo_total, COALESCE(c.claimed_total, 0), t.turbo_count, COALESCE(c.claim_count, 0)
-        FROM turbo t
-        LEFT JOIN carry ca ON ca.user_address=t.user_address
-        LEFT JOIN claims c ON c.user_address=t.user_address
+        SELECT COALESCE(lf.user_address, t.user_address),
+               COALESCE(lf.eligible_turbo_total, 0) + COALESCE(t.eligible_turbo_total, 0),
+               COALESCE(c.claimed_total, 0),
+               COALESCE(lf.turbo_count, 0) + COALESCE(t.turbo_count, 0),
+               COALESCE(c.claim_count, 0)
+        FROM legacy_future lf
+        FULL OUTER JOIN turbo t ON t.user_address=lf.user_address
+        LEFT JOIN carry ca ON ca.user_address=COALESCE(lf.user_address, t.user_address)
+        LEFT JOIN claims c ON c.user_address=COALESCE(lf.user_address, t.user_address)
         WHERE ca.user_address IS NULL
         UNION ALL
         SELECT c.user_address, 0, c.claimed_total, 0, c.claim_count
         FROM claims c
+        LEFT JOIN legacy_future lf ON lf.user_address=c.user_address
         LEFT JOIN turbo t ON t.user_address=c.user_address
         LEFT JOIN carry ca ON ca.user_address=c.user_address
-        WHERE t.user_address IS NULL AND ca.user_address IS NULL
+        WHERE lf.user_address IS NULL AND t.user_address IS NULL AND ca.user_address IS NULL
         """,
-        (eligible_before, bonus_pool),
+        (eligible_before, eligible_before, bonus_pool),
     ).fetchall()
     # 在同一事务中替换汇总，读请求不会看到清空后的中间状态。
     conn.execute("BEGIN IMMEDIATE")
