@@ -188,6 +188,12 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_turbo_pending_amount
             ON turbo_pending(pending_total);
+
+        CREATE TABLE IF NOT EXISTS turbo_pending_carry (
+            user_address TEXT PRIMARY KEY,
+            pending_total REAL NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
     for column in ("burn_stake", "dynamic_release", "actual_turbo", "permanent_bonus", "permanent_stake"):
@@ -242,16 +248,54 @@ def refresh_turbo_pending():
     eligible_before = (now - timedelta(hours=12)).strftime("%Y-%m-%d %H:%M:%S")
     bonus_pool = "0x8501168656fcac4628f6910ccabea8b64ebe5bd4"
     conn = get_conn()
+    # 只在第一次切换到“实际涡轮”口径时结转旧待领取余额。
+    # 结转按地址保存，后续新领取只扣减切换后的领取，避免历史领取被重复扣除。
+    carry_key = "turbo_pending_actual_carry_initialized_v1"
+    if not get_monitor_state(carry_key):
+        legacy_rows = conn.execute(
+            """
+            WITH turbo AS (
+                SELECT lower(to_addr) AS user_address, SUM(value) AS turbo_total
+                FROM events
+                WHERE type='turbo_total' AND timestamp >= ? AND timestamp <= ?
+                      AND to_addr IS NOT NULL
+                GROUP BY lower(to_addr)
+            ), claims AS (
+                SELECT lower(to_addr) AS user_address, SUM(value) AS claimed_total
+                FROM events
+                WHERE type='bonus_withdraw' AND lower(from_addr)=?
+                      AND timestamp >= ? AND timestamp <= ?
+                      AND to_addr IS NOT NULL
+                GROUP BY lower(to_addr)
+            )
+            SELECT turbo.user_address,
+                   MAX(turbo.turbo_total - COALESCE(claims.claimed_total, 0), 0) AS pending_total
+            FROM turbo LEFT JOIN claims USING(user_address)
+            WHERE turbo.turbo_total - COALESCE(claims.claimed_total, 0) > 0
+            GROUP BY turbo.user_address
+            """,
+            (start_at, eligible_before, bonus_pool, start_at, now.strftime("%Y-%m-%d %H:%M:%S")),
+        ).fetchall()
+        conn.executemany(
+            "INSERT OR REPLACE INTO turbo_pending_carry (user_address, pending_total) VALUES (?, ?)",
+            [(row["user_address"], float(row["pending_total"] or 0)) for row in legacy_rows],
+        )
+        conn.commit()
+        set_monitor_state(carry_key, now.strftime("%Y-%m-%d %H:%M:%S"))
+        print(f"[涡轮待领取] 已结转旧余额 {sum(float(row['pending_total'] or 0) for row in legacy_rows):.8f} ARK，共 {len(legacy_rows)} 个地址")
     rows = conn.execute(
         """
-        WITH turbo AS (
+        WITH carry AS (
+            SELECT user_address, pending_total
+            FROM turbo_pending_carry
+        ), turbo AS (
             SELECT lower(to_addr) AS user_address,
                    SUM(COALESCE(actual_value, 0)) AS eligible_turbo_total,
                    COUNT(*) AS turbo_count
             FROM events
             WHERE type='turbo_total'
               AND timestamp IS NOT NULL
-              AND timestamp >= ?
+              AND timestamp >= (SELECT state_value FROM monitor_state WHERE state_key='turbo_pending_actual_carry_initialized_v1')
               AND timestamp <= ?
               AND to_addr IS NOT NULL
             GROUP BY lower(to_addr)
@@ -262,24 +306,32 @@ def refresh_turbo_pending():
             FROM events
             WHERE type='bonus_withdraw'
               AND lower(from_addr)=?
-              AND timestamp >= ?
+              AND timestamp >= (SELECT state_value FROM monitor_state WHERE state_key='turbo_pending_actual_carry_initialized_v1')
               AND to_addr IS NOT NULL
             GROUP BY lower(to_addr)
         )
-        SELECT COALESCE(t.user_address, c.user_address) AS user_address,
-               COALESCE(t.eligible_turbo_total, 0) AS eligible_turbo_total,
+        SELECT COALESCE(ca.user_address, t.user_address, c.user_address) AS user_address,
+               COALESCE(ca.pending_total, 0) + COALESCE(t.eligible_turbo_total, 0) AS eligible_turbo_total,
                COALESCE(c.claimed_total, 0) AS claimed_total,
                COALESCE(t.turbo_count, 0) AS turbo_count,
                COALESCE(c.claim_count, 0) AS claim_count
+        FROM carry ca
+        LEFT JOIN turbo t ON t.user_address=ca.user_address
+        LEFT JOIN claims c ON c.user_address=ca.user_address
+        UNION ALL
+        SELECT t.user_address, t.eligible_turbo_total, COALESCE(c.claimed_total, 0), t.turbo_count, COALESCE(c.claim_count, 0)
         FROM turbo t
+        LEFT JOIN carry ca ON ca.user_address=t.user_address
         LEFT JOIN claims c ON c.user_address=t.user_address
+        WHERE ca.user_address IS NULL
         UNION ALL
         SELECT c.user_address, 0, c.claimed_total, 0, c.claim_count
         FROM claims c
         LEFT JOIN turbo t ON t.user_address=c.user_address
-        WHERE t.user_address IS NULL
+        LEFT JOIN carry ca ON ca.user_address=c.user_address
+        WHERE t.user_address IS NULL AND ca.user_address IS NULL
         """,
-        (start_at, eligible_before, bonus_pool, start_at),
+        (eligible_before, bonus_pool),
     ).fetchall()
     # 在同一事务中替换汇总，读请求不会看到清空后的中间状态。
     conn.execute("BEGIN IMMEDIATE")
