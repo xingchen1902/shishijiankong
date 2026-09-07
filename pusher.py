@@ -28,6 +28,7 @@ FIELD_MAP = {
     "static_burn": "静态释放",
     "dynamic_release": "动态释放",
     "dynamic_in": "总涡轮",
+    "actual_turbo": "实际涡轮",
     "transfer_720": "转720天",
     "stake_balance": "质押池余额",
     "stake_in": "新增质押",
@@ -363,6 +364,7 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
 静态释放：{f(record.get('static_burn',0))} ARK
 动态释放：{f(record.get('dynamic_release', record.get('dynamic_turbo',0)))} ARK
 总涡轮：{f(record.get('dynamic_in',0))} ARK
+实际涡轮：{f(record.get('actual_turbo',0))} ARK
 当前待领取：{f(turbo_pending_total)} ARK
 
 <b>🔄 转720天</b>

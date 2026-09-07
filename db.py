@@ -31,6 +31,8 @@ def init_db():
             from_addr TEXT,
             to_addr TEXT,
             value REAL NOT NULL,
+            actual_value REAL,
+            consensus_coefficient REAL,
             timestamp TEXT,
             release_period TEXT,
             created_at TEXT DEFAULT (datetime('now'))
@@ -61,6 +63,7 @@ def init_db():
             bonus_withdraw REAL DEFAULT 0,
             static_burn REAL DEFAULT 0,
             dynamic_in REAL DEFAULT 0,
+            actual_turbo REAL DEFAULT 0,
             dynamic_release REAL DEFAULT 0,
             transfer_720 REAL DEFAULT 0,
             stake_balance REAL DEFAULT 0,
@@ -187,13 +190,17 @@ def init_db():
             ON turbo_pending(pending_total);
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
-    for column in ("burn_stake", "dynamic_release", "permanent_bonus", "permanent_stake"):
+    for column in ("burn_stake", "dynamic_release", "actual_turbo", "permanent_bonus", "permanent_stake"):
         if column not in columns:
             conn.execute(f"ALTER TABLE daily_summary ADD COLUMN {column} REAL DEFAULT 0")
     # 兼容已有 VPS 数据库：为历史 events 表补充释放周期字段。
     event_columns = {row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
     if "release_period" not in event_columns:
         conn.execute("ALTER TABLE events ADD COLUMN release_period TEXT")
+    if "actual_value" not in event_columns:
+        conn.execute("ALTER TABLE events ADD COLUMN actual_value REAL")
+    if "consensus_coefficient" not in event_columns:
+        conn.execute("ALTER TABLE events ADD COLUMN consensus_coefficient REAL")
     conn.commit()
     conn.close()
 
@@ -239,7 +246,7 @@ def refresh_turbo_pending():
         """
         WITH turbo AS (
             SELECT lower(to_addr) AS user_address,
-                   SUM(value) AS eligible_turbo_total,
+                   SUM(COALESCE(actual_value, 0)) AS eligible_turbo_total,
                    COUNT(*) AS turbo_count
             FROM events
             WHERE type='turbo_total'
@@ -334,6 +341,17 @@ def get_turbo_pending_snapshot():
     ).fetchone()[0]
     conn.close()
     return [dict(row) for row in rows], float(total or 0)
+
+def get_latest_consensus_coefficient():
+    """读取最近一笔新版涡轮事件中的共识系数。"""
+    conn = get_conn()
+    row = conn.execute(
+        """SELECT consensus_coefficient FROM events
+           WHERE type='turbo_total' AND consensus_coefficient IS NOT NULL
+           ORDER BY block DESC, id DESC LIMIT 1"""
+    ).fetchone()
+    conn.close()
+    return float(row[0]) if row else None
 
 def save_ai_daily_report(date_str, **kwargs):
     """保存或更新每日 AI 日报状态，支持失败后重试推送。"""
@@ -525,9 +543,10 @@ def insert_events_batch(events):
     if not events: return
     conn = get_conn()
     data = [(e["block"], e["tx"], e["type"], e.get("from",""), e.get("to",""),
-             e["value"], e.get("timestamp",""), e.get("release_period")) for e in events]
+             e["value"], e.get("actual_value"), e.get("consensus_coefficient"),
+             e.get("timestamp",""), e.get("release_period")) for e in events]
     conn.executemany(
-        "INSERT INTO events (block, tx, type, from_addr, to_addr, value, timestamp, release_period) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO events (block, tx, type, from_addr, to_addr, value, actual_value, consensus_coefficient, timestamp, release_period) VALUES (?,?,?,?,?,?,?,?,?,?)",
         data
     )
     conn.commit()

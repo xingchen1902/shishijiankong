@@ -21,6 +21,7 @@ from db import (
     set_monitor_state,
     refresh_turbo_pending,
     get_turbo_pending_snapshot,
+    get_latest_consensus_coefficient,
 )
 from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply
 from pusher import (
@@ -108,6 +109,7 @@ def get_today_data():
                COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='turbo_total' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN type='turbo_total' THEN COALESCE(actual_value, 0) ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='release_dynamic' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='burn_stake' AND lower(from_addr) NOT IN ('0x7736b5b84caddb7661d250d10e60e31f3c905c99','0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2','0x8501168656fcac4628f6910ccabea8b64ebe5bd4','0xd1d95292f450b665566df4c4255615ef4ed9bd0b') THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0),
@@ -125,14 +127,15 @@ def get_today_data():
     raw_so = float(row[2]) if row[2] else 0
     sb = float(row[3]) if row[3] else 0
     di = float(row[4]) if row[4] else 0
-    dynamic_release = float(row[5]) if row[5] else 0
-    burn_stake = float(row[6]) if row[6] else 0
-    permanent_bonus = float(row[7]) if row[7] else 0
-    permanent_stake = float(row[8]) if row[8] else 0
-    tr720 = float(row[9]) if row[9] else 0
-    bi = float(row[10]) if row[10] else 0
-    ec = int(row[11]) if row[11] else 0
-    lb = int(row[12]) if row[12] else 0
+    actual_turbo = float(row[5]) if row[5] else 0
+    dynamic_release = float(row[6]) if row[6] else 0
+    burn_stake = float(row[7]) if row[7] else 0
+    permanent_bonus = float(row[8]) if row[8] else 0
+    permanent_stake = float(row[9]) if row[9] else 0
+    tr720 = float(row[10]) if row[10] else 0
+    bi = float(row[11]) if row[11] else 0
+    ec = int(row[12]) if row[12] else 0
+    lb = int(row[13]) if row[13] else 0
     # 地址级统计全部转出，再扣除对应的永久质押黑洞转账。
     bo = max(raw_bo - permanent_bonus - tr720, 0)
     so = max(raw_so - permanent_stake, 0)
@@ -162,7 +165,7 @@ def get_today_data():
     displayed_bonus_bal = BONUS_BALANCE_CACHE["value"] if BONUS_BALANCE_CACHE["value"] is not None else bonus_bal
 
     result = {"date":today,"bonus_balance":round(max(displayed_bonus_bal,0),2),"bonus_balance_formula":round(max(bonus_bal,0),2),"bonus_withdraw":round(bo,2),
-            "static_burn":round(sb,2),"dynamic_in":round(di,2),
+            "static_burn":round(sb,2),"dynamic_in":round(di,2),"actual_turbo":round(actual_turbo,2),
             "burn_stake":round(burn_stake,2),
             "permanent_bonus":round(permanent_bonus,2),"permanent_stake":round(permanent_stake,2),
             "dynamic_turbo":round(dynamic_release,2),"dynamic_release":round(dynamic_release,2),"transfer_720":round(tr720,2),"stake_balance":round(max(displayed_stake_bal,0),2),
@@ -442,6 +445,7 @@ def get_today_trend():
         COALESCE(SUM(CASE WHEN lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' THEN value ELSE 0 END),0) as bonus_out_all,
         COALESCE(SUM(CASE WHEN type='release_static' THEN value ELSE 0 END),0) as static_burn,
         COALESCE(SUM(CASE WHEN type='turbo_total' THEN value ELSE 0 END),0) as dynamic_in,
+        COALESCE(SUM(CASE WHEN type='turbo_total' THEN COALESCE(actual_value, 0) ELSE 0 END),0) as actual_turbo,
         COALESCE(SUM(CASE WHEN type='release_dynamic' THEN value ELSE 0 END),0) as dynamic_release,
         COALESCE(SUM(CASE WHEN type='burn_stake' AND lower(from_addr) NOT IN ('0x7736b5b84caddb7661d250d10e60e31f3c905c99','0x100844ccd4af887d123c0ac4a9671e0ab5dd9de2','0x8501168656fcac4628f6910ccabea8b64ebe5bd4','0xd1d95292f450b665566df4c4255615ef4ed9bd0b') THEN value ELSE 0 END),0) as burn_stake,
         COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0) as transfer_720,
@@ -460,13 +464,14 @@ def get_today_trend():
         bo_all = float(r[1]) if r[1] else 0
         sb = float(r[2]) if r[2] else 0
         di = float(r[3]) if r[3] else 0
-        dynamic_release2 = float(r[4]) if r[4] else 0
-        burn_stake2 = float(r[5]) if r[5] else 0
-        t720 = float(r[6]) if r[6] else 0
-        permanent_bonus2 = float(r[7]) if r[7] else 0
-        permanent_stake2 = float(r[8]) if r[8] else 0
-        si2 = float(r[9]) if r[9] else 0
-        so_all = float(r[10]) if r[10] else 0
+        actual_turbo2 = float(r[4]) if r[4] else 0
+        dynamic_release2 = float(r[5]) if r[5] else 0
+        burn_stake2 = float(r[6]) if r[6] else 0
+        t720 = float(r[7]) if r[7] else 0
+        permanent_bonus2 = float(r[8]) if r[8] else 0
+        permanent_stake2 = float(r[9]) if r[9] else 0
+        si2 = float(r[10]) if r[10] else 0
+        so_all = float(r[11]) if r[11] else 0
         bo = max(bo_all - permanent_bonus2 - t720, 0)
         so2 = max(so_all - permanent_stake2, 0)
         # hour_label = "2026-06-24 13" -> "06/24 13:00"
@@ -482,6 +487,7 @@ def get_today_trend():
                        'bonus_withdraw': round(bo, 2),
                        'static_burn': round(sb, 2),
                        'dynamic_in': round(di, 2),
+                       'actual_turbo': round(actual_turbo2, 2),
                        'dynamic_turbo': round(dynamic_release2, 2),
                        'dynamic_release': round(dynamic_release2, 2),
                        'transfer_720': round(t720, 2),
@@ -864,7 +870,8 @@ def get_today():
 def get_turbo_pending():
     """只返回当前已经超过12小时且尚未被奖金池提取核销的地址余额。"""
     rows, total = get_turbo_pending_snapshot()
-    return {"data": rows, "total": round(total, 8)}
+    return {"data": rows, "total": round(total, 8),
+            "current_consensus_coefficient": get_latest_consensus_coefficient()}
 
 
 @app.get("/api/today-trend")

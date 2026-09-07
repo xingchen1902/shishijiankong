@@ -15,6 +15,8 @@ TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523
 SWAP_TOPIC = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
 RELEASE_TOPIC = "0x3b528916c884f3594beeba6799acd20b08bbcacea83d72c44e00360ea67ea24a"
 TURBO_TOPIC = "0x106f923f993c2149d49b4255ff723acafa1f2d94393f561d3eda32ae348f7241"
+# 新版涡轮事件：data[0]=原始涡轮量，data[1]=共识系数（万分比），data[2]=实际涡轮量。
+TURBO_TOPIC_V2 = "0x812be816db82c66cd18ca8457005cd84689642d8ac4d38599cc6af444a2dc72a"
 
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()
 TOKEN_GARK = "0x911f12D137D74E5917877f87cf8A8bB2FDde557f".lower()
@@ -450,7 +452,7 @@ class EventParser:
             "fromBlock": hex(from_block),
             "toBlock": hex(to_block),
             "address": TARGET_DYNAMIC,
-            "topics": [[RELEASE_TOPIC, TURBO_TOPIC]],
+            "topics": [[RELEASE_TOPIC, TURBO_TOPIC, TURBO_TOPIC_V2]],
         }])
         if dynamic_event_logs is None:
             release_logs = _rpc_call("eth_getLogs", [{
@@ -459,11 +461,11 @@ class EventParser:
             }])
             turbo_logs = _rpc_call("eth_getLogs", [{
                 "fromBlock": hex(from_block), "toBlock": hex(to_block),
-                "address": TARGET_DYNAMIC, "topics": [TURBO_TOPIC],
+                "address": TARGET_DYNAMIC, "topics": [[TURBO_TOPIC, TURBO_TOPIC_V2]],
             }])
         else:
             release_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == RELEASE_TOPIC]
-            turbo_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == TURBO_TOPIC]
+            turbo_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() in (TURBO_TOPIC, TURBO_TOPIC_V2)]
 
         release_periods = get_release_periods([
             log.get("transactionHash", "") for log in release_logs
@@ -497,7 +499,19 @@ class EventParser:
                 bn = int(log["blockNumber"], 16)
                 tx_hash = log.get("transactionHash", "").lower()
                 user = _topic_addr(topics[1]).lower()
-                amount_wei = int(raw_data[:64], 16)
+                topic0 = topics[0].lower()
+                words = [int(raw_data[index:index + 64], 16)
+                         for index in range(0, len(raw_data) - 63, 64)]
+                # 旧版事件没有系数；新版事件把原始量、系数和实际量一起写入链上。
+                if topic0 == TURBO_TOPIC_V2 and len(words) >= 3:
+                    amount_wei = words[0]
+                    coefficient_raw = words[1]
+                    actual_amount_wei = words[2]
+                    consensus_coefficient = coefficient_raw / 10000
+                else:
+                    amount_wei = words[0] if words else 0
+                    actual_amount_wei = amount_wei
+                    consensus_coefficient = None
                 valid_transfer = any(
                     from_addr == TARGET_DYNAMIC and to_addr == user and value == amount_wei
                     for from_addr, to_addr, value in ark_transfers.get(tx_hash, [])
@@ -515,6 +529,8 @@ class EventParser:
                     "block": bn, "tx": tx_hash, "type": "turbo_total",
                     "from": TARGET_DYNAMIC, "to": user,
                     "value": amount_wei / 10**DECIMALS,
+                    "actual_value": actual_amount_wei / 10**DECIMALS,
+                    "consensus_coefficient": consensus_coefficient,
                     "timestamp": estimate_block_time(bn),
                 })
 

@@ -226,6 +226,7 @@ td.neg { color: #ef4444; }
     <div class="rt-card blue"><div class="label">奖金池余额</div><div class="value" id="bonusBal">--</div></div>
     <div class="rt-card green"><div class="label">质押池余额</div><div class="value" id="stakeBal">--</div></div>
     <div class="rt-card teal"><div class="label">当前待领取 ARK</div><div class="value" id="turboPendingList">--</div></div>
+    <div class="rt-card teal"><div class="label">当前共识系数</div><div class="value" id="currentConsensusCoefficient">--</div></div>
     <div class="rt-card purple"><div class="label">今日事件</div><div class="value" id="eventCount">--</div><div class="sub">条</div></div>
     <div class="rt-card orange"><div class="label">最新区块</div><div class="value" id="lastBlock">--</div></div>
   </div>
@@ -240,6 +241,7 @@ td.neg { color: #ef4444; }
       <div class="today-item info"><div class="label">新增销毁质押</div><div class="value" id="tdBurnStake">--</div></div>
       <div class="today-item info"><div class="label">静态释放</div><div class="value" id="tdStatic">--</div></div>
       <div class="today-item teal"><div class="label">总涡轮</div><div class="value" id="tdTotalTurbo">--</div></div>
+      <div class="today-item teal"><div class="label">实际涡轮</div><div class="value" id="tdActualTurbo">--</div></div>
       <div class="today-item purple"><div class="label">动态释放</div><div class="value" id="tdTurbo">--</div></div>
       <div class="today-item info"><div class="label">转720天</div><div class="value" id="tdTransfer720">--</div></div>
       <div class="today-item pos"><div class="label">新增质押</div><div class="value" id="tdStakeIn">--</div></div>
@@ -278,11 +280,11 @@ td.neg { color: #ef4444; }
     <table>
       <thead>
         <tr>
-          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>总涡轮</th><th>静态释放</th><th>动态释放</th><th>转720天</th><th>收益永久质押</th><th>本金永久质押</th><th>新增销毁质押</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
+          <th>日期</th><th>奖金池余额</th><th>奖金池提取</th><th>总涡轮</th><th>实际涡轮</th><th>静态释放</th><th>动态释放</th><th>转720天</th><th>收益永久质押</th><th>本金永久质押</th><th>新增销毁质押</th><th>质押池余额</th><th>新增质押</th><th>赎回</th><th>净质押量</th>
         </tr>
       </thead>
       <tbody id="dailyBody">
-        <tr><td colspan="14" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr>
+        <tr><td colspan="15" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr>
       </tbody>
     </table>
   </div>
@@ -481,6 +483,7 @@ function updateToday(data) {
   document.getElementById("tdNetStake").textContent = fmt(data.net_stake);
   document.getElementById("tdStatic").textContent = fmt(data.static_burn);
   document.getElementById("tdTotalTurbo").textContent = fmt(data.dynamic_in);
+  document.getElementById("tdActualTurbo").textContent = fmt(data.actual_turbo);
 
   document.getElementById("tdTurbo").textContent = fmt(data.dynamic_turbo);
   document.getElementById("tdTransfer720").textContent = fmt(data.transfer_720);
@@ -493,6 +496,9 @@ function updateTurboPending(payload) {
   if (!container) return;
   var total = payload && payload.total != null ? payload.total : 0;
   container.textContent = fmt(total);
+  var coefficient = payload && payload.current_consensus_coefficient;
+  var coefficientEl = document.getElementById("currentConsensusCoefficient");
+  if (coefficientEl) coefficientEl.textContent = coefficient != null ? (Number(coefficient) * 100).toFixed(2) + "%" : "--";
 }
 
 function updateStakingOverview(payload) {
@@ -718,7 +724,7 @@ function updateDaily(resp) {
   var page = resp && resp.page ? resp.page : 1;
   var perPage = resp && resp.per_page ? resp.per_page : 10;
   if (!data || !data.length) {
-    tbody.innerHTML = "<tr><td colspan=\"14\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
+    tbody.innerHTML = "<tr><td colspan=\"15\" style=\"text-align:center;padding:20px;color:#64748b;\">暂<span>无历史数据</span></td></tr>";
     if (paginationEl) paginationEl.innerHTML = "";
     syncEventStreamHeight();
     return;
@@ -735,6 +741,7 @@ function updateDaily(resp) {
       "<td>" + fmt(r.bonus_balance) + "</td>" +
       "<td>" + fmt(r.bonus_withdraw) + "</td>" +
       "<td>" + fmt(r.dynamic_in) + "</td>" +
+      "<td>" + fmt(r.actual_turbo) + "</td>" +
       "<td>" + fmt(r.static_burn) + "</td>" +
       "<td>" + dtFmt + "</td>" +
       "<td>" + tr720Fmt + "</td>" +
