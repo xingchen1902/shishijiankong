@@ -7,7 +7,7 @@
 import os, sys, json, time, requests
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-from db import get_pool_address_daily_summaries, get_turbo_pending_snapshot
+from db import get_pool_address_daily_summaries, get_turbo_pending_snapshot, get_latest_consensus_coefficient
 from event_parser import get_balance, TOKEN_USDT, DECIMALS
 
 load_dotenv()
@@ -326,7 +326,7 @@ def _fmt_delta(value, decimals=2):
     n = float(value or 0)
     return f"{n:+,.{decimals}f}"
 
-def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
+def push_to_telegram(record, target_chat_id=None, title_suffix="汇总", include_consensus=False):
     """推送汇总到 Telegram"""
     if not TELEGRAM_BOT_TOKEN:
         print("  [Telegram] 跳过: 未配置 BOT_TOKEN")
@@ -339,6 +339,16 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
     except Exception as exc:
         print(f"  [Telegram] 读取待领取总和失败: {exc}")
         turbo_pending_total = 0
+
+    consensus_line = ""
+    if include_consensus:
+        try:
+            coefficient = get_latest_consensus_coefficient()
+            coefficient_text = f"{coefficient * 100:.2f}%" if coefficient is not None else "--"
+        except Exception as exc:
+            print(f"  [Telegram] 读取共识系数失败: {exc}")
+            coefficient_text = "--"
+        consensus_line = f"当前共识系数：{coefficient_text}\n"
 
     msg = f"""<b>📊 ARK 链上数据</b>
 <b>{record['date']} {title_suffix}</b>
@@ -365,7 +375,7 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总"):
 动态释放：{f(record.get('dynamic_release', record.get('dynamic_turbo',0)))} ARK
 总涡轮：{f(record.get('dynamic_in',0))} ARK
 实际涡轮：{f(record.get('actual_turbo',0))} ARK
-当前待领取：{f(turbo_pending_total)} ARK
+{consensus_line}当前待领取：{f(turbo_pending_total)} ARK
 
 <b>🔄 转720天</b>
 {_fmt_720(record)} ARK
