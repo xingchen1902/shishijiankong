@@ -869,9 +869,9 @@ def get_today():
 
 @app.get("/api/turbo-pending")
 def get_turbo_pending():
-    """只返回当前已经超过12小时且尚未被奖金池提取核销的地址余额。"""
-    rows, total = get_turbo_pending_snapshot()
-    return {"data": rows, "total": round(total, 8),
+    """只返回当前待领取总和与共识系数，不传输地址明细。"""
+    _, total = get_turbo_pending_snapshot()
+    return {"data": [], "total": round(total, 8),
             "current_consensus_coefficient": get_latest_consensus_coefficient()}
 
 
