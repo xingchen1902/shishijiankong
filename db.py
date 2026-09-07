@@ -250,8 +250,14 @@ def refresh_turbo_pending():
     conn = get_conn()
     # 只在第一次切换到“实际涡轮”口径时结转旧待领取余额。
     # 结转按地址保存，后续新领取只扣减切换后的领取，避免历史领取被重复扣除。
-    carry_key = "turbo_pending_actual_carry_initialized_v1"
+    consensus_key = "turbo_consensus_activation_at_v1"
+    transition_at = get_monitor_state(consensus_key)
+    if not transition_at:
+        transition_at = get_monitor_state("turbo_pending_actual_carry_initialized_v1") or now.strftime("%Y-%m-%d %H:%M:%S")
+        set_monitor_state(consensus_key, transition_at)
+    carry_key = "turbo_pending_actual_carry_initialized_v2"
     if not get_monitor_state(carry_key):
+        transition_eligible_before = (datetime.strptime(transition_at, "%Y-%m-%d %H:%M:%S") - timedelta(hours=12)).strftime("%Y-%m-%d %H:%M:%S")
         legacy_rows = conn.execute(
             """
             WITH turbo AS (
@@ -274,14 +280,15 @@ def refresh_turbo_pending():
             WHERE turbo.turbo_total - COALESCE(claims.claimed_total, 0) > 0
             GROUP BY turbo.user_address
             """,
-            (start_at, eligible_before, bonus_pool, start_at, now.strftime("%Y-%m-%d %H:%M:%S")),
+            (start_at, transition_eligible_before, bonus_pool, start_at, transition_at),
         ).fetchall()
+        conn.execute("DELETE FROM turbo_pending_carry")
         conn.executemany(
             "INSERT OR REPLACE INTO turbo_pending_carry (user_address, pending_total) VALUES (?, ?)",
             [(row["user_address"], float(row["pending_total"] or 0)) for row in legacy_rows],
         )
         conn.commit()
-        set_monitor_state(carry_key, now.strftime("%Y-%m-%d %H:%M:%S"))
+        set_monitor_state(carry_key, transition_at)
         print(f"[涡轮待领取] 已结转旧余额 {sum(float(row['pending_total'] or 0) for row in legacy_rows):.8f} ARK，共 {len(legacy_rows)} 个地址")
     rows = conn.execute(
         """
@@ -297,9 +304,9 @@ def refresh_turbo_pending():
               AND timestamp IS NOT NULL
               AND timestamp > datetime(
                     (SELECT state_value FROM monitor_state
-                     WHERE state_key='turbo_pending_actual_carry_initialized_v1'), '-12 hours')
+                     WHERE state_key='turbo_consensus_activation_at_v1'), '-12 hours')
               AND timestamp < (SELECT state_value FROM monitor_state
-                               WHERE state_key='turbo_pending_actual_carry_initialized_v1')
+                               WHERE state_key='turbo_consensus_activation_at_v1')
               AND timestamp <= ?
               AND to_addr IS NOT NULL
             GROUP BY lower(to_addr)
@@ -310,7 +317,7 @@ def refresh_turbo_pending():
             FROM events
             WHERE type='turbo_total'
               AND timestamp IS NOT NULL
-              AND timestamp >= (SELECT state_value FROM monitor_state WHERE state_key='turbo_pending_actual_carry_initialized_v1')
+              AND timestamp >= (SELECT state_value FROM monitor_state WHERE state_key='turbo_consensus_activation_at_v1')
               AND timestamp <= ?
               AND to_addr IS NOT NULL
             GROUP BY lower(to_addr)
@@ -321,7 +328,7 @@ def refresh_turbo_pending():
             FROM events
             WHERE type='bonus_withdraw'
               AND lower(from_addr)=?
-              AND timestamp >= (SELECT state_value FROM monitor_state WHERE state_key='turbo_pending_actual_carry_initialized_v1')
+              AND timestamp >= (SELECT state_value FROM monitor_state WHERE state_key='turbo_consensus_activation_at_v1')
               AND to_addr IS NOT NULL
             GROUP BY lower(to_addr)
         )
