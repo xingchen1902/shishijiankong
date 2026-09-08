@@ -516,12 +516,15 @@ function updateReleasePeriodSummary(payload) {
   if (!container || !payload) return;
   var labels = {dynamic: "动态释放", static: "静态释放"};
   var types = ["dynamic", "static"];
+  var periods = ["0天（立即释放）", "10天", "20天", "30天", "60天", "未知"];
   container.innerHTML = types.map(function(type) {
     var rows = Array.isArray(payload[type]) ? payload[type] : [];
-    var total = rows.reduce(function(sum, row) { return sum + Number(row.total_amount || 0); }, 0);
-    var body = rows.length ? rows.map(function(row) {
-      return '<div class="release-period-row"><span>' + esc(row.period) + '</span><b>' + fmt(row.total_amount) + ' ARK</b></div>';
-    }).join("") : '<div class="release-period-empty">暂无数据</div>';
+    var amounts = {};
+    rows.forEach(function(row) { amounts[row.period] = Number(row.total_amount || 0); });
+    var total = periods.reduce(function(sum, period) { return sum + (amounts[period] || 0); }, 0);
+    var body = periods.map(function(period) {
+      return '<div class="release-period-row"><span>' + esc(period) + '</span><b>' + fmt(amounts[period] || 0) + ' ARK</b></div>';
+    }).join("");
     return '<div class="release-period-panel"><div class="release-period-heading">' + labels[type] + '</div>' + body + '<div class="release-period-total"><span>合计</span><b>' + fmt(total) + ' ARK</b></div></div>';
   }).join("");
   status.textContent = payload.activation_at ? "· 上线后累计" : "";
