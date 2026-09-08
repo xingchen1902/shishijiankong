@@ -22,7 +22,13 @@ from event_parser import (
     EventParser, get_balance, get_transaction_by_hash,
     BONUS_POOL, STAKE_POOL, BURN_ADDR, BURN_ADDR2, TOKEN_ARK, DECIMALS,
 )
-from pusher import push_to_feishu, push_to_telegram, push_burst_alert, push_static_release_top30_excel
+from pusher import (
+    push_to_feishu,
+    push_to_telegram,
+    push_burst_alert,
+    push_static_release_top30_excel,
+    push_release_period_summary_to_telegram,
+)
 from ai_analyzer import generate_and_push_daily_report
 
 BJT = timezone(timedelta(hours=8))
@@ -605,6 +611,7 @@ class DailyAggregator:
             record = self._attach_dex_snapshot(record)
             push_to_feishu(record)
             push_to_telegram(record)
+            push_release_period_summary_to_telegram(date_str)
             generate_and_push_daily_report(date_str, record)
             if push_static_release_top30_excel(date_str):
                 set_monitor_state(f"static_release_top30_sent:{date_str}", "1")

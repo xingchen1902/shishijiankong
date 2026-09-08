@@ -7,7 +7,12 @@
 import os, sys, json, time, requests
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-from db import get_pool_address_daily_summaries, get_turbo_pending_snapshot, get_latest_consensus_coefficient
+from db import (
+    get_pool_address_daily_summaries,
+    get_turbo_pending_snapshot,
+    get_latest_consensus_coefficient,
+    get_release_period_summary,
+)
 from event_parser import get_balance, TOKEN_USDT, DECIMALS
 
 load_dotenv()
@@ -74,6 +79,69 @@ def get_telegram_chat_ids():
 
 def get_telegram_no_button_chat_ids():
     return set(_parse_chat_ids(_no_button_chat_ids))
+
+
+def push_release_period_summary_to_telegram(date_str, realtime=False):
+    """只向正能量小组发送动态/静态释放周期汇总。"""
+    if not TELEGRAM_BOT_TOKEN:
+        print("  [释放周期 Telegram] 跳过: 未配置 BOT_TOKEN")
+        return False
+
+    try:
+        summary = get_release_period_summary(date_str)
+    except Exception as exc:
+        print(f"  [释放周期 Telegram] 统计读取失败: {exc}")
+        return False
+
+    periods = (
+        ("0天", "0天（立即释放）"),
+        ("10天", "10天"),
+        ("20天", "20天"),
+        ("30天", "30天"),
+        ("60天", "60天"),
+        ("未知", "未知"),
+    )
+
+    def build_section(title, rows):
+        values = {row.get("period"): float(row.get("total_amount") or 0) for row in rows}
+        total = sum(values.values())
+        lines = [f"<b>【{title}释放周期】</b>"]
+        for label, key in periods:
+            amount = values.get(key, 0)
+            ratio = amount / total * 100 if total else 0
+            lines.append(f"{label}：{amount:,.2f} ARK（{ratio:.2f}%）")
+        lines.append(f"合计：{total:,.2f} ARK（100%）")
+        return "\n".join(lines)
+
+    if realtime:
+        heading = f"<b>📡 当日实时释放汇总｜{date_str}</b>\n🕒 更新时间：{datetime.now(BJT).strftime('%Y-%m-%d %H:%M:%S')}"
+        footer = "📡 实时监控 · 当日截至当前时间"
+    else:
+        heading = f"<b>📊 前一日释放汇总｜{date_str}</b>"
+        footer = "📅 完整自然日统计"
+    message = "\n\n".join([
+        heading,
+        build_section("动态", summary.get("dynamic", [])),
+        build_section("静态", summary.get("static", [])),
+        footer,
+    ])
+
+    response = requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        json={
+            "chat_id": STAKING_RATE_CHAT_ID,
+            "text": message,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        },
+        timeout=15,
+    )
+    data = response.json()
+    if data.get("ok"):
+        print(f"  [释放周期 Telegram] 推送成功 {date_str} realtime={realtime}")
+        return True
+    print(f"  [释放周期 Telegram] 推送失败: {data.get('description', data)}")
+    return False
 
 def get_feishu_token():
     r = requests.post("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",

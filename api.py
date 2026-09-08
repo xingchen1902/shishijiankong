@@ -32,6 +32,8 @@ from pusher import (
     push_to_telegram,
     push_staking_snapshot_to_feishu,
     push_staking_rate_change_to_telegram,
+    push_release_period_summary_to_telegram,
+    STAKING_RATE_CHAT_ID,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
 )
@@ -764,6 +766,8 @@ def _send_today(record, chat_id=None):
         title_suffix="实时数据",
         include_consensus=True,
     )
+    if chat_id == STAKING_RATE_CHAT_ID:
+        push_release_period_summary_to_telegram(record["date"], realtime=True)
 
 def _send_chat_id(chat_id, title=""):
     text = f"当前群 ID：{chat_id}"
