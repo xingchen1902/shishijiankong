@@ -525,10 +525,9 @@ function updateReleasePeriodSummary(payload) {
     var amounts = {};
     rows.forEach(function(row) { amounts[row.period] = Number(row.total_amount || 0); });
     var total = periods.reduce(function(sum, period) { return sum + (amounts[period] || 0); }, 0);
-    var maxAmount = Math.max.apply(null, periods.map(function(period) { return amounts[period] || 0; }).concat([0]));
     var body = periods.map(function(period) {
       var amount = amounts[period] || 0;
-      var width = maxAmount > 0 ? Math.min(100, amount / maxAmount * 100) : 0;
+      var width = total > 0 ? Math.min(100, amount / total * 100) : 0;
       return '<div class="release-period-row"><span>' + esc(period) + '</span><div class="release-period-bar"><i style="width:' + width.toFixed(2) + '%"></i></div><b>' + fmt(amount) + ' ARK</b></div>';
     }).join("");
     return '<div class="release-period-panel"><div class="release-period-heading">' + labels[type] + '</div>' + body + '<div class="release-period-total"><span>合计</span><b>' + fmt(total) + ' ARK</b></div></div>';
