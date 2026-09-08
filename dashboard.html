@@ -42,15 +42,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .today-item.purple .value { color: #a78bfa; }
 .today-item.teal .value { color: #2dd4bf; }
 .today-item .sub { font-size: 11px; color: #475569; margin-top: 2px; }
-.release-period-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.release-period-panel { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; min-width: 0; }
-.release-period-heading { color: #e2e8f0; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
-.release-period-row, .release-period-total { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #1f2937; }
-.release-period-row span, .release-period-total span { color: #64748b; font-size: 11px; }
-.release-period-row b { color: #cbd5e1; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.release-period-total { border-bottom: none; padding-bottom: 0; }
-.release-period-total span { color: #94a3b8; font-weight: 700; }
-.release-period-total b { color: #2dd4bf; font-size: 15px; white-space: nowrap; }
+.release-period-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.release-period-panel { background: linear-gradient(145deg, #111d32, #0d1729); border: 1px solid #334155; border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.release-period-heading { display: flex; align-items: center; gap: 8px; color: #e2e8f0; font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.release-period-heading::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 0 10px rgba(45,212,191,.55); }
+.release-period-row { display: grid; grid-template-columns: 108px minmax(40px, 1fr) auto; gap: 10px; align-items: center; min-height: 30px; border-bottom: 1px solid rgba(51,65,85,.55); }
+.release-period-row span { color: #94a3b8; font-size: 11px; white-space: nowrap; }
+.release-period-row b { color: #d6e0ec; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.release-period-bar { height: 4px; background: #223047; border-radius: 99px; overflow: hidden; }
+.release-period-bar i { display: block; height: 100%; min-width: 0; background: linear-gradient(90deg, #14b8a6, #60a5fa); border-radius: inherit; }
+.release-period-total { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(20,184,166,.09); }
+.release-period-total span { color: #94a3b8; font-size: 11px; font-weight: 700; }
+.release-period-total b { color: #2dd4bf; font-size: 16px; white-space: nowrap; }
 .release-period-empty, .release-period-loading { color: #64748b; font-size: 11px; padding: 6px 0; }
 .staking-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; min-width: 0; }
 .staking-period { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; min-width: 0; }
@@ -522,8 +525,11 @@ function updateReleasePeriodSummary(payload) {
     var amounts = {};
     rows.forEach(function(row) { amounts[row.period] = Number(row.total_amount || 0); });
     var total = periods.reduce(function(sum, period) { return sum + (amounts[period] || 0); }, 0);
+    var maxAmount = Math.max.apply(null, periods.map(function(period) { return amounts[period] || 0; }).concat([0]));
     var body = periods.map(function(period) {
-      return '<div class="release-period-row"><span>' + esc(period) + '</span><b>' + fmt(amounts[period] || 0) + ' ARK</b></div>';
+      var amount = amounts[period] || 0;
+      var width = maxAmount > 0 ? Math.min(100, amount / maxAmount * 100) : 0;
+      return '<div class="release-period-row"><span>' + esc(period) + '</span><div class="release-period-bar"><i style="width:' + width.toFixed(2) + '%"></i></div><b>' + fmt(amount) + ' ARK</b></div>';
     }).join("");
     return '<div class="release-period-panel"><div class="release-period-heading">' + labels[type] + '</div>' + body + '<div class="release-period-total"><span>合计</span><b>' + fmt(total) + ' ARK</b></div></div>';
   }).join("");
