@@ -57,10 +57,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .release-period-total b { color: #2dd4bf; font-size: 16px; white-space: nowrap; }
 .release-period-empty, .release-period-loading { color: #64748b; font-size: 11px; padding: 6px 0; }
 .release-summary-card { margin-top: 20px; }
+.release-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.release-summary-panel { min-width: 0; background: linear-gradient(145deg, #111d32, #0d1729); border: 1px solid #334155; border-radius: 12px; padding: 12px; }
+.release-summary-panel-title { display: flex; align-items: center; gap: 8px; color: #e2e8f0; font-size: 13px; font-weight: 700; margin: 0 2px 10px; }
+.release-summary-panel-title::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 0 10px rgba(45,212,191,.55); }
 .release-summary-wrap { overflow-x: auto; }
-.release-summary-table { min-width: 900px; }
+.release-summary-table { width: 100%; min-width: 560px; table-layout: fixed; }
 .release-summary-table th { background: #172338; color: #cbd5e1; font-size: 12px; }
-.release-summary-table thead tr:first-child th { color: #2dd4bf; font-size: 13px; }
+.release-summary-table thead tr:first-child th { color: #2dd4bf; font-size: 12px; }
 .release-summary-table td { color: #cbd5e1; font-size: 12px; text-align: right; white-space: nowrap; }
 .release-summary-table td:first-child, .release-summary-table th:first-child { text-align: left; }
 .release-summary-table tbody tr:hover { background: rgba(45,212,191,.05); }
@@ -225,6 +229,7 @@ td.neg { color: #ef4444; }
   .staking-overview { grid-template-columns: minmax(0, 1fr); }
   .pool-address-overview { grid-template-columns: minmax(0, 1fr); }
   .release-period-grid { grid-template-columns: minmax(0, 1fr); }
+  .release-summary-grid { grid-template-columns: minmax(0, 1fr); }
 }
 </style>
 </head>
@@ -399,14 +404,25 @@ td.neg { color: #ef4444; }
 
 <div class="today-card release-summary-card">
   <div class="today-title">📦 释放汇总 · 上线后累计 <span id="releaseSummaryStatus"></span></div>
-  <div class="table-wrap release-summary-wrap">
-    <table class="release-summary-table">
-      <thead>
-        <tr><th rowspan="2">日期</th><th colspan="5">静态释放</th><th colspan="5">动态释放</th></tr>
-        <tr><th>0</th><th>10</th><th>20</th><th>30</th><th>60</th><th>0</th><th>10</th><th>20</th><th>30</th><th>60</th></tr>
-      </thead>
-      <tbody id="releaseSummaryBody"><tr><td colspan="11" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr></tbody>
-    </table>
+  <div class="release-summary-grid">
+    <div class="release-summary-panel">
+      <div class="release-summary-panel-title">静态释放</div>
+      <div class="table-wrap release-summary-wrap">
+        <table class="release-summary-table">
+          <thead><tr><th>日期</th><th>0</th><th>10</th><th>20</th><th>30</th><th>60</th></tr></thead>
+          <tbody id="releaseSummaryStaticBody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="release-summary-panel">
+      <div class="release-summary-panel-title">动态释放</div>
+      <div class="table-wrap release-summary-wrap">
+        <table class="release-summary-table">
+          <thead><tr><th>日期</th><th>0</th><th>10</th><th>20</th><th>30</th><th>60</th></tr></thead>
+          <tbody id="releaseSummaryDynamicBody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -538,22 +554,25 @@ function updateToday(data) {
 }
 
 function updateReleaseSummaryTable(payload) {
-  var tbody = document.getElementById("releaseSummaryBody");
+  var staticBody = document.getElementById("releaseSummaryStaticBody");
+  var dynamicBody = document.getElementById("releaseSummaryDynamicBody");
   var status = document.getElementById("releaseSummaryStatus");
-  if (!tbody || !payload) return;
+  if (!staticBody || !dynamicBody || !payload) return;
   var rows = Array.isArray(payload.data) ? payload.data : [];
   var periods = ["0天（立即释放）", "10天", "20天", "30天", "60天"];
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:20px;color:#64748b;">暂无上线后的释放数据</td></tr>';
-  } else {
-    tbody.innerHTML = rows.map(function(row) {
-      var cells = ["static", "dynamic"].map(function(type) {
-        var values = row[type] || {};
-        return periods.map(function(period) { return '<td>' + fmt(values[period] || 0) + '</td>'; }).join("");
-      }).join("");
+  function render(type, target) {
+    if (!rows.length) {
+      target.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">暂无上线后的释放数据</td></tr>';
+      return;
+    }
+    target.innerHTML = rows.map(function(row) {
+      var values = row[type] || {};
+      var cells = periods.map(function(period) { return '<td>' + fmt(values[period] || 0) + '</td>'; }).join("");
       return '<tr><td>' + esc(row.date) + '</td>' + cells + '</tr>';
     }).join("");
   }
+  render("static", staticBody);
+  render("dynamic", dynamicBody);
   status.textContent = payload.activation_at ? "· 按日期统计" : "";
 }
 
