@@ -492,6 +492,7 @@ function updateHeader(todayInfo) {
 
 function updateToday(data) {
   if (!data) return;
+  updateReleasePeriodSummary(data.release_period_summary);
   document.getElementById("bonusBal").textContent = fmt(data.bonus_balance);
   document.getElementById("stakeBal").textContent = fmt(data.stake_balance);
   document.getElementById("eventCount").textContent = fmtInt(data.event_count);
@@ -1010,12 +1011,6 @@ function loadTurboPending() {
   });
 }
 
-function loadReleasePeriodSummary() {
-  return fetchAPI("/api/release-period-summary").then(function(payload) {
-    updateReleasePeriodSummary(payload);
-  }).catch(function(err) { logLoadError("release period summary", err); });
-}
-
 function loadStakingOverview() {
   return fetchAPI("/api/staking-overview").then(function(payload) {
     updateStakingOverview(payload);
@@ -1069,7 +1064,6 @@ function loadAll() {
   // 独立渲染：趋势查询较慢时，不再阻塞其余看板卡片出现。
   loadToday();
   loadTurboPending();
-  loadReleasePeriodSummary();
   loadStakingOverview();
   loadPoolAddressOverview();
   loadDaily();

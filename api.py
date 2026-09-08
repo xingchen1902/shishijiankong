@@ -865,7 +865,10 @@ threading.Thread(target=turbo_pending_refresh_worker, daemon=True).start()
 
 @app.get("/api/today")
 def get_today():
-    return {"data": get_today_data()}
+    data = get_today_data()
+    # 周期统计与当日实时汇总使用同一次请求和刷新节奏，避免页面两个区域加载不同步。
+    data["release_period_summary"] = get_release_period_summary(data["date"])
+    return {"data": data}
 
 
 @app.get("/api/turbo-pending")
