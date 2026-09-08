@@ -97,6 +97,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .reserve-row:last-child { border-bottom: none; }
 .reserve-row .label { color: #94a3b8; font-size: 11px; white-space: nowrap; }
 .pool-address-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.middle-pool-address { grid-template-columns: minmax(0, 1fr); }
 .pool-address-card { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; min-width: 0; }
 .pool-address-title { color: #e2e8f0; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
 .pool-address-subtitle { color: #64748b; font-size: 10px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -295,14 +296,6 @@ td.neg { color: #ef4444; }
     </div>
   </div>
 
-  <!-- 监控地址与底池交互 -->
-  <div class="today-card">
-    <div class="today-title">💱 当日实时底池交互 <span id="poolAddressStatus"></span></div>
-    <div class="pool-address-overview" id="poolAddressOverview">
-      <div class="pool-address-status">加载中...</div>
-    </div>
-  </div>
-
   <!-- 分时走势图 -->
   <div class="chart-card">
     <div class="today-title">📈 最近24小时走势</div>
@@ -399,6 +392,14 @@ td.neg { color: #ef4444; }
           <div class="dex-detail-row"><div class="dex-detail-label">LP 地址</div><div class="dex-detail-value"><a id="dexPairAddr" href="#" target="_blank">--</a></div></div>
           <div class="dex-detail-row"><div class="dex-detail-label">ARK</div><div class="dex-detail-value"><a id="dexArkAddr" href="#" target="_blank">--</a></div></div>
           <div class="dex-detail-row"><div class="dex-detail-label">USDT</div><div class="dex-detail-value"><a id="dexUsdtAddr" href="#" target="_blank">--</a></div></div>
+        </div>
+      </div>
+
+      <!-- 中间栏：监控地址与底池交互 -->
+      <div class="today-card middle-pool-address-card">
+        <div class="today-title">💱 当日实时底池交互 <span id="poolAddressStatus"></span></div>
+        <div class="pool-address-overview middle-pool-address" id="poolAddressOverview">
+          <div class="pool-address-status">加载中...</div>
         </div>
       </div>
 
