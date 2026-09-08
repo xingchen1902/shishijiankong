@@ -62,7 +62,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .release-summary-panel-title { display: flex; align-items: center; gap: 8px; color: #e2e8f0; font-size: 13px; font-weight: 700; margin: 0 2px 10px; }
 .release-summary-panel-title::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 0 10px rgba(45,212,191,.55); }
 .release-summary-wrap { overflow-x: auto; }
-.release-summary-table { width: 100%; min-width: 700px; table-layout: fixed; }
+.release-summary-table { width: 100%; min-width: 0; table-layout: fixed; }
 .release-summary-table th { background: #172338; color: #cbd5e1; font-size: 12px; }
 .release-summary-table thead tr:first-child th { color: #2dd4bf; font-size: 12px; }
 .release-summary-table td { color: #cbd5e1; font-size: 12px; text-align: right; white-space: nowrap; }
@@ -346,9 +346,10 @@ td.neg { color: #ef4444; }
             <thead><tr><th>日期</th><th>0天</th><th>10天</th><th>20天</th><th>30天</th><th>60天</th><th>未知</th><th>合计</th></tr></thead>
             <tbody id="releaseSummaryDynamicBody"><tr><td colspan="8" style="text-align:center;padding:20px;color:#64748b;">加载中...</td></tr></tbody>
           </table>
-        </div>
-      </div>
     </div>
+  </div>
+  <div class="pagination" id="releaseSummaryPagination" style="display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap;"></div>
+</div>
   </div>
 
     </div>
@@ -558,7 +559,8 @@ function updateReleaseSummaryTable(payload) {
   var staticBody = document.getElementById("releaseSummaryStaticBody");
   var dynamicBody = document.getElementById("releaseSummaryDynamicBody");
   var status = document.getElementById("releaseSummaryStatus");
-  if (!staticBody || !dynamicBody || !payload) return;
+  var pagination = document.getElementById("releaseSummaryPagination");
+  if (!staticBody || !dynamicBody || !pagination || !payload) return;
   var rows = Array.isArray(payload.data) ? payload.data : [];
   var periods = ["0天（立即释放）", "10天", "20天", "30天", "60天", "未知"];
   function render(type, target) {
@@ -576,7 +578,20 @@ function updateReleaseSummaryTable(payload) {
   render("static", staticBody);
   render("dynamic", dynamicBody);
   status.textContent = payload.activation_at ? "· 已完成日期" : "";
+  var totalPages = Math.max(1, Math.ceil(Number(payload.total || 0) / Number(payload.per_page || 10)));
+  var page = Number(payload.page || 1);
+  pagination.innerHTML = totalPages > 1
+    ? '<button onclick="goToReleaseSummaryPage(' + (page - 1) + ')" ' + (page <= 1 ? 'disabled' : '') + '>上一页</button>'
+      + '<span>' + page + ' / ' + totalPages + '</span>'
+      + '<button onclick="goToReleaseSummaryPage(' + (page + 1) + ')" ' + (page >= totalPages ? 'disabled' : '') + '>下一页</button>'
+    : '';
 }
+
+window.releaseSummaryPage = 1;
+window.goToReleaseSummaryPage = function(page) {
+  window.releaseSummaryPage = Math.max(1, page);
+  loadToday();
+};
 
 function updateReleasePeriodSummary(payload) {
   var container = document.getElementById("releasePeriodSummary");
@@ -1051,7 +1066,7 @@ function logLoadError(name, err) {
 }
 
 function loadToday() {
-  return fetchAPI("/api/today").then(function(today) {
+  return fetchAPI("/api/today?release_page=" + (window.releaseSummaryPage || 1) + "&release_per_page=10").then(function(today) {
     updateHeader(today);
     updateToday(today ? today.data : null);
   }).catch(function(err) { logLoadError("today", err); });

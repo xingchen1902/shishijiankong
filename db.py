@@ -195,6 +195,17 @@ def init_db():
             pending_total REAL NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS release_period_daily_summary (
+            date TEXT NOT NULL,
+            release_type TEXT NOT NULL,
+            release_period TEXT NOT NULL,
+            total_amount REAL DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY(date, release_type, release_period)
+        );
+        CREATE INDEX IF NOT EXISTS idx_release_period_daily_date
+            ON release_period_daily_summary(date DESC);
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
     for column in ("burn_stake", "dynamic_release", "actual_turbo", "permanent_bonus", "permanent_stake"):
@@ -798,33 +809,65 @@ def get_release_period_summary(date_str=None):
     result.update({"date": target_date, "activation_at": activation_at})
     return result
 
-def get_release_period_daily_summary():
-    """返回功能上线后的每日释放周期汇总，按日期倒序排列。"""
+def refresh_release_period_daily_summary(date_str):
+    """只重算一个已完成日期，避免每次看板刷新扫描全部历史事件。"""
     activation_at = get_monitor_state(RELEASE_PERIOD_SUMMARY_START_KEY)
-    today = datetime.now(BJT).strftime("%Y-%m-%d")
     if not activation_at:
-        return {"activation_at": None, "data": []}
+        return
+    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    start_at = max(activation_at, f"{date_str} 00:00:00")
+    end_at = f"{next_date} 00:00:00"
     conn = get_conn()
     rows = conn.execute(
         """
-        SELECT substr(timestamp, 1, 10) AS date, type,
+        SELECT type,
                COALESCE(NULLIF(release_period, ''), '未知') AS release_period,
                COALESCE(SUM(value), 0) AS total_amount
         FROM events
         WHERE type IN ('release_dynamic', 'release_static')
           AND timestamp >= ? AND timestamp < ?
-        GROUP BY substr(timestamp, 1, 10), type,
-                 COALESCE(NULLIF(release_period, ''), '未知')
-        ORDER BY date DESC
+        GROUP BY type, COALESCE(NULLIF(release_period, ''), '未知')
         """,
-        # 与每日历史汇总保持一致：排除当天，只统计已经结束的日期。
-        (activation_at, f"{today} 00:00:00"),
+        (start_at, end_at),
     ).fetchall()
+    conn.execute("DELETE FROM release_period_daily_summary WHERE date=?", (date_str,))
+    conn.executemany(
+        "INSERT INTO release_period_daily_summary (date, release_type, release_period, total_amount) VALUES (?, ?, ?, ?)",
+        [(date_str, "dynamic" if row["type"] == "release_dynamic" else "static",
+          row["release_period"], float(row["total_amount"] or 0)) for row in rows],
+    )
+    conn.commit()
     conn.close()
 
-    dates = {}
-    for row in rows:
-        item = dates.setdefault(row["date"], {"date": row["date"], "static": {}, "dynamic": {}})
-        release_type = "dynamic" if row["type"] == "release_dynamic" else "static"
-        item[release_type][row["release_period"]] = round(float(row["total_amount"] or 0), 8)
-    return {"activation_at": activation_at, "data": list(dates.values())}
+def get_release_period_daily_summary(page=1, per_page=10):
+    """返回已完成日期的分页汇总；只重算前一天，读取部分使用轻量汇总表。"""
+    activation_at = get_monitor_state(RELEASE_PERIOD_SUMMARY_START_KEY)
+    if not activation_at:
+        return {"activation_at": None, "data": [], "total": 0, "page": 1, "per_page": per_page}
+    today = datetime.now(BJT).strftime("%Y-%m-%d")
+    yesterday = (datetime.now(BJT) - timedelta(days=1)).strftime("%Y-%m-%d")
+    if yesterday >= activation_at[:10]:
+        refresh_release_period_daily_summary(yesterday)
+
+    page = max(1, int(page or 1))
+    per_page = min(20, max(1, int(per_page or 10)))
+    conn = get_conn()
+    dates = conn.execute(
+        "SELECT DISTINCT date FROM release_period_daily_summary WHERE date < ? ORDER BY date DESC LIMIT ? OFFSET ?",
+        (today, per_page, (page - 1) * per_page),
+    ).fetchall()
+    total = conn.execute(
+        "SELECT COUNT(DISTINCT date) FROM release_period_daily_summary WHERE date < ?", (today,)
+    ).fetchone()[0]
+    result = []
+    for date_row in dates:
+        date_str = date_row["date"]
+        item = {"date": date_str, "static": {}, "dynamic": {}}
+        for row in conn.execute(
+            "SELECT release_type, release_period, total_amount FROM release_period_daily_summary WHERE date=?",
+            (date_str,),
+        ).fetchall():
+            item[row["release_type"]][row["release_period"]] = round(float(row["total_amount"] or 0), 8)
+        result.append(item)
+    conn.close()
+    return {"activation_at": activation_at, "data": result, "total": int(total or 0), "page": page, "per_page": per_page}

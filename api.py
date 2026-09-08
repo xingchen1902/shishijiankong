@@ -865,11 +865,11 @@ threading.Thread(target=dex_daily_snapshot_worker, daemon=True).start()
 threading.Thread(target=turbo_pending_refresh_worker, daemon=True).start()
 
 @app.get("/api/today")
-def get_today():
+def get_today(release_page: int = 1, release_per_page: int = 10):
     data = get_today_data()
     # 周期统计与当日实时汇总使用同一次请求和刷新节奏，避免页面两个区域加载不同步。
     data["release_period_summary"] = get_release_period_summary(data["date"])
-    data["release_period_daily_summary"] = get_release_period_daily_summary()
+    data["release_period_daily_summary"] = get_release_period_daily_summary(release_page, release_per_page)
     return {"data": data}
 
 
