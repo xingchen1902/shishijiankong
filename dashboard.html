@@ -281,7 +281,7 @@ td.neg { color: #ef4444; }
   </div>
 
   <div class="today-card">
-    <div class="today-title">🧭 释放周期统计 <span id="releasePeriodStatus"></span></div>
+    <div class="today-title">🧭 当日释放实时数据 <span id="releasePeriodStatus"></span></div>
     <div class="release-period-grid" id="releasePeriodSummary">
       <div class="release-period-panel"><div class="release-period-heading">动态释放</div><div class="release-period-loading">加载中...</div></div>
       <div class="release-period-panel"><div class="release-period-heading">静态释放</div><div class="release-period-loading">加载中...</div></div>
@@ -613,7 +613,7 @@ function updateReleasePeriodSummary(payload) {
     }).join("");
     return '<div class="release-period-panel"><div class="release-period-heading">' + labels[type] + '</div>' + body + '<div class="release-period-total"><span>合计</span><b>' + fmt(total) + ' ARK</b></div></div>';
   }).join("");
-  status.textContent = payload.activation_at ? "· 上线后累计" : "";
+  status.textContent = "";
 }
 
 function updateTurboPending(payload) {
