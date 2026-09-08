@@ -797,3 +797,33 @@ def get_release_period_summary(date_str=None):
         result[release_type].sort(key=lambda item: (order.get(item["period"], 99), item["period"]))
     result.update({"date": target_date, "activation_at": activation_at})
     return result
+
+def get_release_period_daily_summary():
+    """返回功能上线后的每日释放周期汇总，按日期倒序排列。"""
+    activation_at = get_monitor_state(RELEASE_PERIOD_SUMMARY_START_KEY)
+    today = datetime.now(BJT).strftime("%Y-%m-%d")
+    if not activation_at:
+        return {"activation_at": None, "data": []}
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT substr(timestamp, 1, 10) AS date, type,
+               COALESCE(NULLIF(release_period, ''), '未知') AS release_period,
+               COALESCE(SUM(value), 0) AS total_amount
+        FROM events
+        WHERE type IN ('release_dynamic', 'release_static')
+          AND timestamp >= ? AND timestamp < ?
+        GROUP BY substr(timestamp, 1, 10), type,
+                 COALESCE(NULLIF(release_period, ''), '未知')
+        ORDER BY date DESC
+        """,
+        (activation_at, f"{today} 23:59:59"),
+    ).fetchall()
+    conn.close()
+
+    dates = {}
+    for row in rows:
+        item = dates.setdefault(row["date"], {"date": row["date"], "static": {}, "dynamic": {}})
+        release_type = "dynamic" if row["type"] == "release_dynamic" else "static"
+        item[release_type][row["release_period"]] = round(float(row["total_amount"] or 0), 8)
+    return {"activation_at": activation_at, "data": list(dates.values())}

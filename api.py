@@ -23,6 +23,7 @@ from db import (
     get_turbo_pending_snapshot,
     get_latest_consensus_coefficient,
     get_release_period_summary,
+    get_release_period_daily_summary,
 )
 from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply
 from pusher import (
@@ -868,6 +869,7 @@ def get_today():
     data = get_today_data()
     # 周期统计与当日实时汇总使用同一次请求和刷新节奏，避免页面两个区域加载不同步。
     data["release_period_summary"] = get_release_period_summary(data["date"])
+    data["release_period_daily_summary"] = get_release_period_daily_summary()
     return {"data": data}
 
 
