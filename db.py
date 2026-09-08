@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 BJT = timezone(timedelta(hours=8))
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DB_PATH = os.path.join(DB_DIR, "ark_monitor.db")
+RELEASE_PERIOD_SUMMARY_START_KEY = "release_period_summary_activation_at_v1"
 
 def get_conn():
     os.makedirs(DB_DIR, exist_ok=True)
@@ -213,6 +214,12 @@ def init_db():
         ON events(block DESC, id DESC, consensus_coefficient)
         WHERE type='turbo_total' AND consensus_coefficient IS NOT NULL
     """)
+    # 周期统计只从功能首次上线时间开始，不回填此前的历史释放数据。
+    activation_at = datetime.now(BJT).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "INSERT OR IGNORE INTO monitor_state (state_key, state_value) VALUES (?, ?)",
+        (RELEASE_PERIOD_SUMMARY_START_KEY, activation_at),
+    )
     conn.commit()
     conn.close()
 
@@ -748,3 +755,45 @@ def get_today_events(date_str):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+def get_release_period_summary(date_str=None):
+    """按释放类型和周期汇总功能上线后的释放数据，不读取上线前历史。"""
+    target_date = date_str or datetime.now(BJT).strftime("%Y-%m-%d")
+    next_date = (datetime.strptime(target_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    activation_at = get_monitor_state(RELEASE_PERIOD_SUMMARY_START_KEY)
+    if not activation_at:
+        return {"date": target_date, "activation_at": None, "dynamic": [], "static": []}
+
+    start_at = max(activation_at, f"{target_date} 00:00:00")
+    end_at = f"{next_date} 00:00:00"
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT type,
+               COALESCE(NULLIF(release_period, ''), '未知') AS release_period,
+               COALESCE(SUM(value), 0) AS total_amount,
+               COUNT(*) AS event_count,
+               COUNT(DISTINCT lower(COALESCE(to_addr, from_addr))) AS address_count
+        FROM events
+        WHERE type IN ('release_dynamic', 'release_static')
+          AND timestamp >= ? AND timestamp < ?
+        GROUP BY type, COALESCE(NULLIF(release_period, ''), '未知')
+        """,
+        (start_at, end_at),
+    ).fetchall()
+    conn.close()
+
+    order = {"0天（立即释放）": 0, "10天": 1, "20天": 2, "30天": 3, "60天": 4, "未知": 5}
+    result = {"dynamic": [], "static": []}
+    for row in rows:
+        release_type = "dynamic" if row["type"] == "release_dynamic" else "static"
+        result[release_type].append({
+            "period": row["release_period"],
+            "total_amount": round(float(row["total_amount"] or 0), 8),
+            "event_count": int(row["event_count"] or 0),
+            "address_count": int(row["address_count"] or 0),
+        })
+    for release_type in result:
+        result[release_type].sort(key=lambda item: (order.get(item["period"], 99), item["period"]))
+    result.update({"date": target_date, "activation_at": activation_at})
+    return result

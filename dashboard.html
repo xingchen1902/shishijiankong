@@ -42,6 +42,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .today-item.purple .value { color: #a78bfa; }
 .today-item.teal .value { color: #2dd4bf; }
 .today-item .sub { font-size: 11px; color: #475569; margin-top: 2px; }
+.release-period-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.release-period-panel { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; min-width: 0; }
+.release-period-heading { color: #e2e8f0; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+.release-period-row, .release-period-total { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #1f2937; }
+.release-period-row span, .release-period-total span { color: #64748b; font-size: 11px; }
+.release-period-row b { color: #cbd5e1; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.release-period-total { border-bottom: none; padding-bottom: 0; }
+.release-period-total span { color: #94a3b8; font-weight: 700; }
+.release-period-total b { color: #2dd4bf; font-size: 15px; white-space: nowrap; }
+.release-period-empty, .release-period-loading { color: #64748b; font-size: 11px; padding: 6px 0; }
 .staking-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; min-width: 0; }
 .staking-period { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; min-width: 0; }
 .staking-period-title { color: #e2e8f0; font-size: 14px; font-weight: 700; margin-bottom: 10px; white-space: nowrap; }
@@ -202,6 +212,7 @@ td.neg { color: #ef4444; }
 @media (max-width: 600px) {
   .staking-overview { grid-template-columns: minmax(0, 1fr); }
   .pool-address-overview { grid-template-columns: minmax(0, 1fr); }
+  .release-period-grid { grid-template-columns: minmax(0, 1fr); }
 }
 </style>
 </head>
@@ -247,6 +258,14 @@ td.neg { color: #ef4444; }
       <div class="today-item pos"><div class="label">新增质押</div><div class="value" id="tdStakeIn">--</div></div>
       <div class="today-item neg"><div class="label">赎回</div><div class="value" id="tdStakeOut">--</div></div>
       <div class="today-item" id="tdNetStakeCard"><div class="label">净质押量</div><div class="value" id="tdNetStake">--</div></div>
+    </div>
+  </div>
+
+  <div class="today-card">
+    <div class="today-title">🧭 释放周期统计 <span id="releasePeriodStatus"></span></div>
+    <div class="release-period-grid" id="releasePeriodSummary">
+      <div class="release-period-panel"><div class="release-period-heading">动态释放</div><div class="release-period-loading">加载中...</div></div>
+      <div class="release-period-panel"><div class="release-period-heading">静态释放</div><div class="release-period-loading">加载中...</div></div>
     </div>
   </div>
 
@@ -489,6 +508,23 @@ function updateToday(data) {
   document.getElementById("tdTransfer720").textContent = fmt(data.transfer_720);
   var nsCard = document.getElementById("tdNetStakeCard");
   if (data.net_stake >= 0) { nsCard.className = "today-item pos"; } else { nsCard.className = "today-item neg"; }
+}
+
+function updateReleasePeriodSummary(payload) {
+  var container = document.getElementById("releasePeriodSummary");
+  var status = document.getElementById("releasePeriodStatus");
+  if (!container || !payload) return;
+  var labels = {dynamic: "动态释放", static: "静态释放"};
+  var types = ["dynamic", "static"];
+  container.innerHTML = types.map(function(type) {
+    var rows = Array.isArray(payload[type]) ? payload[type] : [];
+    var total = rows.reduce(function(sum, row) { return sum + Number(row.total_amount || 0); }, 0);
+    var body = rows.length ? rows.map(function(row) {
+      return '<div class="release-period-row"><span>' + esc(row.period) + '</span><b>' + fmt(row.total_amount) + ' ARK</b></div>';
+    }).join("") : '<div class="release-period-empty">暂无数据</div>';
+    return '<div class="release-period-panel"><div class="release-period-heading">' + labels[type] + '</div>' + body + '<div class="release-period-total"><span>合计</span><b>' + fmt(total) + ' ARK</b></div></div>';
+  }).join("");
+  status.textContent = payload.activation_at ? "· 上线后累计" : "";
 }
 
 function updateTurboPending(payload) {
@@ -966,6 +1002,12 @@ function loadTurboPending() {
   });
 }
 
+function loadReleasePeriodSummary() {
+  return fetchAPI("/api/release-period-summary").then(function(payload) {
+    updateReleasePeriodSummary(payload);
+  }).catch(function(err) { logLoadError("release period summary", err); });
+}
+
 function loadStakingOverview() {
   return fetchAPI("/api/staking-overview").then(function(payload) {
     updateStakingOverview(payload);
@@ -1019,6 +1061,7 @@ function loadAll() {
   // 独立渲染：趋势查询较慢时，不再阻塞其余看板卡片出现。
   loadToday();
   loadTurboPending();
+  loadReleasePeriodSummary();
   loadStakingOverview();
   loadPoolAddressOverview();
   loadDaily();

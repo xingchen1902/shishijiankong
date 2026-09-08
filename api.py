@@ -22,6 +22,7 @@ from db import (
     refresh_turbo_pending,
     get_turbo_pending_snapshot,
     get_latest_consensus_coefficient,
+    get_release_period_summary,
 )
 from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply
 from pusher import (
@@ -873,6 +874,11 @@ def get_turbo_pending():
     _, total = get_turbo_pending_snapshot()
     return {"data": [], "total": round(total, 8),
             "current_consensus_coefficient": get_latest_consensus_coefficient()}
+
+
+@app.get("/api/release-period-summary")
+def get_release_period_summary_api(date: str = None):
+    return get_release_period_summary(date)
 
 
 @app.get("/api/today-trend")
