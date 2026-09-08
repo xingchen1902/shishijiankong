@@ -573,7 +573,7 @@ function updateReleaseSummaryTable(payload) {
   }
   render("static", staticBody);
   render("dynamic", dynamicBody);
-  status.textContent = payload.activation_at ? "· 按日期统计" : "";
+  status.textContent = payload.activation_at ? "· 已完成日期" : "";
 }
 
 function updateReleasePeriodSummary(payload) {

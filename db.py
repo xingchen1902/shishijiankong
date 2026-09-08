@@ -817,7 +817,8 @@ def get_release_period_daily_summary():
                  COALESCE(NULLIF(release_period, ''), '未知')
         ORDER BY date DESC
         """,
-        (activation_at, f"{today} 23:59:59"),
+        # 与每日历史汇总保持一致：排除当天，只统计已经结束的日期。
+        (activation_at, f"{today} 00:00:00"),
     ).fetchall()
     conn.close()
 
