@@ -231,53 +231,26 @@ td.neg { color: #ef4444; }
   .release-period-row .release-period-share { grid-area: share; align-self: center; }
   .release-period-row b { grid-area: amount; font-size: 13px; text-align: right; }
   .release-summary-panel { padding: 10px; }
-  .release-summary-wrap { overflow: visible; background: transparent; border: none; }
-  .release-summary-table { display: block; table-layout: auto; }
-  .release-summary-table thead { display: none; }
-  .release-summary-table tbody { display: grid; gap: 8px; }
-  .release-summary-table tbody tr {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 12px;
-    padding: 4px 10px;
-    background: #0f172a;
-    border: 1px solid #334155;
-    border-radius: 10px;
-  }
-  .release-summary-table tbody td,
+  .release-summary-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .release-summary-table { display: table; width: 100%; min-width: 700px; table-layout: fixed; }
+  .release-summary-table thead { display: table-header-group; }
+  .release-summary-table tbody { display: table-row-group; }
+  .release-summary-table tr { display: table-row; }
+  .release-summary-table th,
+  .release-summary-table td,
   .release-summary-table tbody td:first-child,
   .release-summary-table tbody td.release-summary-total {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    min-width: 0;
-    padding: 8px 0;
+    display: table-cell;
+    padding: 9px 7px;
     text-align: right;
+    white-space: nowrap;
     border-bottom: 1px solid rgba(51,65,85,.55);
   }
-  .release-summary-table tbody td::before {
-    display: block;
-    content: attr(data-label);
-    flex: 0 0 auto;
-    color: #64748b;
-    font-size: 11px;
-    text-align: left;
-  }
-  .release-summary-table tbody td:first-child,
-  .release-summary-table tbody td.release-summary-total {
-    grid-column: 1 / -1;
-  }
-  .release-summary-table tbody td:first-child {
-    color: #e2e8f0;
-    font-size: 12px;
-    font-weight: 700;
-  }
-  .release-summary-table tbody td.release-summary-total {
-    border-bottom: none;
-    color: #2dd4bf;
-    font-size: 13px;
-  }
+  .release-summary-table th:first-child,
+  .release-summary-table td:first-child { width: 104px; text-align: left; }
+  .release-summary-table th:last-child,
+  .release-summary-table td.release-summary-total { width: 104px; }
+  .release-summary-table tbody td::before { display: none; }
 }
 @media (min-width: 1101px) and (max-width: 1400px) {
   .staking-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
