@@ -869,12 +869,17 @@ threading.Thread(target=dex_daily_snapshot_worker, daemon=True).start()
 threading.Thread(target=turbo_pending_refresh_worker, daemon=True).start()
 
 @app.get("/api/today")
-def get_today(release_page: int = 1, release_per_page: int = 10):
+def get_today():
     data = get_today_data()
-    # 周期统计与当日实时汇总使用同一次请求和刷新节奏，避免页面两个区域加载不同步。
+    # 当日数据与当日释放周期统计保持同一次刷新；历史释放汇总单独分页加载。
     data["release_period_summary"] = get_release_period_summary(data["date"])
-    data["release_period_daily_summary"] = get_release_period_daily_summary(release_page, release_per_page)
     return {"data": data}
+
+
+@app.get("/api/release-period-history")
+def get_release_period_history(page: int = 1, per_page: int = 10):
+    """独立读取已落库的每日历史释放汇总，页面请求不扫描事件表。"""
+    return get_release_period_daily_summary(page, per_page)
 
 
 @app.get("/api/turbo-pending")

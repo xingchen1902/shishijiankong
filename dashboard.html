@@ -570,7 +570,6 @@ function updateHeader(todayInfo) {
 
 function updateToday(data) {
   if (!data) return;
-  updateReleaseSummaryTable(data.release_period_daily_summary);
   updateReleasePeriodSummary(data.release_period_summary);
   document.getElementById("bonusBal").textContent = fmt(data.bonus_balance);
   document.getElementById("stakeBal").textContent = fmt(data.stake_balance);
@@ -630,7 +629,7 @@ function updateReleaseSummaryTable(payload) {
 window.releaseSummaryPage = 1;
 window.goToReleaseSummaryPage = function(page) {
   window.releaseSummaryPage = Math.max(1, page);
-  loadToday();
+  loadReleaseSummary();
 };
 
 function updateReleasePeriodSummary(payload) {
@@ -1106,10 +1105,16 @@ function logLoadError(name, err) {
 }
 
 function loadToday() {
-  return fetchAPI("/api/today?release_page=" + (window.releaseSummaryPage || 1) + "&release_per_page=10").then(function(today) {
+  return fetchAPI("/api/today").then(function(today) {
     updateHeader(today);
     updateToday(today ? today.data : null);
   }).catch(function(err) { logLoadError("today", err); });
+}
+
+function loadReleaseSummary() {
+  return fetchAPI("/api/release-period-history?page=" + (window.releaseSummaryPage || 1) + "&per_page=10").then(function(payload) {
+    updateReleaseSummaryTable(payload);
+  }).catch(function(err) { logLoadError("release summary", err); });
 }
 
 function loadTurboPending() {
@@ -1182,6 +1187,7 @@ function loadPoolHistory() {
 function loadAll() {
   // 独立渲染：趋势查询较慢时，不再阻塞其余看板卡片出现。
   loadToday();
+  loadReleaseSummary();
   loadTurboPending();
   loadStakingOverview();
   loadPoolAddressOverview();
