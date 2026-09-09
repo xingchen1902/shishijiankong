@@ -69,6 +69,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .release-summary-table td:first-child, .release-summary-table th:first-child { text-align: left; }
 .release-summary-table td.release-summary-total { color: #2dd4bf; font-weight: 700; }
 .release-summary-table tbody tr:hover { background: rgba(45,212,191,.05); }
+.release-summary-table tbody td::before { display: none; }
 .staking-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; min-width: 0; }
 .staking-period { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; min-width: 0; }
 .staking-period-title { color: #e2e8f0; font-size: 14px; font-weight: 700; margin-bottom: 10px; white-space: nowrap; }
@@ -214,6 +215,69 @@ td.neg { color: #ef4444; }
   .staking-period { padding: 10px; }
   .staking-period-title { font-size: 13px; }
   .staking-period-row .value { font-size: 12px; }
+  .release-period-panel { padding: 12px; }
+  .release-period-heading { margin-bottom: 6px; }
+  .release-period-row {
+    grid-template-columns: 64px minmax(0, 1fr) 52px;
+    grid-template-areas:
+      "period bar share"
+      "amount amount amount";
+    gap: 6px 8px;
+    min-height: 0;
+    padding: 8px 0;
+  }
+  .release-period-row span { grid-area: period; align-self: center; }
+  .release-period-row .release-period-bar { grid-area: bar; align-self: center; }
+  .release-period-row .release-period-share { grid-area: share; align-self: center; }
+  .release-period-row b { grid-area: amount; font-size: 13px; text-align: right; }
+  .release-summary-panel { padding: 10px; }
+  .release-summary-wrap { overflow: visible; background: transparent; border: none; }
+  .release-summary-table { display: block; table-layout: auto; }
+  .release-summary-table thead { display: none; }
+  .release-summary-table tbody { display: grid; gap: 8px; }
+  .release-summary-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 12px;
+    padding: 4px 10px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+  }
+  .release-summary-table tbody td,
+  .release-summary-table tbody td:first-child,
+  .release-summary-table tbody td.release-summary-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px 0;
+    text-align: right;
+    border-bottom: 1px solid rgba(51,65,85,.55);
+  }
+  .release-summary-table tbody td::before {
+    display: block;
+    content: attr(data-label);
+    flex: 0 0 auto;
+    color: #64748b;
+    font-size: 11px;
+    text-align: left;
+  }
+  .release-summary-table tbody td:first-child,
+  .release-summary-table tbody td.release-summary-total {
+    grid-column: 1 / -1;
+  }
+  .release-summary-table tbody td:first-child {
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .release-summary-table tbody td.release-summary-total {
+    border-bottom: none;
+    color: #2dd4bf;
+    font-size: 13px;
+  }
 }
 @media (min-width: 1101px) and (max-width: 1400px) {
   .staking-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -572,8 +636,10 @@ function updateReleaseSummaryTable(payload) {
     target.innerHTML = rows.map(function(row) {
       var values = row[type] || {};
       var total = periods.reduce(function(sum, period) { return sum + Number(values[period] || 0); }, 0);
-      var cells = periods.map(function(period) { return '<td>' + fmt(values[period] || 0) + '</td>'; }).join("");
-      return '<tr><td>' + esc(row.date) + '</td>' + cells + '<td class="release-summary-total">' + fmt(total) + '</td></tr>';
+      var cells = periods.map(function(period) {
+        return '<td data-label="' + esc(period.replace("（立即释放）", "")) + '">' + fmt(values[period] || 0) + '</td>';
+      }).join("");
+      return '<tr><td data-label="日期">' + esc(row.date) + '</td>' + cells + '<td data-label="合计" class="release-summary-total">' + fmt(total) + '</td></tr>';
     }).join("");
   }
   render("static", staticBody);
