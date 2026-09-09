@@ -17,6 +17,7 @@ from db import (
     get_monitor_state,
     set_monitor_state,
     get_all_daily_until_yesterday as get_all_daily,
+    refresh_release_period_daily_summary,
 )
 from event_parser import (
     EventParser, get_balance, get_transaction_by_hash,
@@ -606,6 +607,8 @@ class DailyAggregator:
         print("  净质押: %.2f" % net_stake)
 
         upsert_daily_summary(date_str, **{k: v for k, v in record.items() if k != "date"})
+        # 释放周期历史只在日切汇总时写入一次；页面请求不再扫描事件表。
+        refresh_release_period_daily_summary(date_str)
 
         if do_push:
             record = self._attach_dex_snapshot(record)

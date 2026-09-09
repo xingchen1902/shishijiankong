@@ -840,14 +840,11 @@ def refresh_release_period_daily_summary(date_str):
     conn.close()
 
 def get_release_period_daily_summary(page=1, per_page=10):
-    """返回已完成日期的分页汇总；只重算前一天，读取部分使用轻量汇总表。"""
+    """返回已完成日期的分页汇总；页面只读取已落库的轻量汇总表。"""
     activation_at = get_monitor_state(RELEASE_PERIOD_SUMMARY_START_KEY)
     if not activation_at:
         return {"activation_at": None, "data": [], "total": 0, "page": 1, "per_page": per_page}
     today = datetime.now(BJT).strftime("%Y-%m-%d")
-    yesterday = (datetime.now(BJT) - timedelta(days=1)).strftime("%Y-%m-%d")
-    if yesterday >= activation_at[:10]:
-        refresh_release_period_daily_summary(yesterday)
 
     page = max(1, int(page or 1))
     per_page = min(20, max(1, int(per_page or 10)))
