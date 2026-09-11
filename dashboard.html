@@ -724,7 +724,8 @@ function renderReleaseAmountAnalysis(type) {
   var totalEl = document.getElementById("releaseAnalysisTotal");
   var canvas = document.getElementById("releaseAmountChart");
   if (!legend || !totalEl || !canvas) return;
-  var item = payload && payload.by_type ? payload.by_type[type] : null;
+  var byType = payload && (payload.by_type || payload);
+  var item = byType ? byType[type] : null;
   var buckets = item && Array.isArray(item.buckets) ? item.buckets : [];
   var total = item ? Number(item.total_amount || 0) : 0;
   totalEl.textContent = fmt(total);
