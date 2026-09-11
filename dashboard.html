@@ -204,6 +204,30 @@ td.neg { color: #ef4444; }
 .event-type.permanent_stake { background: #14532d; color: #86efac; }
 .event-type.transfer_720 { background: #1c1917; color: #fdba74; }
 .chart-card { background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155; }
+.release-analysis-card { margin-top: 20px; }
+.release-analysis-head { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; }
+.release-analysis-meta { color:#64748b; font-size:11px; font-weight:500; }
+.release-analysis-tabs { display:flex; gap:6px; padding:3px; border:1px solid #334155; border-radius:9px; background:#0f172a; }
+.release-analysis-tab { border:0; border-radius:6px; padding:6px 10px; color:#94a3b8; background:transparent; font:inherit; font-size:11px; font-weight:700; cursor:pointer; transition:background .18s ease,color .18s ease; }
+.release-analysis-tab:hover, .release-analysis-tab:focus-visible { color:#e2e8f0; outline:2px solid rgba(96,165,250,.45); outline-offset:1px; }
+.release-analysis-tab.active { color:#07151f; background:linear-gradient(135deg,#2dd4bf,#60a5fa); }
+.release-analysis-body { display:grid; grid-template-columns:minmax(260px,.82fr) minmax(360px,1.18fr); gap:20px; align-items:center; }
+.release-analysis-chart { position:relative; height:270px; min-height:230px; }
+.release-analysis-chart canvas { width:100% !important; height:100% !important; }
+.release-analysis-center { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center; pointer-events:none; }
+.release-analysis-center strong { color:#2dd4bf; font-size:24px; line-height:1.2; letter-spacing:-.4px; }
+.release-analysis-center span { color:#64748b; font-size:11px; margin-top:4px; }
+.release-analysis-legend { display:grid; gap:8px; }
+.release-analysis-row { display:grid; grid-template-columns:10px minmax(84px,1fr) auto auto; gap:9px; align-items:center; min-height:36px; padding:7px 9px; border:1px solid rgba(51,65,85,.72); border-radius:8px; background:#111d32; }
+.release-analysis-row:hover { border-color:#475569; background:#15233a; }
+.release-analysis-swatch { width:9px; height:9px; border-radius:3px; box-shadow:0 0 9px currentColor; }
+.release-analysis-label { color:#cbd5e1; font-size:12px; font-weight:700; white-space:nowrap; }
+.release-analysis-amount { color:#e2e8f0; font-size:12px; font-weight:700; text-align:right; white-space:nowrap; }
+.release-analysis-share { color:#60a5fa; font-size:12px; font-weight:700; text-align:right; white-space:nowrap; }
+.release-analysis-count { grid-column:2 / -1; color:#64748b; font-size:10px; }
+.release-analysis-empty { color:#64748b; font-size:12px; padding:18px 0; text-align:center; border:1px dashed #334155; border-radius:9px; }
+.release-analysis-footnote { color:#64748b; font-size:10px; margin-top:12px; }
+.dashboard-main > .release-analysis-card { width:calc(100% + 400px); }
 .footer { text-align: center; padding: 20px; color: #475569; font-size: 12px; }
 @media (max-width: 600px) {
   .container { padding: 12px; }
@@ -259,7 +283,7 @@ td.neg { color: #ef4444; }
 @media (max-width: 1100px) {
   .dashboard-layout { grid-template-columns: 1fr; }
   .dex-sidebar .dex-card, .pool-history-sidebar .dex-card { position: static; }
-  .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination, .dashboard-main > .release-summary-card { width: 100%; }
+  .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination, .dashboard-main > .release-summary-card, .dashboard-main > .release-analysis-card { width: 100%; }
   .dashboard-main > .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .dashboard-main > .table-wrap table { min-width: 1120px; table-layout: fixed; }
   .staking-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; padding-bottom: 4px; }
@@ -269,6 +293,12 @@ td.neg { color: #ef4444; }
   .pool-address-overview { grid-template-columns: minmax(0, 1fr); }
   .release-period-grid { grid-template-columns: minmax(0, 1fr); }
   .release-summary-grid { grid-template-columns: minmax(0, 1fr); }
+  .release-analysis-body { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .release-analysis-chart { height:245px; min-height:220px; }
+  .release-analysis-tabs { width:100%; }
+  .release-analysis-tab { flex:1; }
+  .release-analysis-row { grid-template-columns:10px minmax(72px,1fr) auto auto; gap:7px; }
+  .release-analysis-amount, .release-analysis-share { font-size:11px; }
 }
 </style>
 </head>
@@ -339,6 +369,28 @@ td.neg { color: #ef4444; }
     <div style="position:relative;height:280px;">
       <canvas id="trendChart"></canvas>
     </div>
+  </div>
+
+  <!-- 释放金额区间分析：位于底池交互/事件流下方的空白区域 -->
+  <div class="today-card release-analysis-card">
+    <div class="release-analysis-head">
+      <div class="today-title" style="margin-bottom:0;">◒ 当日释放金额区间分析 <span id="releaseAnalysisStatus"></span></div>
+      <div class="release-analysis-tabs" role="tablist" aria-label="释放类型">
+        <button class="release-analysis-tab active" type="button" data-release-type="all" role="tab" aria-selected="true">全部释放</button>
+        <button class="release-analysis-tab" type="button" data-release-type="static" role="tab" aria-selected="false">静态释放</button>
+        <button class="release-analysis-tab" type="button" data-release-type="dynamic" role="tab" aria-selected="false">动态释放</button>
+      </div>
+    </div>
+    <div class="release-analysis-body">
+      <div class="release-analysis-chart">
+        <canvas id="releaseAmountChart" aria-label="释放金额区间占比扇形图"></canvas>
+        <div class="release-analysis-center"><strong id="releaseAnalysisTotal">--</strong><span>总释放 ARK</span></div>
+      </div>
+      <div class="release-analysis-legend" id="releaseAnalysisLegend">
+        <div class="release-analysis-empty">加载中...</div>
+      </div>
+    </div>
+    <div class="release-analysis-footnote">按单笔释放数量分组，扇区占比按释放金额计算。</div>
   </div>
 
   <!-- 历史表格 -->
@@ -482,6 +534,10 @@ var currentDexPeriod = "h24";
 var currentPoolHistoryPage = 1;
 var POOL_HISTORY_PER_PAGE = 15;
 var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24小时"};
+var currentReleaseAmountType = "all";
+var currentReleaseAmountDistribution = null;
+var releaseAmountChart = null;
+var RELEASE_AMOUNT_COLORS = ["#2dd4bf", "#60a5fa", "#a78bfa", "#f59e0b", "#fb7185", "#94a3b8"];
 
 function fmt(n) {
   if (n === null || n === undefined || n === "--") return "--";
@@ -571,6 +627,7 @@ function updateHeader(todayInfo) {
 function updateToday(data) {
   if (!data) return;
   updateReleasePeriodSummary(data.release_period_summary);
+  updateReleaseAmountAnalysis(data.release_amount_distribution);
   document.getElementById("bonusBal").textContent = fmt(data.bonus_balance);
   document.getElementById("stakeBal").textContent = fmt(data.stake_balance);
   document.getElementById("eventCount").textContent = fmtInt(data.event_count);
@@ -652,6 +709,76 @@ function updateReleasePeriodSummary(payload) {
     return '<div class="release-period-panel"><div class="release-period-heading">' + labels[type] + '</div>' + body + '<div class="release-period-total"><span>合计</span><b>' + fmt(total) + ' ARK</b></div></div>';
   }).join("");
   status.textContent = "";
+}
+
+function updateReleaseAmountAnalysis(payload) {
+  currentReleaseAmountDistribution = payload || null;
+  renderReleaseAmountAnalysis(currentReleaseAmountType);
+  var status = document.getElementById("releaseAnalysisStatus");
+  if (status) status.textContent = payload && payload.date ? "· " + payload.date : "";
+}
+
+function renderReleaseAmountAnalysis(type) {
+  var payload = currentReleaseAmountDistribution;
+  var legend = document.getElementById("releaseAnalysisLegend");
+  var totalEl = document.getElementById("releaseAnalysisTotal");
+  var canvas = document.getElementById("releaseAmountChart");
+  if (!legend || !totalEl || !canvas) return;
+  var item = payload && payload.by_type ? payload.by_type[type] : null;
+  var buckets = item && Array.isArray(item.buckets) ? item.buckets : [];
+  var total = item ? Number(item.total_amount || 0) : 0;
+  totalEl.textContent = fmt(total);
+  if (releaseAmountChart) {
+    releaseAmountChart.destroy();
+    releaseAmountChart = null;
+  }
+  if (!buckets.length) {
+    legend.innerHTML = '<div class="release-analysis-empty">暂无当日释放数据</div>';
+    return;
+  }
+  var values = buckets.map(function(row) { return Number(row.amount || 0); });
+  var hasAmount = values.some(function(value) { return value > 0; });
+  if (window.Chart) {
+    releaseAmountChart = new Chart(canvas.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels: hasAmount ? buckets.map(function(row) { return row.label; }) : ["暂无数据"],
+        datasets: [{
+          data: hasAmount ? values : [1],
+          backgroundColor: hasAmount ? RELEASE_AMOUNT_COLORS : ["#223047"],
+          borderColor: "#1e293b",
+          borderWidth: 3,
+          hoverOffset: 7
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "67%",
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                var row = buckets[context.dataIndex] || {};
+                return " " + (row.label || "") + "：" + fmt(row.amount || 0) + " ARK（" + Number(row.amount_pct || 0).toFixed(2) + "%）";
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+  legend.innerHTML = buckets.map(function(row, index) {
+    var color = RELEASE_AMOUNT_COLORS[index] || "#94a3b8";
+    return '<div class="release-analysis-row">' +
+      '<span class="release-analysis-swatch" style="color:' + color + ';background:' + (hasAmount ? color : "#223047") + '"></span>' +
+      '<span class="release-analysis-label">' + esc(row.label) + '</span>' +
+      '<span class="release-analysis-amount">' + fmt(row.amount || 0) + ' ARK</span>' +
+      '<span class="release-analysis-share">' + Number(row.amount_pct || 0).toFixed(2) + '%</span>' +
+      '<span class="release-analysis-count">' + fmtInt(row.count || 0) + ' 笔释放</span>' +
+      '</div>';
+  }).join("");
 }
 
 function updateTurboPending(payload) {
@@ -1097,6 +1224,18 @@ document.querySelectorAll(".dex-change-tab").forEach(function(tab) {
       updateLpSwaps(lp);
     });
     renderDexPeriod(currentDexPeriod);
+  });
+});
+
+document.querySelectorAll(".release-analysis-tab").forEach(function(tab) {
+  tab.addEventListener("click", function() {
+    currentReleaseAmountType = tab.getAttribute("data-release-type") || "all";
+    document.querySelectorAll(".release-analysis-tab").forEach(function(other) {
+      var active = other === tab;
+      other.classList.toggle("active", active);
+      other.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    renderReleaseAmountAnalysis(currentReleaseAmountType);
   });
 });
 

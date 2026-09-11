@@ -24,6 +24,7 @@ from db import (
     get_latest_consensus_coefficient,
     get_release_period_summary,
     get_release_period_daily_summary,
+    get_release_amount_distribution,
 )
 from event_parser import BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply
 from pusher import (
@@ -873,6 +874,7 @@ def get_today():
     data = get_today_data()
     # 当日数据与当日释放周期统计保持同一次刷新；历史释放汇总单独分页加载。
     data["release_period_summary"] = get_release_period_summary(data["date"])
+    data["release_amount_distribution"] = get_release_amount_distribution(data["date"])
     return {"data": data}
 
 

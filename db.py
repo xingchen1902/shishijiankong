@@ -12,6 +12,14 @@ BJT = timezone(timedelta(hours=8))
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DB_PATH = os.path.join(DB_DIR, "ark_monitor.db")
 RELEASE_PERIOD_SUMMARY_START_KEY = "release_period_summary_activation_at_v1"
+RELEASE_AMOUNT_BUCKETS = (
+    ("0_5", "0–5 ARK"),
+    ("5_10", "5–10 ARK"),
+    ("10_20", "10–20 ARK"),
+    ("20_40", "20–40 ARK"),
+    ("40_80", "40–80 ARK"),
+    ("80_plus", "80 ARK以上"),
+)
 
 def get_conn():
     os.makedirs(DB_DIR, exist_ok=True)
@@ -807,6 +815,81 @@ def get_release_period_summary(date_str=None):
     for release_type in result:
         result[release_type].sort(key=lambda item: (order.get(item["period"], 99), item["period"]))
     result.update({"date": target_date, "activation_at": activation_at})
+    return result
+
+def get_release_amount_distribution(date_str=None):
+    """返回指定日期的释放金额区间分布，默认只读取当日实时数据。"""
+    target_date = date_str or datetime.now(BJT).strftime("%Y-%m-%d")
+    next_date = (datetime.strptime(target_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    activation_at = get_monitor_state(RELEASE_PERIOD_SUMMARY_START_KEY)
+    if not activation_at:
+        return {"date": target_date, "activation_at": None, "by_type": {}}
+
+    now_date = datetime.now(BJT).strftime("%Y-%m-%d")
+    start_at = max(activation_at, f"{target_date} 00:00:00")
+    end_at = datetime.now(BJT).strftime("%Y-%m-%d %H:%M:%S") if target_date == now_date else f"{next_date} 00:00:00"
+    bucket_case = """
+        CASE
+            WHEN value > 0 AND value <= 5 THEN '0_5'
+            WHEN value > 5 AND value <= 10 THEN '5_10'
+            WHEN value > 10 AND value <= 20 THEN '10_20'
+            WHEN value > 20 AND value <= 40 THEN '20_40'
+            WHEN value > 40 AND value <= 80 THEN '40_80'
+            WHEN value > 80 THEN '80_plus'
+        END
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        f"""
+        SELECT type, {bucket_case} AS bucket,
+               COALESCE(SUM(value), 0) AS total_amount,
+               COUNT(*) AS event_count
+        FROM events
+        WHERE type IN ('release_dynamic', 'release_static')
+          AND timestamp >= ? AND timestamp < ?
+          AND value > 0
+        GROUP BY type, bucket
+        """,
+        (start_at, end_at),
+    ).fetchall()
+    conn.close()
+
+    by_type = {"all": {}, "static": {}, "dynamic": {}}
+    for key, _ in RELEASE_AMOUNT_BUCKETS:
+        for release_type in by_type:
+            by_type[release_type][key] = {"amount": 0.0, "count": 0}
+
+    for row in rows:
+        bucket = row["bucket"]
+        if not bucket:
+            continue
+        release_type = "dynamic" if row["type"] == "release_dynamic" else "static"
+        amount = float(row["total_amount"] or 0)
+        count = int(row["event_count"] or 0)
+        by_type[release_type][bucket] = {"amount": amount, "count": count}
+        by_type["all"][bucket]["amount"] += amount
+        by_type["all"][bucket]["count"] += count
+
+    result = {}
+    for release_type, buckets in by_type.items():
+        total_amount = sum(item["amount"] for item in buckets.values())
+        total_count = sum(item["count"] for item in buckets.values())
+        result[release_type] = {
+            "total_amount": round(total_amount, 8),
+            "event_count": total_count,
+            "buckets": [
+                {
+                    "key": key,
+                    "label": label,
+                    "amount": round(buckets[key]["amount"], 8),
+                    "count": buckets[key]["count"],
+                    "amount_pct": round((buckets[key]["amount"] / total_amount * 100) if total_amount else 0, 4),
+                    "count_pct": round((buckets[key]["count"] / total_count * 100) if total_count else 0, 4),
+                }
+                for key, label in RELEASE_AMOUNT_BUCKETS
+            ],
+        }
+    result.update({"date": target_date, "from": start_at, "to": end_at, "activation_at": activation_at})
     return result
 
 def refresh_release_period_daily_summary(date_str):
