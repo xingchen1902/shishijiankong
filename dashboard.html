@@ -24,6 +24,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .dashboard-layout.history-mode { grid-template-columns: minmax(0, 1fr); }
 .dashboard-layout.history-mode > .dex-sidebar,
 .dashboard-layout.history-mode > .pool-history-sidebar { display: none; }
+.dashboard-layout.release-mode { grid-template-columns: minmax(0, 1fr); }
+.dashboard-layout.release-mode > .dex-sidebar,
+.dashboard-layout.release-mode > .pool-history-sidebar { display: none; }
 .header { margin-left: 224px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 24px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .header h1 { font-size: 22px; font-weight: 700; }
 .header h1 span { color: #60a5fa; }
@@ -438,6 +441,37 @@ td.neg { color: #ef4444; }
 
   </div>
 
+  <div class="dashboard-page release-page is-hidden" data-page-content="release">
+  <div class="today-card">
+    <div class="today-title">🧭 当日释放实时数据 <span id="releasePeriodStatusPage"></span></div>
+    <div class="release-period-grid" id="releasePeriodSummaryPage">
+      <div class="release-period-panel"><div class="release-period-heading">动态释放</div><div class="release-period-loading">加载中...</div></div>
+      <div class="release-period-panel"><div class="release-period-heading">静态释放</div><div class="release-period-loading">加载中...</div></div>
+    </div>
+  </div>
+
+  <div class="today-card release-analysis-card">
+    <div class="release-analysis-head">
+      <div class="today-title" style="margin-bottom:0;">◒ 当日释放金额区间分析 <span id="releaseAnalysisStatusPage"></span></div>
+      <div class="release-analysis-tabs" role="tablist" aria-label="释放类型">
+        <button class="release-analysis-tab active" type="button" data-release-type="all" role="tab" aria-selected="true">全部释放</button>
+        <button class="release-analysis-tab" type="button" data-release-type="static" role="tab" aria-selected="false">静态释放</button>
+        <button class="release-analysis-tab" type="button" data-release-type="dynamic" role="tab" aria-selected="false">动态释放</button>
+      </div>
+    </div>
+    <div class="release-analysis-body">
+      <div class="release-analysis-chart">
+        <canvas id="releaseAmountChartPage" aria-label="释放金额区间占比扇形图"></canvas>
+        <div class="release-analysis-center"><strong id="releaseAnalysisTotalPage">--</strong><span>总释放 ARK</span></div>
+      </div>
+      <div class="release-analysis-legend" id="releaseAnalysisLegendPage">
+        <div class="release-analysis-empty">加载中...</div>
+      </div>
+    </div>
+    <div class="release-analysis-footnote">按单笔释放数量分组，扇区占比按释放金额计算。</div>
+  </div>
+  </div>
+
   <!-- 历史表格 -->
   <div class="dashboard-page history-page is-hidden" data-page-content="history">
   <div class="section-title">📅 每日历史汇总</div>
@@ -584,7 +618,7 @@ var POOL_HISTORY_PER_PAGE = 15;
 var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24小时"};
 var currentReleaseAmountType = "all";
 var currentReleaseAmountDistribution = null;
-var releaseAmountChart = null;
+var releaseAmountCharts = {};
 var RELEASE_AMOUNT_COLORS = ["#2dd4bf", "#60a5fa", "#a78bfa", "#f59e0b", "#fb7185", "#94a3b8"];
 
 function fmt(n) {
@@ -738,57 +772,68 @@ window.goToReleaseSummaryPage = function(page) {
 };
 
 function updateReleasePeriodSummary(payload) {
-  var container = document.getElementById("releasePeriodSummary");
-  var status = document.getElementById("releasePeriodStatus");
-  if (!container || !payload) return;
+  if (!payload) return;
   var labels = {dynamic: "动态释放", static: "静态释放"};
   var types = ["dynamic", "static"];
   var periods = ["0天（立即释放）", "10天", "20天", "30天", "60天", "未知"];
-  container.innerHTML = types.map(function(type) {
-    var rows = Array.isArray(payload[type]) ? payload[type] : [];
-    var amounts = {};
-    rows.forEach(function(row) { amounts[row.period] = Number(row.total_amount || 0); });
-    var total = periods.reduce(function(sum, period) { return sum + (amounts[period] || 0); }, 0);
-    var body = periods.map(function(period) {
-      var amount = amounts[period] || 0;
-      var width = total > 0 ? Math.min(100, amount / total * 100) : 0;
-      return '<div class="release-period-row"><span>' + esc(period) + '</span><div class="release-period-bar"><i style="width:' + width.toFixed(2) + '%"></i></div><em class="release-period-share">' + width.toFixed(2) + '%</em><b>' + fmt(amount) + ' ARK</b></div>';
+  ["releasePeriodSummary", "releasePeriodSummaryPage"].forEach(function(containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = types.map(function(type) {
+      var rows = Array.isArray(payload[type]) ? payload[type] : [];
+      var amounts = {};
+      rows.forEach(function(row) { amounts[row.period] = Number(row.total_amount || 0); });
+      var total = periods.reduce(function(sum, period) { return sum + (amounts[period] || 0); }, 0);
+      var body = periods.map(function(period) {
+        var amount = amounts[period] || 0;
+        var width = total > 0 ? Math.min(100, amount / total * 100) : 0;
+        return '<div class="release-period-row"><span>' + esc(period) + '</span><div class="release-period-bar"><i style="width:' + width.toFixed(2) + '%"></i></div><em class="release-period-share">' + width.toFixed(2) + '%</em><b>' + fmt(amount) + ' ARK</b></div>';
+      }).join("");
+      return '<div class="release-period-panel"><div class="release-period-heading">' + labels[type] + '</div>' + body + '<div class="release-period-total"><span>合计</span><b>' + fmt(total) + ' ARK</b></div></div>';
     }).join("");
-    return '<div class="release-period-panel"><div class="release-period-heading">' + labels[type] + '</div>' + body + '<div class="release-period-total"><span>合计</span><b>' + fmt(total) + ' ARK</b></div></div>';
-  }).join("");
-  status.textContent = "";
+  });
+  ["releasePeriodStatus", "releasePeriodStatusPage"].forEach(function(statusId) {
+    var status = document.getElementById(statusId);
+    if (status) status.textContent = "";
+  });
 }
 
 function updateReleaseAmountAnalysis(payload) {
   currentReleaseAmountDistribution = payload || null;
   renderReleaseAmountAnalysis(currentReleaseAmountType);
-  var status = document.getElementById("releaseAnalysisStatus");
-  if (status) status.textContent = payload && payload.date ? "· " + payload.date : "";
+  ["releaseAnalysisStatus", "releaseAnalysisStatusPage"].forEach(function(statusId) {
+    var status = document.getElementById(statusId);
+    if (status) status.textContent = payload && payload.date ? "· " + payload.date : "";
+  });
 }
 
 function renderReleaseAmountAnalysis(type) {
   var payload = currentReleaseAmountDistribution;
-  var legend = document.getElementById("releaseAnalysisLegend");
-  var totalEl = document.getElementById("releaseAnalysisTotal");
-  var canvas = document.getElementById("releaseAmountChart");
-  if (!legend || !totalEl || !canvas) return;
   var byType = payload && (payload.by_type || payload);
   var item = byType ? byType[type] : null;
   var buckets = item && Array.isArray(item.buckets) ? item.buckets : [];
   var total = item ? Number(item.total_amount || 0) : 0;
-  totalEl.textContent = fmt(total);
-  if (releaseAmountChart) {
-    releaseAmountChart.destroy();
-    releaseAmountChart = null;
-  }
-  if (!buckets.length) {
-    legend.innerHTML = '<div class="release-analysis-empty">暂无当日释放数据</div>';
-    return;
-  }
   var values = buckets.map(function(row) { return Number(row.amount || 0); });
   var hasAmount = values.some(function(value) { return value > 0; });
-  if (window.Chart) {
-    releaseAmountChart = new Chart(canvas.getContext("2d"), {
+  [
+    {legend: "releaseAnalysisLegend", total: "releaseAnalysisTotal", canvas: "releaseAmountChart"},
+    {legend: "releaseAnalysisLegendPage", total: "releaseAnalysisTotalPage", canvas: "releaseAmountChartPage"}
+  ].forEach(function(target) {
+    var legend = document.getElementById(target.legend);
+    var totalEl = document.getElementById(target.total);
+    var canvas = document.getElementById(target.canvas);
+    if (!legend || !totalEl || !canvas) return;
+    totalEl.textContent = fmt(total);
+    if (releaseAmountCharts[target.canvas]) {
+      releaseAmountCharts[target.canvas].destroy();
+      delete releaseAmountCharts[target.canvas];
+    }
+    if (!buckets.length) {
+      legend.innerHTML = '<div class="release-analysis-empty">暂无当日释放数据</div>';
+      return;
+    }
+    if (window.Chart) {
+      releaseAmountCharts[target.canvas] = new Chart(canvas.getContext("2d"), {
       type: "doughnut",
       data: {
         labels: hasAmount ? buckets.map(function(row) { return row.label; }) : ["暂无数据"],
@@ -816,18 +861,19 @@ function renderReleaseAmountAnalysis(type) {
           }
         }
       }
-    });
-  }
-  legend.innerHTML = buckets.map(function(row, index) {
-    var color = RELEASE_AMOUNT_COLORS[index] || "#94a3b8";
-    return '<div class="release-analysis-row">' +
-      '<span class="release-analysis-swatch" style="color:' + color + ';background:' + (hasAmount ? color : "#223047") + '"></span>' +
-      '<span class="release-analysis-label">' + esc(row.label) + '</span>' +
-      '<span class="release-analysis-amount">' + fmt(row.amount || 0) + ' ARK</span>' +
-      '<span class="release-analysis-share">' + Number(row.amount_pct || 0).toFixed(2) + '%</span>' +
-      '<span class="release-analysis-count">' + fmtInt(row.count || 0) + ' 笔释放</span>' +
-      '</div>';
-  }).join("");
+      });
+    }
+    legend.innerHTML = buckets.map(function(row, index) {
+      var color = RELEASE_AMOUNT_COLORS[index] || "#94a3b8";
+      return '<div class="release-analysis-row">' +
+        '<span class="release-analysis-swatch" style="color:' + color + ';background:' + (hasAmount ? color : "#223047") + '"></span>' +
+        '<span class="release-analysis-label">' + esc(row.label) + '</span>' +
+        '<span class="release-analysis-amount">' + fmt(row.amount || 0) + ' ARK</span>' +
+        '<span class="release-analysis-share">' + Number(row.amount_pct || 0).toFixed(2) + '%</span>' +
+        '<span class="release-analysis-count">' + fmtInt(row.count || 0) + ' 笔释放</span>' +
+        '</div>';
+    }).join("");
+  });
 }
 
 function updateTurboPending(payload) {
@@ -1296,7 +1342,9 @@ document.querySelectorAll(".sidebar-link").forEach(function(link) {
     document.querySelectorAll("[data-page-content]").forEach(function(page) {
       page.classList.toggle("is-hidden", page !== target);
     });
-    document.querySelector(".dashboard-layout").classList.toggle("history-mode", pageName === "history");
+    var dashboardLayout = document.querySelector(".dashboard-layout");
+    dashboardLayout.classList.toggle("history-mode", pageName === "history");
+    dashboardLayout.classList.toggle("release-mode", pageName === "release");
     document.querySelectorAll(".sidebar-link").forEach(function(other) {
       var active = other === link;
       other.classList.toggle("active", active);
