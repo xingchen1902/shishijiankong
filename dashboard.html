@@ -1234,8 +1234,13 @@ function syncEventStreamHeight() {
 }
 
 var eventCenterEvents = [];
+var eventCenterTotals = {};
 var eventCenterFilter = "all";
 var eventCenterSelectedIndex = 0;
+var EVENT_CENTER_TYPES = [
+  "bonus_withdraw", "stake_in", "stake_out", "bonus_in", "burn_stake", "transfer_720",
+  "turbo_total", "release_dynamic", "release_static", "permanent_bonus", "permanent_stake", "burn_other"
+];
 
 function eventTime(value, withDate) {
   if (!value) return "--";
@@ -1253,22 +1258,21 @@ function eventTypeClass(type) {
   return Object.prototype.hasOwnProperty.call(TYPE_LABELS, type) ? type : "unknown";
 }
 
-function renderEventCenter(events) {
+function renderEventCenter(events, totals) {
   eventCenterEvents = Array.isArray(events) ? events : [];
+  if (totals) eventCenterTotals = totals;
   var filterGrid = document.getElementById("eventFilterGrid");
   var body = document.getElementById("eventCenterBody");
   if (!filterGrid || !body) return;
-  var counts = {};
-  eventCenterEvents.forEach(function(e) { counts[e.type] = (counts[e.type] || 0) + 1; });
-  var filterTypes = Object.keys(counts).sort(function(a, b) { return counts[b] - counts[a]; }).slice(0, 10);
-  filterGrid.innerHTML = '<button class="event-filter ' + (eventCenterFilter === "all" ? "active" : "") + '" type="button" data-event-filter="all"><span class="event-filter-label">全部事件</span><span class="event-filter-count">' + eventCenterEvents.length + '</span></button>' + filterTypes.map(function(type) {
-    return '<button class="event-filter ' + (eventCenterFilter === type ? "active" : "") + '" type="button" data-event-filter="' + esc(type) + '"><span class="event-filter-label">' + esc(TYPE_LABELS[type] || type) + '</span><span class="event-filter-count">' + counts[type] + '</span></button>';
+  var totalCount = EVENT_CENTER_TYPES.reduce(function(sum, type) { return sum + Number(eventCenterTotals[type] || 0); }, 0);
+  filterGrid.innerHTML = '<button class="event-filter ' + (eventCenterFilter === "all" ? "active" : "") + '" type="button" data-event-filter="all"><span class="event-filter-label">全部事件</span><span class="event-filter-count">' + totalCount + '</span></button>' + EVENT_CENTER_TYPES.map(function(type) {
+    return '<button class="event-filter ' + (eventCenterFilter === type ? "active" : "") + '" type="button" data-event-filter="' + esc(type) + '"><span class="event-filter-label">' + esc(TYPE_LABELS[type] || type) + '</span><span class="event-filter-count">' + Number(eventCenterTotals[type] || 0) + '</span></button>';
   }).join("");
   filterGrid.querySelectorAll(".event-filter").forEach(function(button) {
     button.addEventListener("click", function() {
       eventCenterFilter = button.getAttribute("data-event-filter") || "all";
       eventCenterSelectedIndex = 0;
-      renderEventCenter(eventCenterEvents);
+      renderEventCenter(eventCenterEvents, eventCenterTotals);
     });
   });
   var filtered = eventCenterFilter === "all" ? eventCenterEvents : eventCenterEvents.filter(function(e) { return e.type === eventCenterFilter; });
@@ -1292,7 +1296,7 @@ function renderEventCenter(events) {
   body.querySelectorAll("tr[data-event-index]").forEach(function(row) {
     row.addEventListener("click", function() {
       eventCenterSelectedIndex = Number(row.getAttribute("data-event-index"));
-      renderEventCenter(eventCenterEvents);
+      renderEventCenter(eventCenterEvents, eventCenterTotals);
     });
   });
   renderEventDetail(filtered[eventCenterSelectedIndex]);
@@ -1320,9 +1324,9 @@ function renderEventDetail(event) {
     row("虚拟机", "BSC") + row("事件索引", event.id != null ? esc(String(event.id)) : "--");
 }
 
-function updateEvents(allEvents) {
+function updateEvents(allEvents, totals) {
   var box = document.getElementById("eventStream");
-  renderEventCenter(allEvents);
+  renderEventCenter(allEvents, totals);
   if (!box) return;
   if (!allEvents || !allEvents.length) {
     box.innerHTML = "<div style=\"text-align:center;color:#64748b;padding:10px;\">暂无事件</div>";
@@ -1547,7 +1551,7 @@ function loadDaily() {
 
 function loadRealtime() {
   return fetchAPI("/api/realtime?limit=50").then(function(realtime) {
-    updateEvents(realtime ? realtime.data : null);
+    updateEvents(realtime ? realtime.data : null, realtime ? realtime.totals : null);
   }).catch(function(err) { logLoadError("realtime", err); });
 }
 

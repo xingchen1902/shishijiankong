@@ -1106,8 +1106,14 @@ def get_realtime(limit:int=100):
         ORDER BY timestamp DESC, block DESC, id DESC
         LIMIT ?
     """, (limit,)).fetchall()
+    totals = conn.execute("""
+        SELECT type, COUNT(*) AS count
+        FROM events
+        WHERE type NOT IN ('dynamic', 'static_burn')
+        GROUP BY type
+    """).fetchall()
     conn.close()
-    return {"data": [dict(r) for r in rows]}
+    return {"data": [dict(r) for r in rows], "totals": {row["type"]: row["count"] for row in totals}}
 
 @app.get("/api/lp-swaps")
 def get_lp_swaps(limit:int=100, period: str = "h24"):
