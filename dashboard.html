@@ -209,7 +209,7 @@ tbody tr:hover { background: #1a2332; }
 tbody tr:last-child td { border-bottom: none; }
 td.pos { color: #22c55e; }
 td.neg { color: #ef4444; }
-.events-box { background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-top: 20px; padding: 16px; overflow-y: auto; }
+.events-box { background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-top: 20px; padding: 16px; height: 560px; min-height: 420px; max-height: 560px; overflow-y: auto; }
 .events-box .event-item { padding: 6px 0; border-bottom: 1px solid #1a2332; font-size: 12px; display: flex; justify-content: space-between; }
 .events-box .event-item:last-child { border: none; }
 .event-type { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 6px; }
@@ -312,6 +312,7 @@ td.neg { color: #ef4444; }
   .dashboard-main > .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .dashboard-main > .table-wrap table { min-width: 1120px; table-layout: fixed; }
   .staking-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; padding-bottom: 4px; }
+  .events-box { height: 420px; max-height: 420px; }
 }
 @media (max-width: 600px) {
   .staking-overview { grid-template-columns: minmax(0, 1fr); }
@@ -324,6 +325,7 @@ td.neg { color: #ef4444; }
   .release-analysis-tab { flex:1; }
   .release-analysis-row { grid-template-columns:10px minmax(72px,1fr) auto auto; gap:7px; }
   .release-analysis-amount, .release-analysis-share { font-size:11px; }
+  .events-box { height: 360px; min-height: 320px; max-height: 360px; }
 }
 
 @media (max-width: 700px) {
@@ -1163,10 +1165,11 @@ function updateDaily(resp) {
 }
 
 function syncEventStreamHeight() {
-  var tableWrap = document.querySelector(".table-wrap");
   var eventBox = document.getElementById("eventStream");
-  if (!tableWrap || !eventBox) return;
+  var tableWrap = Array.from(document.querySelectorAll(".table-wrap")).find(function(el) { return el.offsetHeight > 0; });
+  if (!tableWrap || !eventBox || eventBox.offsetWidth === 0) return;
   var height = tableWrap.offsetHeight;
+  if (height <= 0) return;
   eventBox.style.height = height + "px";
   eventBox.style.maxHeight = height + "px";
 }
