@@ -5,7 +5,7 @@ SQLite 存储层
 - daily: 按日期聚合的汇总数据
 """
 
-import os, sqlite3, json
+import os, sqlite3, json, fcntl
 from datetime import datetime, timezone, timedelta
 
 BJT = timezone(timedelta(hours=8))
@@ -29,6 +29,17 @@ def get_conn():
     return conn
 
 def init_db():
+    """Serialize schema initialization across the listener and API processes."""
+    os.makedirs(DB_DIR, exist_ok=True)
+    lock_path = DB_PATH + ".init.lock"
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            _init_db()
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+def _init_db():
     conn = get_conn()
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript("""
