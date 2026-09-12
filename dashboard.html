@@ -211,7 +211,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .event-filter-count { display: block; margin-top: 7px; color: #e2e8f0; font-size: 18px; font-weight: 700; }
 .event-center-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; align-items: start; }
 .event-table-wrap { overflow: auto; max-height: 720px; background: #111d32; border: 1px solid #263b59; border-radius: 12px; }
-.event-table { min-width: 900px; table-layout: fixed; }
+.event-table { min-width: 1120px; table-layout: fixed; }
 .event-table th { position: sticky; top: 0; z-index: 1; background: #14233b; color: #94a3b8; }
 .event-table td { color: #cbd5e1; white-space: nowrap; }
 .event-table tbody tr { cursor: pointer; }
@@ -514,8 +514,8 @@ td.neg { color: #ef4444; }
       <div class="event-center-grid">
         <div class="event-table-wrap">
           <table class="event-table">
-            <thead><tr><th>时间</th><th>事件类型</th><th>ARK数量</th><th>从地址</th><th>到地址</th><th>交易哈希</th></tr></thead>
-            <tbody id="eventCenterBody"><tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b;">等待数据...</td></tr></tbody>
+            <thead><tr><th>时间</th><th>事件类型</th><th>ARK数量</th><th>涡轮系数</th><th>实际涡轮</th><th>从地址</th><th>到地址</th><th>交易哈希</th></tr></thead>
+            <tbody id="eventCenterBody"><tr><td colspan="8" style="text-align:center;padding:24px;color:#64748b;">等待数据...</td></tr></tbody>
           </table>
         </div>
         <aside class="event-detail-card" id="eventDetailCard">
@@ -1265,6 +1265,10 @@ function shortAddress(value) {
   return value.slice(0, 6) + "..." + value.slice(-4);
 }
 
+function turboCoefficient(value) {
+  return value == null ? "--" : (Number(value) * 100).toFixed(2) + "%";
+}
+
 function eventTypeClass(type) {
   return Object.prototype.hasOwnProperty.call(TYPE_LABELS, type) ? type : "unknown";
 }
@@ -1288,7 +1292,7 @@ function renderEventCenter(events, totals) {
   });
   var filtered = eventCenterFilter === "all" ? eventCenterEvents : eventCenterEvents.filter(function(e) { return e.type === eventCenterFilter; });
   if (!filtered.length) {
-    body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b;">暂无事件</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#64748b;">暂无事件</td></tr>';
     renderEventDetail(null);
     return;
   }
@@ -1298,7 +1302,9 @@ function renderEventCenter(events, totals) {
     return '<tr data-event-index="' + index + '" class="' + (index === eventCenterSelectedIndex ? "selected" : "") + '">' +
       '<td>' + eventTime(e.timestamp, true) + '</td>' +
       '<td><span class="event-badge event-type ' + eventTypeClass(e.type) + '">' + esc(TYPE_LABELS[e.type] || e.type || "未知事件") + '</span></td>' +
-      '<td class="event-value">' + fmt(e.actual_value != null ? e.actual_value : e.value) + '</td>' +
+      '<td class="event-value">' + fmt(e.value) + '</td>' +
+      '<td>' + turboCoefficient(e.consensus_coefficient) + '</td>' +
+      '<td class="event-value">' + (e.actual_value != null ? fmt(e.actual_value) : "--") + '</td>' +
       '<td>' + esc(shortAddress(e.from_addr)) + '</td>' +
       '<td>' + esc(shortAddress(e.to_addr)) + '</td>' +
       '<td class="event-link">' + (tx ? '<a href="https://bscscan.com/tx/' + encodeURIComponent(tx) + '" target="_blank">' + esc(shortAddress(tx)) + '</a>' : "--") + '</td>' +
@@ -1325,7 +1331,9 @@ function renderEventDetail(event) {
   card.innerHTML = '<div class="event-detail-title">事件详情</div>' +
     '<div class="event-detail-status">已确认 · ' + esc(eventTime(event.timestamp, true)) + '</div>' +
     row("事件类型", '<span class="event-badge event-type ' + eventTypeClass(event.type) + '">' + esc(TYPE_LABELS[event.type] || event.type || "未知事件") + '</span>') +
-    row("ARK数量", fmt(event.actual_value != null ? event.actual_value : event.value) + ' ARK') +
+    row("ARK数量", fmt(event.value) + ' ARK') +
+    row("涡轮系数", turboCoefficient(event.consensus_coefficient)) +
+    row("实际涡轮", event.actual_value != null ? fmt(event.actual_value) + ' ARK' : "--") +
     row("从地址", esc(event.from_addr || "--")) +
     row("到地址", esc(event.to_addr || "--")) +
     row("交易哈希", tx ? '<a href="https://bscscan.com/tx/' + encodeURIComponent(tx) + '" target="_blank">' + esc(tx) + '</a>' : "--") +
