@@ -1112,8 +1112,27 @@ def get_realtime(limit:int=100):
         WHERE type NOT IN ('dynamic', 'static_burn')
         GROUP BY type
     """).fetchall()
+    typed_rows = conn.execute("""
+        SELECT * FROM (
+            SELECT events.*,
+                   ROW_NUMBER() OVER (PARTITION BY type ORDER BY timestamp DESC, block DESC, id DESC) AS event_rank
+            FROM events
+            WHERE type NOT IN ('dynamic', 'static_burn')
+        )
+        WHERE event_rank <= 15
+        ORDER BY timestamp DESC, block DESC, id DESC
+    """).fetchall()
     conn.close()
-    return {"data": [dict(r) for r in rows], "totals": {row["type"]: row["count"] for row in totals}}
+    recent_by_type = {}
+    for row in typed_rows:
+        item = dict(row)
+        item.pop("event_rank", None)
+        recent_by_type.setdefault(item["type"], []).append(item)
+    return {
+        "data": [dict(r) for r in rows],
+        "totals": {row["type"]: row["count"] for row in totals},
+        "recent_by_type": recent_by_type,
+    }
 
 @app.get("/api/lp-swaps")
 def get_lp_swaps(limit:int=100, period: str = "h24"):

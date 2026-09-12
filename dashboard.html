@@ -1246,6 +1246,7 @@ function syncEventStreamHeight() {
 
 var eventCenterEvents = [];
 var eventCenterTotals = {};
+var eventCenterRecentByType = {};
 var eventCenterFilter = "all";
 var eventCenterSelectedIndex = 0;
 var EVENT_CENTER_TYPES = [
@@ -1273,9 +1274,10 @@ function eventTypeClass(type) {
   return Object.prototype.hasOwnProperty.call(TYPE_LABELS, type) ? type : "unknown";
 }
 
-function renderEventCenter(events, totals) {
+function renderEventCenter(events, totals, recentByType) {
   eventCenterEvents = Array.isArray(events) ? events : [];
   if (totals) eventCenterTotals = totals;
+  if (recentByType) eventCenterRecentByType = recentByType;
   var filterGrid = document.getElementById("eventFilterGrid");
   var body = document.getElementById("eventCenterBody");
   if (!filterGrid || !body) return;
@@ -1287,10 +1289,12 @@ function renderEventCenter(events, totals) {
     button.addEventListener("click", function() {
       eventCenterFilter = button.getAttribute("data-event-filter") || "all";
       eventCenterSelectedIndex = 0;
-      renderEventCenter(eventCenterEvents, eventCenterTotals);
+      renderEventCenter(eventCenterEvents, eventCenterTotals, eventCenterRecentByType);
     });
   });
-  var filtered = eventCenterFilter === "all" ? eventCenterEvents : eventCenterEvents.filter(function(e) { return e.type === eventCenterFilter; });
+  var filtered = eventCenterFilter === "all"
+    ? eventCenterEvents.slice(0, 15)
+    : (eventCenterRecentByType[eventCenterFilter] || eventCenterEvents.filter(function(e) { return e.type === eventCenterFilter; }).slice(0, 15));
   if (!filtered.length) {
     body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#64748b;">暂无事件</td></tr>';
     renderEventDetail(null);
@@ -1313,7 +1317,7 @@ function renderEventCenter(events, totals) {
   body.querySelectorAll("tr[data-event-index]").forEach(function(row) {
     row.addEventListener("click", function() {
       eventCenterSelectedIndex = Number(row.getAttribute("data-event-index"));
-      renderEventCenter(eventCenterEvents, eventCenterTotals);
+      renderEventCenter(eventCenterEvents, eventCenterTotals, eventCenterRecentByType);
     });
   });
   renderEventDetail(filtered[eventCenterSelectedIndex]);
@@ -1343,9 +1347,9 @@ function renderEventDetail(event) {
     row("虚拟机", "BSC") + row("事件索引", event.id != null ? esc(String(event.id)) : "--");
 }
 
-function updateEvents(allEvents, totals) {
+function updateEvents(allEvents, totals, recentByType) {
   var box = document.getElementById("eventStream");
-  renderEventCenter(allEvents, totals);
+  renderEventCenter(allEvents, totals, recentByType);
   if (!box) return;
   if (!allEvents || !allEvents.length) {
     box.innerHTML = "<div style=\"text-align:center;color:#64748b;padding:10px;\">暂无事件</div>";
@@ -1577,7 +1581,7 @@ function loadDaily() {
 
 function loadRealtime() {
   return fetchAPI("/api/realtime?limit=50").then(function(realtime) {
-    updateEvents(realtime ? realtime.data : null, realtime ? realtime.totals : null);
+    updateEvents(realtime ? realtime.data : null, realtime ? realtime.totals : null, realtime ? realtime.recent_by_type : null);
   }).catch(function(err) { logLoadError("realtime", err); });
 }
 
