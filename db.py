@@ -50,6 +50,14 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
         CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
         CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_events_type_recent
+            ON events(type, timestamp DESC, block DESC, id DESC);
+
+        CREATE TABLE IF NOT EXISTS event_type_counts (
+            type TEXT PRIMARY KEY,
+            count INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
 
         CREATE TABLE IF NOT EXISTS raw_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,6 +235,15 @@ def init_db():
         conn.execute("ALTER TABLE events ADD COLUMN actual_value REAL")
     if "consensus_coefficient" not in event_columns:
         conn.execute("ALTER TABLE events ADD COLUMN consensus_coefficient REAL")
+    # 首次建立累计表时校准历史数量，之后由事件写入逻辑增量维护，避免每次重启扫描整张 events 表。
+    if not conn.execute("SELECT 1 FROM event_type_counts LIMIT 1").fetchone():
+        conn.execute("""
+            INSERT INTO event_type_counts(type, count, updated_at)
+            SELECT type, COUNT(*), datetime('now')
+            FROM events
+            WHERE type NOT IN ('dynamic', 'static_burn')
+            GROUP BY type
+        """)
     # 系数卡片只查新版涡轮事件中的最新记录；专用索引避免每次页面刷新扫描/排序整张 events 表。
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_events_turbo_coefficient
@@ -645,6 +662,12 @@ def insert_event(block, tx, event_type, from_addr, to_addr, value, timestamp):
         "INSERT INTO events (block, tx, type, from_addr, to_addr, value, timestamp, release_period) VALUES (?,?,?,?,?,?,?,?)",
         (block, tx, event_type, from_addr, to_addr, value, timestamp, None)
     )
+    if event_type not in ("dynamic", "static_burn"):
+        conn.execute(
+            "INSERT INTO event_type_counts(type, count, updated_at) VALUES (?, 1, datetime('now')) "
+            "ON CONFLICT(type) DO UPDATE SET count=count+1, updated_at=datetime('now')",
+            (event_type,),
+        )
     conn.commit()
     conn.close()
 
@@ -657,6 +680,16 @@ def insert_events_batch(events):
     conn.executemany(
         "INSERT INTO events (block, tx, type, from_addr, to_addr, value, actual_value, consensus_coefficient, timestamp, release_period) VALUES (?,?,?,?,?,?,?,?,?,?)",
         data
+    )
+    counts = {}
+    for event in events:
+        event_type = event["type"]
+        if event_type not in ("dynamic", "static_burn"):
+            counts[event_type] = counts.get(event_type, 0) + 1
+    conn.executemany(
+        "INSERT INTO event_type_counts(type, count, updated_at) VALUES (?, ?, datetime('now')) "
+        "ON CONFLICT(type) DO UPDATE SET count=count+excluded.count, updated_at=datetime('now')",
+        list(counts.items()),
     )
     conn.commit()
     conn.close()

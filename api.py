@@ -1107,27 +1107,22 @@ def get_realtime(limit:int=100):
         LIMIT ?
     """, (limit,)).fetchall()
     totals = conn.execute("""
-        SELECT type, COUNT(*) AS count
-        FROM events
+        SELECT type, count
+        FROM event_type_counts
         WHERE type NOT IN ('dynamic', 'static_burn')
-        GROUP BY type
     """).fetchall()
-    typed_rows = conn.execute("""
-        SELECT * FROM (
-            SELECT events.*,
-                   ROW_NUMBER() OVER (PARTITION BY type ORDER BY timestamp DESC, block DESC, id DESC) AS event_rank
-            FROM events
-            WHERE type NOT IN ('dynamic', 'static_burn')
-        )
-        WHERE event_rank <= 15
-        ORDER BY timestamp DESC, block DESC, id DESC
-    """).fetchall()
-    conn.close()
+    event_types = [row["type"] for row in totals]
     recent_by_type = {}
-    for row in typed_rows:
-        item = dict(row)
-        item.pop("event_rank", None)
-        recent_by_type.setdefault(item["type"], []).append(item)
+    for event_type in event_types:
+        typed_rows = conn.execute("""
+            SELECT * FROM events
+            WHERE type = ?
+            ORDER BY timestamp DESC, block DESC, id DESC
+            LIMIT 15
+        """, (event_type,)).fetchall()
+        if typed_rows:
+            recent_by_type[event_type] = [dict(row) for row in typed_rows]
+    conn.close()
     return {
         "data": [dict(r) for r in rows],
         "totals": {row["type"]: row["count"] for row in totals},
