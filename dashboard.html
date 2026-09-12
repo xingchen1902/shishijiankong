@@ -18,6 +18,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .sidebar-link .nav-icon { width: 18px; color: #64748b; font-size: 15px; text-align: center; }
 .sidebar-link.active { color: #dbeafe; background: linear-gradient(90deg, rgba(37, 99, 235, .22), rgba(20, 184, 166, .08)); border-color: rgba(96, 165, 250, .25); box-shadow: inset 3px 0 0 #60a5fa; }
 .sidebar-link.active .nav-icon { color: #60a5fa; }
+.sidebar-link:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.dashboard-page.is-hidden { display: none; }
+.dashboard-main > .history-page { width: calc(100% + 400px); }
 .header { margin-left: 224px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 24px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .header h1 { font-size: 22px; font-weight: 700; }
 .header h1 span { color: #60a5fa; }
@@ -295,6 +298,7 @@ td.neg { color: #ef4444; }
   .dashboard-layout { grid-template-columns: 1fr; }
   .dex-sidebar .dex-card, .pool-history-sidebar .dex-card { position: static; }
   .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination, .dashboard-main > .release-summary-card, .dashboard-main > .release-analysis-card { width: 100%; }
+  .dashboard-main > .history-page { width: 100%; }
   .dashboard-main > .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .dashboard-main > .table-wrap table { min-width: 1120px; table-layout: fixed; }
   .staking-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; padding-bottom: 4px; }
@@ -332,10 +336,10 @@ td.neg { color: #ef4444; }
   </div>
   <div class="sidebar-label">导航</div>
   <div class="sidebar-links">
-    <button class="sidebar-link active" type="button" aria-current="page"><span class="nav-icon">⌂</span><span>首页</span></button>
-    <button class="sidebar-link" type="button"><span class="nav-icon">▤</span><span>历史汇总</span></button>
-    <button class="sidebar-link" type="button"><span class="nav-icon">◒</span><span>释放数据</span></button>
-    <button class="sidebar-link" type="button"><span class="nav-icon">ϟ</span><span>事件流</span></button>
+    <button class="sidebar-link active" type="button" data-page="home" aria-current="page"><span class="nav-icon">⌂</span><span>首页</span></button>
+    <button class="sidebar-link" type="button" data-page="history"><span class="nav-icon">▤</span><span>历史汇总</span></button>
+    <button class="sidebar-link" type="button" data-page="release"><span class="nav-icon">◒</span><span>释放数据</span></button>
+    <button class="sidebar-link" type="button" data-page="events"><span class="nav-icon">ϟ</span><span>事件流</span></button>
   </div>
 </nav>
 <div class="header">
@@ -353,6 +357,7 @@ td.neg { color: #ef4444; }
 <div class="container">
   <div class="dashboard-layout">
     <div class="dashboard-main">
+  <div class="dashboard-page home-page" data-page-content="home">
   <!-- 实时余额卡片 -->
   <div class="realtime-grid">
     <div class="rt-card blue"><div class="label">奖金池余额</div><div class="value" id="bonusBal">--</div></div>
@@ -428,7 +433,10 @@ td.neg { color: #ef4444; }
     <div class="release-analysis-footnote">按单笔释放数量分组，扇区占比按释放金额计算。</div>
   </div>
 
+  </div>
+
   <!-- 历史表格 -->
+  <div class="dashboard-page history-page is-hidden" data-page-content="history">
   <div class="section-title">📅 每日历史汇总</div>
   <div class="table-wrap">
     <table>
@@ -467,6 +475,8 @@ td.neg { color: #ef4444; }
   </div>
   <div class="pagination" id="releaseSummaryPagination" style="display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap;"></div>
 </div>
+  </div>
+
   </div>
 
     </div>
@@ -1272,6 +1282,23 @@ document.querySelectorAll(".release-analysis-tab").forEach(function(tab) {
       other.setAttribute("aria-selected", active ? "true" : "false");
     });
     renderReleaseAmountAnalysis(currentReleaseAmountType);
+  });
+});
+
+document.querySelectorAll(".sidebar-link").forEach(function(link) {
+  link.addEventListener("click", function() {
+    var pageName = link.getAttribute("data-page");
+    var target = document.querySelector('[data-page-content="' + pageName + '"]');
+    if (!target) return;
+    document.querySelectorAll("[data-page-content]").forEach(function(page) {
+      page.classList.toggle("is-hidden", page !== target);
+    });
+    document.querySelectorAll(".sidebar-link").forEach(function(other) {
+      var active = other === link;
+      other.classList.toggle("active", active);
+      if (active) other.setAttribute("aria-current", "page");
+      else other.removeAttribute("aria-current");
+    });
   });
 });
 
