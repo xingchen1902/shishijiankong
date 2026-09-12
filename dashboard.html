@@ -417,28 +417,6 @@ td.neg { color: #ef4444; }
     </div>
   </div>
 
-  <!-- 释放金额区间分析：位于底池交互/事件流下方的空白区域 -->
-  <div class="today-card release-analysis-card">
-    <div class="release-analysis-head">
-      <div class="today-title" style="margin-bottom:0;">◒ 当日释放金额区间分析 <span id="releaseAnalysisStatus"></span></div>
-      <div class="release-analysis-tabs" role="tablist" aria-label="释放类型">
-        <button class="release-analysis-tab active" type="button" data-release-type="all" role="tab" aria-selected="true">全部释放</button>
-        <button class="release-analysis-tab" type="button" data-release-type="static" role="tab" aria-selected="false">静态释放</button>
-        <button class="release-analysis-tab" type="button" data-release-type="dynamic" role="tab" aria-selected="false">动态释放</button>
-      </div>
-    </div>
-    <div class="release-analysis-body">
-      <div class="release-analysis-chart">
-        <canvas id="releaseAmountChart" aria-label="释放金额区间占比扇形图"></canvas>
-        <div class="release-analysis-center"><strong id="releaseAnalysisTotal">--</strong><span>总释放 ARK</span></div>
-      </div>
-      <div class="release-analysis-legend" id="releaseAnalysisLegend">
-        <div class="release-analysis-empty">加载中...</div>
-      </div>
-    </div>
-    <div class="release-analysis-footnote">按单笔释放数量分组，扇区占比按释放金额计算。</div>
-  </div>
-
   </div>
 
   <div class="dashboard-page release-page is-hidden" data-page-content="release">
