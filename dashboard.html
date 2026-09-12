@@ -21,6 +21,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .sidebar-link:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 .dashboard-page.is-hidden { display: none; }
 .dashboard-main > .history-page { width: 100%; }
+.history-page { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
+.history-tables { min-width: 0; }
+.history-pool-sidebar { min-width: 0; }
 .dashboard-layout.history-mode { grid-template-columns: minmax(0, 1fr); }
 .dashboard-layout.history-mode > .dex-sidebar,
 .dashboard-layout.history-mode > .pool-history-sidebar { display: none; }
@@ -305,6 +308,7 @@ td.neg { color: #ef4444; }
   .dex-sidebar .dex-card, .pool-history-sidebar .dex-card { position: static; }
   .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination, .dashboard-main > .release-summary-card, .dashboard-main > .release-analysis-card { width: 100%; }
   .dashboard-main > .history-page { width: 100%; }
+  .history-page { grid-template-columns: minmax(0, 1fr); }
   .dashboard-main > .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .dashboard-main > .table-wrap table { min-width: 1120px; table-layout: fixed; }
   .staking-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; padding-bottom: 4px; }
@@ -452,6 +456,7 @@ td.neg { color: #ef4444; }
 
   <!-- 历史表格 -->
   <div class="dashboard-page history-page is-hidden" data-page-content="history">
+  <div class="history-tables">
   <div class="section-title">📅 每日历史汇总</div>
   <div class="table-wrap">
     <table>
@@ -492,6 +497,23 @@ td.neg { color: #ef4444; }
 </div>
   </div>
 
+  </div>
+  <aside class="history-pool-sidebar">
+    <div class="dex-card">
+      <div class="dex-head">
+        <div class="today-title" style="margin-bottom:0;">每日底池记录</div>
+        <div class="dex-source" id="poolHistorySource">本地记录</div>
+      </div>
+      <div class="pool-note">北京时间每日结束后自动记录 Dex Screener 的池内 ARK、池内 USDT 和 ARK 价格。</div>
+      <div class="pool-list" id="poolHistoryList">
+        <div class="pool-table-head"><div>日期</div><div>ARK</div><div>USDT</div><div>价格</div></div>
+        <div id="poolHistoryRows">
+          <div class="pool-empty">等待每日结束后生成记录...</div>
+        </div>
+      </div>
+      <div class="pool-pagination" id="poolHistoryPagination"></div>
+    </div>
+  </aside>
   </div>
 
     </div>
@@ -555,20 +577,6 @@ td.neg { color: #ef4444; }
     </aside>
 
     <aside class="pool-history-sidebar">
-      <div class="dex-card">
-        <div class="dex-head">
-          <div class="today-title" style="margin-bottom:0;">每日底池记录</div>
-          <div class="dex-source" id="poolHistorySource">本地记录</div>
-        </div>
-        <div class="pool-note">北京时间每日结束后自动记录 Dex Screener 的池内 ARK、池内 USDT 和 ARK 价格。</div>
-        <div class="pool-list" id="poolHistoryList">
-          <div class="pool-table-head"><div>日期</div><div>ARK</div><div>USDT</div><div>价格</div></div>
-          <div id="poolHistoryRows">
-            <div class="pool-empty">等待每日结束后生成记录...</div>
-          </div>
-        </div>
-        <div class="pool-pagination" id="poolHistoryPagination"></div>
-      </div>
       <!-- 事件流 -->
       <div class="section-title">⚡ 最新事件流</div>
       <div class="events-box" id="eventStream">
