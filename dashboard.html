@@ -258,6 +258,7 @@ td.neg { color: #ef4444; }
 .event-type.permanent_bonus { background: #422006; color: #fcd34d; }
 .event-type.permanent_stake { background: #14532d; color: #86efac; }
 .event-type.transfer_720 { background: #1c1917; color: #fdba74; }
+.event-badge.event-type { padding: 4px 8px; margin-right: 0; border-radius: 6px; font-size: 12px; }
 .chart-card { background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155; }
 .release-analysis-card { margin-top: 20px; }
 .release-analysis-head { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; }
@@ -1248,6 +1249,10 @@ function shortAddress(value) {
   return value.slice(0, 6) + "..." + value.slice(-4);
 }
 
+function eventTypeClass(type) {
+  return Object.prototype.hasOwnProperty.call(TYPE_LABELS, type) ? type : "unknown";
+}
+
 function renderEventCenter(events) {
   eventCenterEvents = Array.isArray(events) ? events : [];
   var filterGrid = document.getElementById("eventFilterGrid");
@@ -1277,7 +1282,7 @@ function renderEventCenter(events) {
     var tx = e.tx || "";
     return '<tr data-event-index="' + index + '" class="' + (index === eventCenterSelectedIndex ? "selected" : "") + '">' +
       '<td>' + eventTime(e.timestamp, true) + '</td>' +
-      '<td><span class="event-badge">' + esc(TYPE_LABELS[e.type] || e.type || "未知事件") + '</span></td>' +
+      '<td><span class="event-badge event-type ' + eventTypeClass(e.type) + '">' + esc(TYPE_LABELS[e.type] || e.type || "未知事件") + '</span></td>' +
       '<td class="event-value">' + fmt(e.actual_value != null ? e.actual_value : e.value) + '</td>' +
       '<td>' + esc(shortAddress(e.from_addr)) + '</td>' +
       '<td>' + esc(shortAddress(e.to_addr)) + '</td>' +
@@ -1304,7 +1309,7 @@ function renderEventDetail(event) {
   var row = function(label, value) { return '<div class="event-detail-row"><span class="label">' + label + '</span><span class="value">' + value + '</span></div>'; };
   card.innerHTML = '<div class="event-detail-title">事件详情</div>' +
     '<div class="event-detail-status">已确认 · ' + esc(eventTime(event.timestamp, true)) + '</div>' +
-    row("事件类型", '<span class="event-badge">' + esc(TYPE_LABELS[event.type] || event.type || "未知事件") + '</span>') +
+    row("事件类型", '<span class="event-badge event-type ' + eventTypeClass(event.type) + '">' + esc(TYPE_LABELS[event.type] || event.type || "未知事件") + '</span>') +
     row("ARK数量", fmt(event.actual_value != null ? event.actual_value : event.value) + ' ARK') +
     row("从地址", esc(event.from_addr || "--")) +
     row("到地址", esc(event.to_addr || "--")) +
