@@ -20,7 +20,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .sidebar-link.active .nav-icon { color: #60a5fa; }
 .sidebar-link:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 .dashboard-page.is-hidden { display: none; }
-.dashboard-main > .history-page { width: calc(100% + 400px); }
+.dashboard-main > .history-page { width: 100%; }
+.dashboard-layout.history-mode { grid-template-columns: minmax(0, 1fr); }
+.dashboard-layout.history-mode > .dex-sidebar,
+.dashboard-layout.history-mode > .pool-history-sidebar { display: none; }
 .header { margin-left: 224px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 24px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .header h1 { font-size: 22px; font-weight: 700; }
 .header h1 span { color: #60a5fa; }
@@ -1293,6 +1296,7 @@ document.querySelectorAll(".sidebar-link").forEach(function(link) {
     document.querySelectorAll("[data-page-content]").forEach(function(page) {
       page.classList.toggle("is-hidden", page !== target);
     });
+    document.querySelector(".dashboard-layout").classList.toggle("history-mode", pageName === "history");
     document.querySelectorAll(".sidebar-link").forEach(function(other) {
       var active = other === link;
       other.classList.toggle("active", active);
