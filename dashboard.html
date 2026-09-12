@@ -261,6 +261,9 @@ td.neg { color: #ef4444; }
 .event-badge.event-type { padding: 4px 8px; margin-right: 0; border-radius: 6px; font-size: 12px; }
 .chart-card { background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155; }
 .release-analysis-card { margin-top: 20px; }
+.release-analysis-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.release-analysis-layout > .chart-card,
+.release-analysis-layout > .release-analysis-card { min-width: 0; margin: 0; }
 .release-analysis-head { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; }
 .release-analysis-meta { color:#64748b; font-size:11px; font-weight:500; }
 .release-analysis-tabs { display:flex; gap:6px; padding:3px; border:1px solid #334155; border-radius:9px; background:#0f172a; }
@@ -354,6 +357,7 @@ td.neg { color: #ef4444; }
   .release-period-grid { grid-template-columns: minmax(0, 1fr); }
   .release-summary-grid { grid-template-columns: minmax(0, 1fr); }
   .release-analysis-body { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .release-analysis-layout { grid-template-columns: minmax(0, 1fr); }
   .release-analysis-chart { height:245px; min-height:220px; }
   .release-analysis-tabs { width:100%; }
   .release-analysis-tab { flex:1; }
@@ -469,6 +473,14 @@ td.neg { color: #ef4444; }
     </div>
   </div>
 
+  <div class="release-analysis-layout">
+  <div class="chart-card">
+    <div class="today-title">📈 最近24小时走势</div>
+    <div style="position:relative;height:280px;">
+      <canvas id="releaseTrendChart"></canvas>
+    </div>
+  </div>
+
   <div class="today-card release-analysis-card">
     <div class="release-analysis-head">
       <div class="today-title" style="margin-bottom:0;">◒ 当日释放金额区间分析 <span id="releaseAnalysisStatusPage"></span></div>
@@ -488,6 +500,7 @@ td.neg { color: #ef4444; }
       </div>
     </div>
     <div class="release-analysis-footnote">按单笔释放数量分组，扇区占比按释放金额计算。</div>
+  </div>
   </div>
   </div>
 
@@ -1347,7 +1360,7 @@ function updateEvents(allEvents, totals) {
   box.innerHTML = html;
 }
 
-var trendChart = null;
+var trendCharts = {};
 
 function updateTrend(data) {
   if (!data || !data.length) return;
@@ -1362,9 +1375,11 @@ function updateTrend(data) {
     so.push(data[i].stake_out);
     t720.push(data[i].transfer_720 || 0);
   }
-  var ctx = document.getElementById("trendChart").getContext("2d");
-  if (trendChart) trendChart.destroy();
-  trendChart = new Chart(ctx, {
+  ["trendChart", "releaseTrendChart"].forEach(function(chartId) {
+  var canvas = document.getElementById(chartId);
+  if (!canvas || !window.Chart) return;
+  if (trendCharts[chartId]) trendCharts[chartId].destroy();
+  trendCharts[chartId] = new Chart(canvas.getContext("2d"), {
     type: "line",
     data: {
       labels: labels,
@@ -1435,6 +1450,7 @@ function updateTrend(data) {
         y: { ticks: { color: "#64748b" }, grid: { color: "#334155" } }
       }
     }
+  });
   });
 }
 
