@@ -204,8 +204,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .events-center-title { color: #e2e8f0; font-size: 22px; font-weight: 700; }
 .events-center-meta { color: #64748b; font-size: 12px; }
 .events-center-meta .live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 0 10px rgba(45,212,191,.7); }
-.event-filter-grid { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
-.event-filter { min-width: 0; padding: 12px 14px; color: #94a3b8; background: #111d32; border: 1px solid #263b59; border-radius: 10px; text-align: left; cursor: pointer; }
+.event-filter-grid { display: flex; gap: 10px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.event-filter { flex: 1 0 0; min-width: 112px; padding: 12px 10px; color: #94a3b8; background: #111d32; border: 1px solid #263b59; border-radius: 10px; text-align: left; cursor: pointer; }
 .event-filter.active { color: #dbeafe; background: linear-gradient(135deg, rgba(20,184,166,.2), rgba(37,99,235,.2)); border-color: #38bdf8; box-shadow: inset 0 -2px 0 #2dd4bf; }
 .event-filter-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .event-filter-count { display: block; margin-top: 7px; color: #e2e8f0; font-size: 18px; font-weight: 700; }
@@ -342,7 +342,6 @@ td.neg { color: #ef4444; }
   .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination, .dashboard-main > .release-summary-card, .dashboard-main > .release-analysis-card { width: 100%; }
   .dashboard-main > .history-page { width: 100%; }
   .history-page { grid-template-columns: minmax(0, 1fr); }
-  .event-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .event-center-grid { grid-template-columns: minmax(0, 1fr); }
   .dashboard-main > .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .dashboard-main > .table-wrap table { min-width: 1120px; table-layout: fixed; }
@@ -361,7 +360,6 @@ td.neg { color: #ef4444; }
   .release-analysis-row { grid-template-columns:10px minmax(72px,1fr) auto auto; gap:7px; }
   .release-analysis-amount, .release-analysis-share { font-size:11px; }
   .events-box { height: 360px; min-height: 320px; max-height: 360px; }
-  .event-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .events-center-title { font-size: 18px; }
 }
 
