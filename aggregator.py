@@ -28,6 +28,7 @@ from pusher import (
     push_to_telegram,
     push_burst_alert,
     push_static_release_top30_excel,
+    push_dynamic_release_top30_excel,
     push_release_period_summary_to_telegram,
 )
 from ai_analyzer import generate_and_push_daily_report
@@ -423,14 +424,20 @@ class DailyAggregator:
         conn = get_conn()
         exists = conn.execute("SELECT id FROM daily_summary WHERE date=?", (yesterday,)).fetchone()
         conn.close()
-        report_sent = get_monitor_state(f"static_release_top30_sent:{yesterday}")
+        static_report_sent = get_monitor_state(f"static_release_top30_sent:{yesterday}")
+        dynamic_report_sent = get_monitor_state(f"dynamic_release_top30_sent:{yesterday}")
         if not exists:
             print(f"[检查] {yesterday} 未汇总，立即推送")
             self.compute_and_push(yesterday)
-        elif not report_sent:
-            print(f"[检查] {yesterday} 静态释放排名未发送，补发 Excel")
-            if push_static_release_top30_excel(yesterday):
-                set_monitor_state(f"static_release_top30_sent:{yesterday}", "1")
+        else:
+            if not static_report_sent:
+                print(f"[检查] {yesterday} 静态释放排名未发送，补发 Excel")
+                if push_static_release_top30_excel(yesterday):
+                    set_monitor_state(f"static_release_top30_sent:{yesterday}", "1")
+            if not dynamic_report_sent:
+                print(f"[检查] {yesterday} 动态释放排名未发送，补发 Excel")
+                if push_dynamic_release_top30_excel(yesterday):
+                    set_monitor_state(f"dynamic_release_top30_sent:{yesterday}", "1")
 
     def check_date_change(self):
         today = datetime.now(BJT).strftime("%Y-%m-%d")
@@ -618,6 +625,8 @@ class DailyAggregator:
             generate_and_push_daily_report(date_str, record)
             if push_static_release_top30_excel(date_str):
                 set_monitor_state(f"static_release_top30_sent:{date_str}", "1")
+            if push_dynamic_release_top30_excel(date_str):
+                set_monitor_state(f"dynamic_release_top30_sent:{date_str}", "1")
             if not hasattr(self, "_pushed_dates"):
                 self._pushed_dates = set()
             self._pushed_dates.add(date_str)

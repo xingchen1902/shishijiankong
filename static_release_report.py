@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""每日静态释放地址排名 Excel 报表。"""
+"""每日静态/动态释放地址排名 Excel 报表。"""
 
 import html
 import io
@@ -11,19 +11,19 @@ from datetime import datetime, timedelta
 from db import get_conn
 
 
-def get_top_static_release_rows(date_str, limit=30):
-    """返回排名后的逐笔明细；排名按地址当日静态释放合计计算。"""
+def get_top_release_rows(date_str, release_type, limit=30):
+    """返回排名后的逐笔明细；排名按地址当日对应类型释放合计计算。"""
     next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     conn = get_conn()
     rows = conn.execute(
         """
         SELECT id, to_addr, value, release_period
         FROM events
-        WHERE type='release_static'
+        WHERE type=?
           AND timestamp >= ? AND timestamp < ?
         ORDER BY timestamp ASC, block ASC, id ASC
         """,
-        (date_str + " 00:00:00", next_date + " 00:00:00"),
+        (release_type, date_str + " 00:00:00", next_date + " 00:00:00"),
     ).fetchall()
     conn.close()
 
@@ -47,6 +47,16 @@ def get_top_static_release_rows(date_str, limit=30):
     return result
 
 
+def get_top_static_release_rows(date_str, limit=30):
+    """返回排名后的逐笔静态释放明细。"""
+    return get_top_release_rows(date_str, "release_static", limit)
+
+
+def get_top_dynamic_release_rows(date_str, limit=30):
+    """返回排名后的逐笔动态释放明细。"""
+    return get_top_release_rows(date_str, "release_dynamic", limit)
+
+
 def _cell(value, row, col, style=None):
     ref = f"{col}{row}"
     style_attr = f' s="{style}"' if style is not None else ""
@@ -56,12 +66,15 @@ def _cell(value, row, col, style=None):
     return f'<c r="{ref}"{style_attr} t="inlineStr"><is><t>{escaped}</t></is></c>'
 
 
-def build_xlsx(date_str, rows):
-    """生成无额外颜色填充的标准 xlsx 文件。"""
+def build_xlsx(date_str, rows, release_type="static"):
+    """生成无额外颜色填充的标准静态或动态释放 xlsx 文件。"""
+    is_dynamic = release_type == "dynamic"
+    report_name = "动态释放前30名" if is_dynamic else "静态释放前30名"
+    amount_name = "动态释放数量" if is_dynamic else "静态释放数量"
     sheet_rows = [
         _cell("排名", 1, "A", 1)
         + _cell("用户地址", 1, "B", 1)
-        + _cell("静态释放数量", 1, "C", 1)
+        + _cell(amount_name, 1, "C", 1)
         + _cell("释放周期", 1, "D", 1)
     ]
     for excel_row, (rank, address, amount, period) in enumerate(rows, 2):
@@ -108,7 +121,7 @@ def build_xlsx(date_str, rows):
     workbook_xml = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                     '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
                     'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-                    '<sheets><sheet name="静态释放前30名" sheetId="1" r:id="rId1"/></sheets></workbook>')
+                    f'<sheets><sheet name="{report_name}" sheetId="1" r:id="rId1"/></sheets></workbook>')
     rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
             '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
