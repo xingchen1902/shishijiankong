@@ -259,6 +259,36 @@ td.neg { color: #ef4444; }
 .event-type.permanent_stake { background: #14532d; color: #86efac; }
 .event-type.transfer_720 { background: #1c1917; color: #fdba74; }
 .event-badge.event-type { padding: 4px 8px; margin-right: 0; border-radius: 6px; font-size: 12px; }
+.calc-card { background: linear-gradient(145deg, #17253b, #101b2e); border: 1px solid #365174; border-radius: 12px; padding: 16px; margin-top: 16px; }
+.calc-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; }
+.calc-card-title { color:#e2e8f0; font-size:15px; font-weight:700; }
+.calc-card-note { color:#64748b; font-size:10px; line-height:1.5; margin-top:4px; }
+.calc-live { color:#2dd4bf; font-size:10px; white-space:nowrap; }
+.calc-inputs { display:grid; grid-template-columns:1.2fr 1fr; gap:8px; margin-bottom:12px; }
+.calc-field { min-width:0; }
+.calc-field label { display:block; color:#94a3b8; font-size:10px; margin-bottom:5px; }
+.calc-field input, .calc-field select { width:100%; height:32px; padding:0 8px; color:#e2e8f0; background:#0f172a; border:1px solid #334155; border-radius:7px; font:inherit; font-size:12px; outline:none; }
+.calc-field input:focus, .calc-field select:focus { border-color:#38bdf8; box-shadow:0 0 0 2px rgba(56,189,248,.12); }
+.calc-live-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; margin-bottom:12px; }
+.calc-live-item { min-width:0; padding:8px; background:#0f172a; border:1px solid #263b59; border-radius:7px; }
+.calc-live-item span { display:block; color:#64748b; font-size:9px; margin-bottom:3px; }
+.calc-live-item b { display:block; overflow:hidden; color:#cbd5e1; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.calc-options { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; }
+.calc-option { min-width:0; padding:10px; background:#0f172a; border:1px solid #263b59; border-radius:8px; }
+.calc-option.direct { border-color:rgba(45,212,191,.4); }
+.calc-option.release { border-color:rgba(96,165,250,.35); }
+.calc-option h4 { color:#e2e8f0; font-size:11px; margin-bottom:8px; }
+.calc-row { display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:4px 0; border-bottom:1px solid rgba(51,65,85,.55); }
+.calc-row:last-child { border-bottom:0; }
+.calc-row span { color:#64748b; font-size:10px; white-space:nowrap; }
+.calc-row b { color:#cbd5e1; font-size:11px; text-align:right; white-space:nowrap; }
+.calc-row b.accent { color:#2dd4bf; }
+.calc-row b.warn { color:#fbbf24; }
+.calc-row b.bad { color:#fb7185; }
+.calc-result { margin-top:10px; padding:9px 10px; border-radius:8px; color:#cbd5e1; background:rgba(20,184,166,.1); border:1px solid rgba(45,212,191,.2); font-size:11px; line-height:1.5; }
+.calc-result strong { color:#2dd4bf; }
+.calc-result.release-choice { background:rgba(96,165,250,.1); border-color:rgba(96,165,250,.25); }
+.calc-error { color:#fbbf24; }
 .chart-card { background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #334155; }
 .release-analysis-card { margin-top: 20px; }
 .release-analysis-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
@@ -654,6 +684,26 @@ td.neg { color: #ef4444; }
       <div class="events-box" id="eventStream">
         <div style="text-align:center;color:#64748b;padding:10px;">等待数据...</div>
       </div>
+      <div class="calc-card" id="contributionCalculator">
+        <div class="calc-card-head">
+          <div><div class="calc-card-title">🧮 贡献值购买测算</div><div class="calc-card-note">实时比较直接使用涡轮余额，或释放后换 USDT 购买。</div></div>
+          <span class="calc-live">● 实时</span>
+        </div>
+        <div class="calc-inputs">
+          <div class="calc-field"><label for="calcTargetContribution">目标贡献值（ARK）</label><input id="calcTargetContribution" type="number" min="0" step="0.01" value="500"></div>
+          <div class="calc-field"><label for="calcReleasePeriod">释放周期</label><select id="calcReleasePeriod"><option value="60" selected>60天 · 0%</option><option value="30">30天 · 5%</option><option value="20">20天 · 10%</option><option value="10">10天 · 15%</option><option value="0">0天 · 10%</option></select></div>
+        </div>
+        <div class="calc-live-grid">
+          <div class="calc-live-item"><span>ARK实时价格</span><b id="calcPrice">--</b></div>
+          <div class="calc-live-item"><span>共识系数</span><b id="calcCoefficient">--</b></div>
+          <div class="calc-live-item"><span>当前涡轮余额</span><b id="calcTurboBalance">--</b></div>
+        </div>
+        <div class="calc-options">
+          <div class="calc-option direct"><h4>直接使用涡轮余额</h4><div class="calc-row"><span>消耗涡轮</span><b id="calcDirectTurbo">--</b></div><div class="calc-row"><span>购买后剩余</span><b id="calcDirectRemaining">--</b></div></div>
+          <div class="calc-option release"><h4>释放后用 USDT 购买</h4><div class="calc-row"><span>需要 USDT</span><b id="calcReleaseUsdt">--</b></div><div class="calc-row"><span>实际释放</span><b id="calcReleaseGross">--</b></div><div class="calc-row"><span>燃烧费用</span><b id="calcReleaseBurn">--</b></div><div class="calc-row"><span>消耗涡轮</span><b id="calcReleaseTurbo">--</b></div></div>
+        </div>
+        <div class="calc-result" id="calcRecommendation">等待价格和共识系数数据...</div>
+      </div>
     </aside>
   </div>
 </div>
@@ -673,6 +723,8 @@ var currentLpData = null;
 var currentDexPeriod = "h24";
 var currentPoolHistoryPage = 1;
 var POOL_HISTORY_PER_PAGE = 15;
+var calculatorConsensusCoefficient = null;
+var calculatorTurboBalance = null;
 var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24小时"};
 var currentReleaseAmountType = "all";
 var currentReleaseAmountDistribution = null;
@@ -938,10 +990,62 @@ function updateTurboPending(payload) {
   var container = document.getElementById("turboPendingList");
   if (!container) return;
   var total = payload && payload.total != null ? payload.total : 0;
+  calculatorTurboBalance = Number(total || 0);
   container.textContent = fmt(total);
   var coefficient = payload && payload.current_consensus_coefficient;
+  calculatorConsensusCoefficient = coefficient != null ? Number(coefficient) : null;
   var coefficientEl = document.getElementById("currentConsensusCoefficient");
   if (coefficientEl) coefficientEl.textContent = coefficient != null ? (Number(coefficient) * 100).toFixed(2) + "%" : "--";
+  updateContributionCalculator();
+}
+
+function updateContributionCalculator() {
+  var priceEl = document.getElementById("calcPrice");
+  var coefficientEl = document.getElementById("calcCoefficient");
+  var turboBalanceEl = document.getElementById("calcTurboBalance");
+  var resultEl = document.getElementById("calcRecommendation");
+  if (!priceEl || !coefficientEl || !turboBalanceEl || !resultEl) return;
+
+  var price = currentDexData && Number(currentDexData.price_usd);
+  var coefficient = Number(calculatorConsensusCoefficient);
+  var turboBalance = Number(calculatorTurboBalance);
+  priceEl.textContent = price > 0 ? fmtUsd(price, 4) : "--";
+  coefficientEl.textContent = coefficient > 0 ? (coefficient * 100).toFixed(2) + "%" : "--";
+  turboBalanceEl.textContent = Number.isFinite(turboBalance) ? fmt(turboBalance) + " ARK" : "--";
+  if (!(price > 0) || !(coefficient > 0) || !Number.isFinite(turboBalance)) {
+    resultEl.className = "calc-result calc-error";
+    resultEl.textContent = "等待价格和共识系数数据...";
+    return;
+  }
+
+  var target = Math.max(0, Number(document.getElementById("calcTargetContribution").value || 0));
+  var period = document.getElementById("calcReleasePeriod").value;
+  var feeMap = {"60": 0, "30": 0.05, "20": 0.10, "10": 0.15, "0": 0.10};
+  var fee = feeMap[period] != null ? feeMap[period] : 0;
+  var directTurbo = target / 5;
+  var directRemaining = turboBalance - directTurbo;
+  var usdtNeeded = target * price / 6;
+  var netSellArk = target / 6;
+  var grossRelease = fee < 1 ? netSellArk / (1 - fee) : 0;
+  var burnArk = grossRelease * fee;
+  var burnUsdt = burnArk * price;
+  var releaseTurbo = coefficient > 0 ? grossRelease / coefficient : Infinity;
+  var releaseRemaining = turboBalance - releaseTurbo;
+  var breakEven = 5 / (6 * (1 - fee));
+  var directBetter = directTurbo <= releaseTurbo;
+
+  document.getElementById("calcDirectTurbo").textContent = fmt(directTurbo) + " ARK";
+  document.getElementById("calcDirectRemaining").textContent = fmt(directRemaining) + " ARK";
+  document.getElementById("calcReleaseUsdt").textContent = fmtUsd(usdtNeeded, 2);
+  document.getElementById("calcReleaseGross").textContent = fmt(grossRelease) + " ARK";
+  document.getElementById("calcReleaseBurn").textContent = fmt(burnArk) + " ARK · " + fmtUsd(burnUsdt, 2);
+  document.getElementById("calcReleaseTurbo").textContent = fmt(releaseTurbo) + " ARK";
+  var releaseTurboEl = document.getElementById("calcReleaseTurbo");
+  releaseTurboEl.className = releaseRemaining >= 0 ? "" : "bad";
+  resultEl.className = "calc-result " + (directBetter ? "" : "release-choice");
+  resultEl.innerHTML = directBetter
+    ? "当前推荐：<strong>直接使用涡轮余额</strong> · 当前系数低于该周期临界系数 " + (breakEven * 100).toFixed(2) + "%。释放方案剩余涡轮：" + fmt(releaseRemaining) + " ARK。"
+    : "当前推荐：<strong>释放后用 USDT 购买</strong> · 当前系数高于该周期临界系数 " + (breakEven * 100).toFixed(2) + "%。释放方案剩余涡轮：" + fmt(releaseRemaining) + " ARK。";
 }
 
 function updateStakingOverview(payload) {
@@ -1034,6 +1138,7 @@ function updateDex(data) {
     return;
   }
   currentDexData = data;
+  updateContributionCalculator();
   var updated = data.updated_at ? new Date(data.updated_at).toLocaleTimeString("zh-CN", {hour12:false}) : "--";
   source.textContent = "Dex Screener · 更新 " + updated + (data.cached ? " · 缓存数据" : "");
   var best = data.best_pair || {};
@@ -1504,6 +1609,9 @@ document.querySelectorAll(".release-analysis-tab").forEach(function(tab) {
     renderReleaseAmountAnalysis(currentReleaseAmountType);
   });
 });
+
+document.getElementById("calcTargetContribution").addEventListener("input", updateContributionCalculator);
+document.getElementById("calcReleasePeriod").addEventListener("change", updateContributionCalculator);
 
 document.querySelectorAll(".sidebar-link").forEach(function(link) {
   link.addEventListener("click", function() {
