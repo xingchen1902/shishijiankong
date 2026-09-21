@@ -21,7 +21,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .sidebar-link:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 .dashboard-page.is-hidden { display: none; }
 .dashboard-main > .history-page { width: 100%; }
-.history-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.history-page { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
 .history-tables { min-width: 0; }
 .history-pool-sidebar { min-width: 0; }
 .dashboard-layout.history-mode { grid-template-columns: minmax(0, 1fr); }
@@ -568,6 +568,24 @@ td.neg { color: #ef4444; }
   <div class="pagination" id="releaseSummaryPagination" style="display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap;"></div>
 </div>
   </div>
+
+  </div>
+  <aside class="history-pool-sidebar">
+    <div class="dex-card">
+      <div class="dex-head">
+        <div class="today-title" style="margin-bottom:0;">每日底池记录</div>
+        <div class="dex-source" id="poolHistorySource">本地记录</div>
+      </div>
+      <div class="pool-note">北京时间每日结束后自动记录 Dex Screener 的池内 ARK、池内 USDT 和 ARK 价格。</div>
+      <div class="pool-list" id="poolHistoryList">
+        <div class="pool-table-head"><div>日期</div><div>ARK</div><div>USDT</div><div>价格</div></div>
+        <div id="poolHistoryRows">
+          <div class="pool-empty">等待每日结束后生成记录...</div>
+        </div>
+      </div>
+      <div class="pool-pagination" id="poolHistoryPagination"></div>
+    </div>
+  </aside>
   </div>
 
     </div>
@@ -631,22 +649,6 @@ td.neg { color: #ef4444; }
     </aside>
 
     <aside class="pool-history-sidebar">
-      <!-- 每日底池记录 -->
-      <div class="dex-card">
-        <div class="dex-head">
-          <div class="today-title" style="margin-bottom:0;">每日底池记录</div>
-          <div class="dex-source" id="poolHistorySource">本地记录</div>
-        </div>
-        <div class="pool-note">北京时间每日结束后自动记录 Dex Screener 的池内 ARK、池内 USDT 和 ARK 价格。</div>
-        <div class="pool-list" id="poolHistoryList">
-          <div class="pool-table-head"><div>日期</div><div>ARK</div><div>USDT</div><div>价格</div></div>
-          <div id="poolHistoryRows">
-            <div class="pool-empty">等待每日结束后生成记录...</div>
-          </div>
-        </div>
-        <div class="pool-pagination" id="poolHistoryPagination"></div>
-      </div>
-
       <!-- 事件流 -->
       <div class="section-title">⚡ 最新事件流</div>
       <div class="events-box" id="eventStream">
