@@ -17,6 +17,9 @@ RELEASE_TOPIC = "0x3b528916c884f3594beeba6799acd20b08bbcacea83d72c44e00360ea67ea
 TURBO_TOPIC = "0x106f923f993c2149d49b4255ff723acafa1f2d94393f561d3eda32ae348f7241"
 # 新版涡轮事件：data[0]=原始涡轮量，data[1]=共识系数（万分比），data[2]=实际涡轮量。
 TURBO_TOPIC_V2 = "0x812be816db82c66cd18ca8457005cd84689642d8ac4d38599cc6af444a2dc72a"
+# 涡轮余额转贡献值：该事件同交易通常还会有 BONUS_POOL -> 黑洞的 ARK 转账，
+# 但这不属于收益永久质押。
+TURBO_CONTRIBUTION_TOPIC = "0xcdf0a5cf01aa8763b7144f90616500147fa5c401236db59e2163bd8261ebb9e6"
 
 TOKEN_ARK = "0xCae117ca6Bc8A341D2E7207F30E180f0e5618B9D".lower()
 TOKEN_GARK = "0x911f12D137D74E5917877f87cf8A8bB2FDde557f".lower()
@@ -285,8 +288,9 @@ def reserve_usdt_transfer_detected(from_block, to_block):
         )
     return reserve_dirty, records
 
-def _classify_logs(logs, from_block, to_block):
+def _classify_logs(logs, from_block, to_block, turbo_contribution_txs=None):
     """解析 ARK logs，按地址分类，返回 (已分类, 未分类原始log)"""
+    turbo_contribution_txs = {tx.lower() for tx in (turbo_contribution_txs or set())}
     results = []
     raw_records = []
     for log in logs:
@@ -297,7 +301,11 @@ def _classify_logs(logs, from_block, to_block):
         val = int(log["data"], 16) / 10**DECIMALS
         ts = estimate_block_time(bn)
 
-        if fr == BONUS_POOL and to == BURN_ADDR:
+        # 涡轮余额转贡献值不是看板事件：跳过 BONUS_POOL -> 黑洞转账，
+        # 避免它被误记为收益永久质押，也不在事件流中新增展示类型。
+        if fr == BONUS_POOL and to == BURN_ADDR and tx.lower() in turbo_contribution_txs:
+            continue
+        elif fr == BONUS_POOL and to == BURN_ADDR:
             etype = "permanent_bonus"
         elif fr == STAKE_POOL and to == BURN_ADDR:
             etype = "permanent_stake"
@@ -423,8 +431,41 @@ class EventParser:
             ark_logs = [log for log in token_transfer_logs if log.get("address", "").lower() == TOKEN_ARK]
             gark_logs = [log for log in token_transfer_logs if log.get("address", "").lower() == TOKEN_GARK] if query_gark else []
         ark_transfers = _ark_transfer_index(ark_logs)
+
+        # 先读取动态合约事件，供 ARK Transfer 分类使用。
+        # 涡轮余额转贡献值会产生 BONUS_POOL -> 黑洞转账，必须在通用销毁规则之前识别。
+        dynamic_event_logs = _rpc_call("eth_getLogs", [{
+            "fromBlock": hex(from_block),
+            "toBlock": hex(to_block),
+            "address": TARGET_DYNAMIC,
+            "topics": [[RELEASE_TOPIC, TURBO_TOPIC, TURBO_TOPIC_V2, TURBO_CONTRIBUTION_TOPIC]],
+        }])
+        if dynamic_event_logs is None:
+            release_logs = _rpc_call("eth_getLogs", [{
+                "fromBlock": hex(from_block), "toBlock": hex(to_block),
+                "address": TARGET_DYNAMIC, "topics": [RELEASE_TOPIC],
+            }])
+            turbo_logs = _rpc_call("eth_getLogs", [{
+                "fromBlock": hex(from_block), "toBlock": hex(to_block),
+                "address": TARGET_DYNAMIC, "topics": [[TURBO_TOPIC, TURBO_TOPIC_V2]],
+            }])
+            contribution_logs = _rpc_call("eth_getLogs", [{
+                "fromBlock": hex(from_block), "toBlock": hex(to_block),
+                "address": TARGET_DYNAMIC, "topics": [TURBO_CONTRIBUTION_TOPIC],
+            }])
+        else:
+            release_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == RELEASE_TOPIC]
+            turbo_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() in (TURBO_TOPIC, TURBO_TOPIC_V2)]
+            contribution_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == TURBO_CONTRIBUTION_TOPIC]
+        turbo_contribution_txs = {
+            log.get("transactionHash", "").lower()
+            for log in contribution_logs
+            if log.get("transactionHash")
+        }
         if ark_logs:
-            classified, raw = _classify_logs(ark_logs, from_block, to_block)
+            classified, raw = _classify_logs(
+                ark_logs, from_block, to_block, turbo_contribution_txs
+            )
             results.extend(classified)
             if raw:
                 from db import insert_raw_logs_batch
@@ -446,26 +487,6 @@ class EventParser:
                         "block": bn, "tx": tx, "type": "static_burn",
                         "from": fr, "to": to, "value": val, "timestamp": ts,
                     })
-
-        # 3. Release 与 Turbo 都来自动态合约，可合并为一次日志查询。
-        dynamic_event_logs = _rpc_call("eth_getLogs", [{
-            "fromBlock": hex(from_block),
-            "toBlock": hex(to_block),
-            "address": TARGET_DYNAMIC,
-            "topics": [[RELEASE_TOPIC, TURBO_TOPIC, TURBO_TOPIC_V2]],
-        }])
-        if dynamic_event_logs is None:
-            release_logs = _rpc_call("eth_getLogs", [{
-                "fromBlock": hex(from_block), "toBlock": hex(to_block),
-                "address": TARGET_DYNAMIC, "topics": [RELEASE_TOPIC],
-            }])
-            turbo_logs = _rpc_call("eth_getLogs", [{
-                "fromBlock": hex(from_block), "toBlock": hex(to_block),
-                "address": TARGET_DYNAMIC, "topics": [[TURBO_TOPIC, TURBO_TOPIC_V2]],
-            }])
-        else:
-            release_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() == RELEASE_TOPIC]
-            turbo_logs = [log for log in dynamic_event_logs if log.get("topics", [""])[0].lower() in (TURBO_TOPIC, TURBO_TOPIC_V2)]
 
         release_periods = get_release_periods([
             log.get("transactionHash", "") for log in release_logs
