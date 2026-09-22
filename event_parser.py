@@ -301,10 +301,9 @@ def _classify_logs(logs, from_block, to_block, turbo_contribution_txs=None):
         val = int(log["data"], 16) / 10**DECIMALS
         ts = estimate_block_time(bn)
 
-        # 涡轮余额转贡献值不是看板事件：跳过 BONUS_POOL -> 黑洞转账，
-        # 避免它被误记为收益永久质押，也不在事件流中新增展示类型。
+        # 涡轮余额转贡献值单独记录到数据库；它不是收益永久质押。
         if fr == BONUS_POOL and to == BURN_ADDR and tx.lower() in turbo_contribution_txs:
-            continue
+            etype = "turbo_contribution"
         elif fr == BONUS_POOL and to == BURN_ADDR:
             etype = "permanent_bonus"
         elif fr == STAKE_POOL and to == BURN_ADDR:

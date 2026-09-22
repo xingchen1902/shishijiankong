@@ -1099,17 +1099,18 @@ def get_daily(page: int = 1, per_page: int = 10):
 def get_realtime(limit:int=100):
     conn = get_conn()
     # dynamic 是旧版按 ARK 转账写入的辅助记录，static_burn 是识别静态释放的 gARK 销毁凭据。
-    # 两者都已有对应业务事件，事件流不再展示，避免同一笔交易重复出现。
+    # turbo_contribution 需要保留在数据库供统计/追溯，但不在看板事件流展示。
+    # 这些类型都已有对应业务逻辑，事件流不展示，避免重复或无关事件出现。
     rows = conn.execute("""
         SELECT * FROM events
-        WHERE type NOT IN ('dynamic', 'static_burn')
+        WHERE type NOT IN ('dynamic', 'static_burn', 'turbo_contribution')
         ORDER BY timestamp DESC, block DESC, id DESC
         LIMIT ?
     """, (limit,)).fetchall()
     totals = conn.execute("""
         SELECT type, count
         FROM event_type_counts
-        WHERE type NOT IN ('dynamic', 'static_burn')
+        WHERE type NOT IN ('dynamic', 'static_burn', 'turbo_contribution')
     """).fetchall()
     event_types = [row["type"] for row in totals]
     recent_by_type = {}
