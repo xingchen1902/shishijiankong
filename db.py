@@ -92,6 +92,7 @@ def _init_db():
             static_burn REAL DEFAULT 0,
             dynamic_in REAL DEFAULT 0,
             actual_turbo REAL DEFAULT 0,
+            consensus_coefficient REAL DEFAULT 0,
             dynamic_release REAL DEFAULT 0,
             transfer_720 REAL DEFAULT 0,
             stake_balance REAL DEFAULT 0,
@@ -235,7 +236,7 @@ def _init_db():
             ON release_period_daily_summary(date DESC);
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_summary)")}
-    for column in ("burn_stake", "dynamic_release", "actual_turbo", "permanent_bonus", "permanent_stake"):
+    for column in ("burn_stake", "dynamic_release", "actual_turbo", "consensus_coefficient", "permanent_bonus", "permanent_stake"):
         if column not in columns:
             conn.execute(f"ALTER TABLE daily_summary ADD COLUMN {column} REAL DEFAULT 0")
     # 兼容已有 VPS 数据库：为历史 events 表补充释放周期字段。

@@ -34,6 +34,7 @@ FIELD_MAP = {
     "dynamic_release": "动态释放",
     "dynamic_in": "总涡轮",
     "actual_turbo": "实际涡轮",
+    "consensus_coefficient": "共识系数",
     "transfer_720": "转720天",
     "stake_balance": "质押池余额",
     "stake_in": "新增质押",

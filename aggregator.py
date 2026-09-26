@@ -16,6 +16,7 @@ from db import (
     upsert_daily_summary,
     get_monitor_state,
     set_monitor_state,
+    get_latest_consensus_coefficient,
     get_all_daily_until_yesterday as get_all_daily,
     refresh_release_period_daily_summary,
 )
@@ -563,6 +564,7 @@ class DailyAggregator:
         static_burn = float(row["static_burn"])
         dynamic_in = float(row["dynamic_in"])
         actual_turbo = float(row["actual_turbo"])
+        consensus_coefficient = get_latest_consensus_coefficient()
         dynamic_release = float(row["dynamic_release"])
         transfer_720 = float(row["transfer_720"]) if row["transfer_720"] else 0
         bonus_in = float(row["bonus_in"]) if row["bonus_in"] else 0
@@ -593,6 +595,7 @@ class DailyAggregator:
             "static_burn": round(static_burn, 2),
             "dynamic_in": round(dynamic_in, 2),
             "actual_turbo": round(actual_turbo, 2),
+            "consensus_coefficient": round(consensus_coefficient, 6) if consensus_coefficient is not None else None,
             "dynamic_release": round(dynamic_release, 2),
             "transfer_720": round(transfer_720, 2),
             "stake_balance": round(stake_bal, 2),
@@ -608,6 +611,8 @@ class DailyAggregator:
         print("  静态释放: %.2f" % static_burn)
         print("  总涡轮: %.2f" % dynamic_in)
         print("  新增质押: %.2f" % stake_in_val)
+        if consensus_coefficient is not None:
+            print("  共识系数: %.6f" % consensus_coefficient)
         print("  赎回: %.2f" % stake_out)
         print("  奖金池余额: %.2f" % bonus_bal)
         print("  质押池余额: %.2f" % stake_bal)
