@@ -57,6 +57,48 @@ FIELD_PRECISION = {
 
 OFFICIAL_STAKING_OVERVIEW_URL = "https://0xfantasy.ark.pro/v1/bond-rebasing-config"
 
+
+def compound_daily_rate(single_rate):
+    """将单次结算收益率按每天结算两次换算为日复利收益率（小数）。"""
+    rate = float(single_rate)
+    return (1 + rate) ** 2 - 1
+
+
+def get_official_staking_daily_rates():
+    """读取官网单次收益率，并换算为每日两次复利后的收益率。"""
+    response = requests.get(
+        OFFICIAL_STAKING_OVERVIEW_URL,
+        headers={
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://www.ark.pro",
+            "Referer": "https://www.ark.pro/",
+            "User-Agent": "Mozilla/5.0 (compatible; ARK-Monitor/1.0)",
+        },
+        timeout=15,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise ValueError("官网质押接口返回格式不是数组")
+
+    rates = {}
+    field_map = {
+        6: "720天质押收益率",
+        100: "永久质押收益率",
+    }
+    for item in payload:
+        mode_id = int(item.get("modeId"))
+        field_name = field_map.get(mode_id)
+        if not field_name:
+            continue
+        if item.get("interestRate") is None:
+            raise ValueError(f"官网质押接口缺少 modeId={mode_id} 的单次收益率")
+        rates[field_name] = compound_daily_rate(item["interestRate"])
+
+    if len(rates) != len(field_map):
+        raise ValueError("官网质押接口缺少 720 天或永久质押收益率")
+    return rates
+
 # Telegram 配置
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 _chat = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -225,6 +267,16 @@ def push_to_feishu(record):
         fields.update(get_official_staking_totals())
     except Exception as exc:
         print(f"  [飞书] 官网累计质押数据读取失败，跳过新增字段: {exc}")
+
+    # 官网返回的是单次 Rebase 收益率；项目每天中午和午夜各结算一次，
+    # 因此写入按两次复利换算后的日收益率。飞书字段底层存小数，按百分比显示。
+    try:
+        fields.update({
+            field_name: round(rate, 10)
+            for field_name, rate in get_official_staking_daily_rates().items()
+        })
+    except Exception as exc:
+        print(f"  [飞书] 官网日收益率读取失败，跳过收益率字段: {exc}")
 
     r = requests.post(url, headers=headers, json={"fields": fields}, timeout=15)
     d = r.json()
@@ -396,7 +448,7 @@ def push_staking_rate_change_to_telegram(changes):
         return False
 
     def daily_rate(rate):
-        return ((1 + float(rate)) ** 2 - 1) * 100
+        return compound_daily_rate(rate) * 100
 
     lines = [
         "<b>📈 质押日收益率变更提醒</b>",
