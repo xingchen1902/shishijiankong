@@ -51,15 +51,11 @@ FIELD_MAP = {
     "sell_value_usdt": "卖出价值",
 }
 
-# 飞书链上数据表的新增汇总字段。保留上面的旧字段，兼容已有历史列。
-ADDITIONAL_DAILY_FIELD_MAP = {
-    "transfer_720": "720天质押数量",
-    "permanent_total": "永久质押数量",
-}
-
 FIELD_PRECISION = {
     "ark_price": 6,
 }
+
+OFFICIAL_STAKING_OVERVIEW_URL = "https://0xfantasy.ark.pro/v1/bond-rebasing-config"
 
 # Telegram 配置
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -158,6 +154,35 @@ def get_feishu_token():
     return d["tenant_access_token"]
 
 
+def get_official_staking_totals():
+    """读取官网接口中的 720 天和永久质押累计总量。"""
+    response = requests.get(
+        OFFICIAL_STAKING_OVERVIEW_URL,
+        headers={
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://www.ark.pro",
+            "Referer": "https://www.ark.pro/",
+            "User-Agent": "Mozilla/5.0 (compatible; ARK-Monitor/1.0)",
+        },
+        timeout=15,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise ValueError("官网质押接口返回格式不是数组")
+
+    totals = {}
+    for item in payload:
+        mode_id = int(item.get("modeId"))
+        if mode_id not in (6, 100):
+            continue
+        total = float(item.get("totalStakingArk") or 0) + float(item.get("totalLpBondedArk") or 0)
+        totals[mode_id] = round(total, 2)
+    if 6 not in totals or 100 not in totals:
+        raise ValueError("官网质押接口缺少 720 天或永久质押数据")
+    return {"720天质押数量": totals[6], "永久质押数量": totals[100]}
+
+
 def push_to_feishu(record):
     """写入飞书多维表格（自动去重覆盖）"""
     token = get_feishu_token()
@@ -195,12 +220,11 @@ def push_to_feishu(record):
         if key in FIELD_MAP and key != "date" and val is not None:
             fields[FIELD_MAP[key]] = round(float(val), FIELD_PRECISION.get(key, 2))
 
-    # 新增字段：720天质押数量直接取当日转720天；永久质押数量合并本金和收益两类永久质押。
-    if record.get("transfer_720") is not None:
-        fields[ADDITIONAL_DAILY_FIELD_MAP["transfer_720"]] = round(float(record["transfer_720"]), 2)
-    if record.get("permanent_stake") is not None or record.get("permanent_bonus") is not None:
-        permanent_total = float(record.get("permanent_stake") or 0) + float(record.get("permanent_bonus") or 0)
-        fields[ADDITIONAL_DAILY_FIELD_MAP["permanent_total"]] = round(permanent_total, 2)
+    # 新增字段读取官网累计总量，不使用当日事件增量。
+    try:
+        fields.update(get_official_staking_totals())
+    except Exception as exc:
+        print(f"  [飞书] 官网累计质押数据读取失败，跳过新增字段: {exc}")
 
     r = requests.post(url, headers=headers, json={"fields": fields}, timeout=15)
     d = r.json()
