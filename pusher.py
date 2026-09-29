@@ -51,6 +51,12 @@ FIELD_MAP = {
     "sell_value_usdt": "卖出价值",
 }
 
+# 飞书链上数据表的新增汇总字段。保留上面的旧字段，兼容已有历史列。
+ADDITIONAL_DAILY_FIELD_MAP = {
+    "transfer_720": "720天质押数量",
+    "permanent_total": "永久质押数量",
+}
+
 FIELD_PRECISION = {
     "ark_price": 6,
 }
@@ -188,6 +194,13 @@ def push_to_feishu(record):
     for key, val in record.items():
         if key in FIELD_MAP and key != "date" and val is not None:
             fields[FIELD_MAP[key]] = round(float(val), FIELD_PRECISION.get(key, 2))
+
+    # 新增字段：720天质押数量直接取当日转720天；永久质押数量合并本金和收益两类永久质押。
+    if record.get("transfer_720") is not None:
+        fields[ADDITIONAL_DAILY_FIELD_MAP["transfer_720"]] = round(float(record["transfer_720"]), 2)
+    if record.get("permanent_stake") is not None or record.get("permanent_bonus") is not None:
+        permanent_total = float(record.get("permanent_stake") or 0) + float(record.get("permanent_bonus") or 0)
+        fields[ADDITIONAL_DAILY_FIELD_MAP["permanent_total"]] = round(permanent_total, 2)
 
     r = requests.post(url, headers=headers, json={"fields": fields}, timeout=15)
     d = r.json()
