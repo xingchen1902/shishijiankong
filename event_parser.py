@@ -171,10 +171,14 @@ def _parse_release_period_from_input(input_data):
     words = [int(body[index:index + 64], 16) for index in range(0, len(body) - 63, 64)]
     return RELEASE_PERIOD_SECONDS.get(words[5], "未知") if len(words) > 5 else "未知"
 
-def get_release_periods(tx_hashes):
-    """批量解析释放交易周期，供所有静态/动态释放入库使用。"""
+def get_release_periods(tx_hashes, retry_unknown=False):
+    """批量解析释放交易周期；补解析任务可要求重新查询缓存中的未知结果。"""
     unique = [tx for tx in dict.fromkeys(tx_hashes) if tx]
-    missing = [tx for tx in unique if tx not in RELEASE_PERIOD_CACHE]
+    missing = [
+        tx for tx in unique
+        if tx not in RELEASE_PERIOD_CACHE
+        or (retry_unknown and RELEASE_PERIOD_CACHE.get(tx) == "未知")
+    ]
     if missing:
         transactions = _rpc.call_batch(
             "eth_getTransactionByHash", [[tx] for tx in missing], retries=1
