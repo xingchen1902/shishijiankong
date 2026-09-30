@@ -121,6 +121,7 @@ def get_today_data():
                COALESCE(SUM(CASE WHEN lower(from_addr)='0xd1d95292f450b665566df4c4255615ef4ed9bd0b' AND lower(to_addr)='0x0000000000000000000000000000000000000000' THEN value ELSE 0 END),0),
               COALESCE(SUM(CASE WHEN type='transfer_720' THEN value ELSE 0 END),0),
                COALESCE(SUM(CASE WHEN type='bonus_in' THEN value ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN type='bonus_withdraw' AND lower(from_addr)='0x8501168656fcac4628f6910ccabea8b64ebe5bd4' THEN value ELSE 0 END),0),
               COUNT(*), MAX(block)
         FROM events
         WHERE timestamp >= ? AND timestamp < ?
@@ -139,10 +140,11 @@ def get_today_data():
     permanent_stake = float(row[9]) if row[9] else 0
     tr720 = float(row[10]) if row[10] else 0
     bi = float(row[11]) if row[11] else 0
-    ec = int(row[12]) if row[12] else 0
-    lb = int(row[13]) if row[13] else 0
-    # 地址级统计全部转出，再扣除对应的永久质押黑洞转账。
-    bo = max(raw_bo - permanent_bonus - tr720, 0)
+    ordinary_bonus_withdraw = float(row[12]) if row[12] else 0
+    ec = int(row[13]) if row[13] else 0
+    lb = int(row[14]) if row[14] else 0
+    # 奖金池提取只显示普通提取；涡轮余额转贡献值保留在事件表中但不计入此项。
+    bo = max(ordinary_bonus_withdraw, 0)
     so = max(raw_so - permanent_stake, 0)
     real_stake_in = si + burn_stake
 

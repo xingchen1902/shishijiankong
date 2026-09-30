@@ -532,8 +532,8 @@ class DailyAggregator:
         next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
         row = conn.execute("""
             SELECT
-                -- 奖金池提取以奖金池全部转出为基数，再排除永久质押和转 720 天。
-                COALESCE(SUM(CASE WHEN lower(from_addr)=? THEN value ELSE 0 END),0) as bonus_out_all,
+                -- 奖金池提取只统计普通奖金池提取；涡轮余额转贡献值单独留在事件表，不能计入此项。
+                COALESCE(SUM(CASE WHEN type='bonus_withdraw' AND lower(from_addr)=? THEN value ELSE 0 END),0) as bonus_out_all,
                 COALESCE(SUM(CASE WHEN type='stake_in' THEN value ELSE 0 END),0) as stake_in,
                 COALESCE(SUM(CASE WHEN type='burn_stake' THEN value ELSE 0 END),0) as burn_stake,
                 -- 赎回以质押池全部转出为基数，再排除本金永久质押。
@@ -555,7 +555,7 @@ class DailyAggregator:
             print("  [汇总]", date_str, "无数据")
             return
 
-        # 奖金池提取不包含转 720 天和收益永久质押（奖金池 → 黑洞）。
+        # bonus_out_all 已按事件类型过滤，不包含涡轮余额转贡献值、转 720 天和收益永久质押。
         bonus_out_all = float(row["bonus_out_all"])
         stake_in_val = float(row["stake_in"]) + float(row["burn_stake"])
         stake_out_all = float(row["stake_out_all"])
@@ -568,7 +568,7 @@ class DailyAggregator:
         dynamic_release = float(row["dynamic_release"])
         transfer_720 = float(row["transfer_720"]) if row["transfer_720"] else 0
         bonus_in = float(row["bonus_in"]) if row["bonus_in"] else 0
-        bonus_out = max(bonus_out_all - permanent_bonus - transfer_720, 0)
+        bonus_out = max(bonus_out_all, 0)
         stake_out = max(stake_out_all - permanent_stake, 0)
 
         # 余额以链上 ARK balanceOf 为准，不再用上一日余额和事件公式累计。
