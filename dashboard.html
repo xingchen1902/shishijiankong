@@ -230,6 +230,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .event-detail-row .value a { color: #60a5fa; text-decoration: none; }
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: hidden; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
+.daily-history-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-color: #475569 #172235; scrollbar-width: thin; }
+.daily-history-wrap table { width: 100%; min-width: 1680px; table-layout: fixed; }
+.daily-history-wrap th,
+.daily-history-wrap td { white-space: nowrap; overflow-wrap: normal; word-break: keep-all; }
+.daily-history-wrap th:first-child,
+.daily-history-wrap td:first-child { position: sticky; left: 0; width: 112px; min-width: 112px; text-align: left; background: #172235; box-shadow: 1px 0 0 #334155; }
+.daily-history-wrap th:first-child { z-index: 3; background: #0f172a; }
+.daily-history-wrap td:first-child { z-index: 1; }
+.daily-history-hint { display: none; color: #71839e; font-size: 11px; margin: 7px 2px 0; }
 .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination, .dashboard-main > .release-summary-card { width: calc(100% + 400px); }
 table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
 thead th { background: #0f172a; color: #94a3b8; font-weight: 600; padding: 10px 5px; text-align: right; border-bottom: 1px solid #334155; position: sticky; top: 0; white-space: normal; overflow-wrap: anywhere; }
@@ -376,6 +385,13 @@ td.neg { color: #ef4444; }
   .sidebar-link .nav-icon { width: auto; font-size: 14px; }
   .header { margin-left: 0; }
   .container { margin-left: 0; }
+  .history-tables { width: 100%; min-width: 0; }
+  .history-tables > .section-title { margin-top: 14px; }
+  .daily-history-wrap { border-radius: 10px; scrollbar-width: auto; }
+  .daily-history-wrap table { min-width: 1680px; }
+  .daily-history-wrap th { padding: 11px 8px; font-size: 12px; }
+  .daily-history-wrap td { padding: 12px 8px; font-size: 13px; }
+  .daily-history-hint { display: block; }
 }
 </style>
 </head>
@@ -530,7 +546,7 @@ td.neg { color: #ef4444; }
   <div class="dashboard-page history-page is-hidden" data-page-content="history">
   <div class="history-tables">
   <div class="section-title">📅 每日历史汇总</div>
-  <div class="table-wrap">
+  <div class="table-wrap daily-history-wrap" tabindex="0" role="region" aria-label="每日历史汇总，可左右滑动查看全部数据">
     <table>
       <thead>
         <tr>
@@ -542,6 +558,7 @@ td.neg { color: #ef4444; }
       </tbody>
     </table>
   </div>
+  <div class="daily-history-hint" aria-hidden="true">↔ 左右滑动查看完整数据</div>
   <div class="pagination" id="dailyPagination" style="display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap;"></div>
 
   <div class="today-card release-summary-card">
