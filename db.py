@@ -262,12 +262,6 @@ def _init_db():
         ON events(block DESC, id DESC, consensus_coefficient)
         WHERE type='turbo_total' AND consensus_coefficient IS NOT NULL
     """)
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_events_unknown_release_period
-        ON events(type, timestamp, lower(tx))
-        WHERE type IN ('release_static', 'release_dynamic')
-          AND (release_period IS NULL OR release_period='' OR release_period='未知')
-    """)
     # 周期统计只从功能首次上线时间开始，不回填此前的历史释放数据。
     activation_at = datetime.now(BJT).strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
@@ -729,27 +723,6 @@ def update_release_period(tx, period):
     conn.commit()
     conn.close()
 
-
-def update_unknown_release_periods(period_by_tx):
-    """批量回写未知释放周期，不覆盖已确认周期。"""
-    if not period_by_tx:
-        return 0
-    conn = get_conn()
-    before = conn.total_changes
-    conn.executemany(
-        """
-        UPDATE events
-        SET release_period=?
-        WHERE lower(tx)=lower(?)
-          AND type IN ('release_static', 'release_dynamic')
-          AND (release_period IS NULL OR release_period='' OR release_period='未知')
-        """,
-        [(period, tx) for tx, period in period_by_tx.items() if period and period != "未知"],
-    )
-    updated = conn.total_changes - before
-    conn.commit()
-    conn.close()
-    return updated
 
 def insert_lp_swaps_batch(swaps):
     if not swaps: return

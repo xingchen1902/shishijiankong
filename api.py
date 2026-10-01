@@ -25,8 +25,6 @@ from db import (
     get_release_period_summary,
     get_release_period_daily_summary,
     get_release_amount_distribution,
-    update_unknown_release_periods,
-    refresh_release_period_daily_summary,
 )
 from event_parser import (
     BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply,
@@ -1018,60 +1016,6 @@ def staking_rate_monitor_worker():
             time.sleep(60)
 
 
-def release_period_repair_worker():
-    """每 6 小时只查询数据库中的未知释放周期，并按交易哈希补解析。"""
-    while True:
-        now = datetime.now(BJT)
-        next_hour = ((now.hour // 6) + 1) * 6
-        target = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(hours=next_hour)
-        time.sleep(max(1, (target - now).total_seconds()))
-
-        try:
-            conn = get_conn()
-            rows = conn.execute(
-                """
-                SELECT lower(tx) AS tx, MIN(substr(timestamp, 1, 10)) AS date
-                FROM events
-                WHERE type IN ('release_static', 'release_dynamic')
-                  AND (release_period IS NULL OR release_period='' OR release_period='未知')
-                  AND tx IS NOT NULL AND tx!=''
-                GROUP BY lower(tx)
-                ORDER BY MIN(timestamp)
-                """
-            ).fetchall()
-            conn.close()
-
-            if not rows:
-                print("[释放周期补解析] 未发现未知周期，跳过 RPC")
-                continue
-
-            period_by_tx = {}
-            dates_by_tx = {}
-            txs = [row["tx"] for row in rows]
-            for offset in range(0, len(txs), 100):
-                batch = txs[offset:offset + 100]
-                try:
-                    period_by_tx.update(get_release_periods(batch, retry_unknown=True))
-                except Exception as exc:
-                    print(f"[释放周期补解析] RPC 批次失败（{len(batch)} 笔）: {exc}")
-                for row in rows[offset:offset + 100]:
-                    dates_by_tx[row["tx"]] = row["date"]
-
-            resolved = {tx: period for tx, period in period_by_tx.items() if period != "未知"}
-            updated = update_unknown_release_periods(resolved)
-            affected_dates = {dates_by_tx[tx] for tx in resolved if dates_by_tx.get(tx)}
-            for date_str in sorted(affected_dates):
-                refresh_release_period_daily_summary(date_str)
-
-            unresolved = len(txs) - len(resolved)
-            print(
-                f"[释放周期补解析] 检查 {len(txs)} 笔，修复 {updated} 条记录，"
-                f"仍未知 {unresolved} 笔"
-            )
-        except Exception as exc:
-            print(f"[释放周期补解析] 本轮失败: {exc}")
-
-
 def staking_feishu_push_worker():
     """每天北京时间 00:05 将前一日质押快照写入独立飞书表格。"""
     pushed_key = "staking_feishu_last_pushed_date"
@@ -1114,7 +1058,6 @@ def get_pool_address_daily_api(limit: int = 30):
 threading.Thread(target=staking_snapshot_worker, daemon=True).start()
 threading.Thread(target=staking_feishu_push_worker, daemon=True).start()
 threading.Thread(target=staking_rate_monitor_worker, daemon=True).start()
-threading.Thread(target=release_period_repair_worker, daemon=True).start()
 
 @app.get("/api/dex/ark")
 def get_ark_dex():
