@@ -33,6 +33,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .dashboard-layout.events-mode { grid-template-columns: minmax(0, 1fr); }
 .dashboard-layout.events-mode > .dex-sidebar,
 .dashboard-layout.events-mode > .pool-history-sidebar { display: none; }
+.dashboard-layout.staking-yield-mode { grid-template-columns: minmax(0, 1fr); }
+.dashboard-layout.staking-yield-mode > .dex-sidebar,
+.dashboard-layout.staking-yield-mode > .pool-history-sidebar { display: none; }
 .header { margin-left: 224px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 24px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .header h1 { font-size: 22px; font-weight: 700; }
 .header h1 span { color: #60a5fa; }
@@ -106,6 +109,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .staking-period-row.total .value { color: #2dd4bf; }
 .staking-period-row.rate .value { color: #f59e0b; }
 .staking-period-row.rebase .value { color: #a78bfa; }
+.staking-period-row.yield .value { color: #2dd4bf; }
+.staking-period-row.yield-estimate .value { color: #60a5fa; }
+.staking-yield-note { color: #64748b; font-size: 10px; margin-top: 8px; }
+.staking-yield-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.staking-yield-card { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 14px; min-width: 0; }
+.staking-yield-card-title { color: #e2e8f0; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+.staking-yield-card .staking-period-row { padding: 7px 0; }
+.staking-yield-card .staking-period-row .label { white-space: normal; }
+.staking-yield-card .staking-period-row.updated .value { white-space: normal; overflow-wrap: anywhere; font-size: 10px; }
 .staking-period-row.updated .value { color: #94a3b8; font-size: 11px; font-weight: 500; }
 .staking-period-row .change { margin-left: 4px; font-size: 11px; font-weight: 600; }
 .staking-period-row .change.positive { color: #22c55e; }
@@ -380,7 +392,7 @@ td.neg { color: #ef4444; }
   .sidebar-nav { position: relative; width: 100%; height: auto; padding: 12px 14px; border-right: 0; border-bottom: 1px solid #263650; box-shadow: none; }
   .sidebar-brand { display: none; }
   .sidebar-label { display: none; }
-  .sidebar-links { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .sidebar-links { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
   .sidebar-link { justify-content: center; gap: 5px; padding: 9px 5px; font-size: 11px; text-align: center; }
   .sidebar-link .nav-icon { width: auto; font-size: 14px; }
   .header { margin-left: 0; }
@@ -404,6 +416,7 @@ td.neg { color: #ef4444; }
   <div class="sidebar-label">导航</div>
   <div class="sidebar-links">
     <button class="sidebar-link active" type="button" data-page="home" aria-current="page"><span class="nav-icon">⌂</span><span>首页</span></button>
+    <button class="sidebar-link" type="button" data-page="staking-yield"><span class="nav-icon">％</span><span>质押收益</span></button>
     <button class="sidebar-link" type="button" data-page="history"><span class="nav-icon">▤</span><span>历史汇总</span></button>
     <button class="sidebar-link" type="button" data-page="release"><span class="nav-icon">◒</span><span>释放数据</span></button>
     <button class="sidebar-link" type="button" data-page="events"><span class="nav-icon">ϟ</span><span>事件流</span></button>
@@ -478,6 +491,16 @@ td.neg { color: #ef4444; }
     </div>
   </div>
 
+  </div>
+
+  <div class="dashboard-page is-hidden" data-page-content="staking-yield">
+    <div class="today-card">
+      <div class="today-title">📈 各质押周期复利收益</div>
+      <div class="staking-yield-overview" id="stakingYieldOverview">
+        <div class="staking-overview-status">加载中...</div>
+      </div>
+      <div class="staking-yield-note">按北京时间 00:00、12:00 结算时各周期的单次收益率复利计算。累计收益从功能启用后的首次成功结算开始，不回填历史；下次结算为按当前本金、已记录累计收益和当前收益率计算的预估值。</div>
+    </div>
   </div>
 
   <div class="dashboard-page release-page is-hidden" data-page-content="release">
@@ -951,14 +974,41 @@ function renderReleaseAmountAnalysis(type) {
   });
 }
 
+var officialCoefficientRange = { min: null, max: null };
+var officialCoefficientTimer = null;
+
+function renderOfficialCoefficient() {
+  var coefficientEl = document.getElementById("currentConsensusCoefficient");
+  if (!coefficientEl) return;
+  var min = Number(officialCoefficientRange.min);
+  var max = Number(officialCoefficientRange.max);
+  if (!isFinite(min) || !isFinite(max) || min < 0 || max < min) {
+    coefficientEl.textContent = "--";
+    return;
+  }
+  // 与官方 DApp 的 useFloatingValues 保持一致：在官方区间内动态刷新。
+  var coefficient = min + Math.random() * (max - min);
+  coefficientEl.textContent = (coefficient * 100).toFixed(2) + "%";
+}
+
+function startOfficialCoefficientTicker() {
+  if (officialCoefficientTimer !== null) return;
+  renderOfficialCoefficient();
+  officialCoefficientTimer = setInterval(renderOfficialCoefficient, 500);
+}
+
 function updateTurboPending(payload) {
   var container = document.getElementById("turboPendingList");
   if (!container) return;
   var total = payload && payload.total != null ? payload.total : 0;
   container.textContent = fmt(total);
-  var coefficient = payload && payload.current_consensus_coefficient;
-  var coefficientEl = document.getElementById("currentConsensusCoefficient");
-  if (coefficientEl) coefficientEl.textContent = coefficient != null ? (Number(coefficient) * 100).toFixed(2) + "%" : "--";
+  officialCoefficientRange.min = payload && payload.official_turbine_min_percentage;
+  officialCoefficientRange.max = payload && payload.official_turbine_max_percentage;
+  if (officialCoefficientRange.min != null && officialCoefficientRange.max != null) {
+    startOfficialCoefficientTicker();
+  } else {
+    renderOfficialCoefficient();
+  }
 }
 
 function updateStakingOverview(payload) {
@@ -966,9 +1016,11 @@ function updateStakingOverview(payload) {
   var status = document.getElementById("stakingOverviewStatus");
   if (!payload || !Array.isArray(payload.data) || !payload.data.length) {
     container.innerHTML = '<div class="staking-overview-status">官网质押数据暂时不可用</div>';
+    updateStakingYieldOverview(payload);
     status.textContent = "";
     return;
   }
+  updateStakingYieldOverview(payload);
   status.textContent = payload.cached ? "· 缓存约 60 秒" : "· 已同步";
   var grandTotal = payload.data.reduce(function(sum, row) {
     return sum + Number(row.total_ark || 0);
@@ -1015,6 +1067,35 @@ function updateStakingOverview(payload) {
       '<div class="staking-period-row updated"><span class="label">收益率更新时间</span><span class="value">' + updatedAtMarkup(row.rate_updated_at || row.updated_at) + '</span></div>' +
       '</div>';
   }).join("") + reserveCards;
+}
+
+function updateStakingYieldOverview(payload) {
+  var container = document.getElementById("stakingYieldOverview");
+  if (!container) return;
+  if (!payload || !Array.isArray(payload.data) || !payload.data.length) {
+    container.innerHTML = '<div class="staking-overview-status">质押收益数据暂时不可用</div>';
+    return;
+  }
+  function rate(value) {
+    var n = Number(value);
+    return isFinite(n) ? (n * 100).toFixed(4) + '%' : '--';
+  }
+  container.innerHTML = payload.data.map(function(row) {
+    var lastSettlement = row.last_settlement_at
+      ? esc(String(row.last_settlement_at)) + '（北京时间）'
+      : '等待首次结算';
+    var lastEarned = row.last_settlement_earned_ark == null
+      ? '--' : fmt(row.last_settlement_earned_ark) + ' ARK';
+    return '<section class="staking-yield-card">' +
+      '<div class="staking-yield-card-title">' + esc(row.period || '质押周期') + '</div>' +
+      '<div class="staking-period-row total"><span class="label">当前质押本金</span><span class="value">' + fmt(row.total_ark) + ' ARK</span></div>' +
+      '<div class="staking-period-row rebase"><span class="label">当前单次收益率</span><span class="value">' + rate(row.interest_rate) + '</span></div>' +
+      '<div class="staking-period-row yield"><span class="label">最近一次结算收益</span><span class="value">' + lastEarned + '</span></div>' +
+      '<div class="staking-period-row yield"><span class="label">累计收益（启用后）</span><span class="value">' + fmt(row.cumulative_earned_ark || 0) + ' ARK</span></div>' +
+      '<div class="staking-period-row yield-estimate" title="按当前收益率估算；实际金额以结算时本金和收益率为准"><span class="label">下次结算预估</span><span class="value">' + fmt(row.next_settlement_estimate_ark || 0) + ' ARK</span></div>' +
+      '<div class="staking-period-row updated"><span class="label">最近结算时间</span><span class="value">' + lastSettlement + '</span></div>' +
+      '</section>';
+  }).join("");
 }
 
 function updatePoolAddressOverview(payload) {
@@ -1535,6 +1616,7 @@ document.querySelectorAll(".sidebar-link").forEach(function(link) {
     dashboardLayout.classList.toggle("history-mode", pageName === "history");
     dashboardLayout.classList.toggle("release-mode", pageName === "release");
     dashboardLayout.classList.toggle("events-mode", pageName === "events");
+    dashboardLayout.classList.toggle("staking-yield-mode", pageName === "staking-yield");
     document.querySelectorAll(".sidebar-link").forEach(function(other) {
       var active = other === link;
       other.classList.toggle("active", active);
@@ -1645,6 +1727,8 @@ function loadAll() {
 
 loadAll();
 setInterval(loadAll, 30000);
+// 官方 DApp 每约 10 秒重新读取配置区间；动态展示值由上面的 500ms ticker 负责。
+setInterval(loadTurboPending, 10000);
 </script>
 </body>
 </html>

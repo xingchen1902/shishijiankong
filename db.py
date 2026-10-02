@@ -157,6 +157,20 @@ def _init_db():
             created_at TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS staking_yield_settlements (
+            settlement_at TEXT NOT NULL,
+            mode_id INTEGER NOT NULL,
+            period TEXT NOT NULL,
+            principal_ark REAL NOT NULL,
+            interest_rate REAL NOT NULL,
+            earned_ark REAL NOT NULL,
+            cumulative_earned_ark REAL NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY(settlement_at, mode_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_staking_yield_settlements_mode_time
+            ON staking_yield_settlements(mode_id, settlement_at DESC);
+
         CREATE TABLE IF NOT EXISTS pool_address_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             block INTEGER NOT NULL,
@@ -576,6 +590,71 @@ def get_staking_daily_snapshots(limit=30):
             "created_at": row["created_at"],
         })
     return result
+
+
+def record_staking_yield_settlement(settlement_at, rows):
+    """Record one idempotent settlement for all staking modes, compounding prior rewards."""
+    if not rows:
+        return {"recorded": False, "rows": []}
+    conn = get_conn()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            "SELECT COUNT(*) AS count FROM staking_yield_settlements WHERE settlement_at=?",
+            (settlement_at,),
+        ).fetchone()["count"]
+        if existing:
+            conn.rollback()
+            return {"recorded": False, "rows": []}
+
+        recorded = []
+        for row in rows:
+            mode_id = int(row["mode_id"])
+            previous = conn.execute(
+                "SELECT cumulative_earned_ark FROM staking_yield_settlements "
+                "WHERE mode_id=? ORDER BY settlement_at DESC LIMIT 1",
+                (mode_id,),
+            ).fetchone()
+            cumulative_before = float(previous["cumulative_earned_ark"]) if previous else 0.0
+            principal = max(0.0, float(row.get("total_ark") or 0))
+            rate = max(0.0, float(row.get("interest_rate") or 0))
+            earned = (principal + cumulative_before) * rate
+            cumulative = cumulative_before + earned
+            conn.execute(
+                """INSERT INTO staking_yield_settlements
+                   (settlement_at, mode_id, period, principal_ark, interest_rate,
+                    earned_ark, cumulative_earned_ark)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (settlement_at, mode_id, row.get("period", ""), principal, rate,
+                 earned, cumulative),
+            )
+            recorded.append({
+                "mode_id": mode_id,
+                "period": row.get("period", ""),
+                "earned_ark": earned,
+                "cumulative_earned_ark": cumulative,
+            })
+        conn.commit()
+        return {"recorded": True, "rows": recorded}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_staking_yield_latest():
+    """Return the latest saved compound-yield state for every staking mode."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT s.* FROM staking_yield_settlements s
+           JOIN (
+               SELECT mode_id, MAX(settlement_at) AS settlement_at
+               FROM staking_yield_settlements GROUP BY mode_id
+           ) latest ON latest.mode_id=s.mode_id AND latest.settlement_at=s.settlement_at"""
+    ).fetchall()
+    conn.close()
+    return {int(row["mode_id"]): dict(row) for row in rows}
 
 
 def insert_pool_address_events_batch(records):

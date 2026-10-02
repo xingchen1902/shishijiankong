@@ -105,6 +105,7 @@ _chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 TELEGRAM_CHAT_ID = int(_chat) if _chat.lstrip("-").isdigit() else _chat
 _chat_ids = os.environ.get("TELEGRAM_CHAT_IDS", "")
 _no_button_chat_ids = os.environ.get("TELEGRAM_NO_BUTTON_CHAT_IDS", "")
+ARK_API_BASE_URL = os.environ.get("ARK_API_BASE_URL", "http://127.0.0.1:8899")
 # 集中涡轮/赎回/释放提醒，以及单笔异常提醒，同时发送到两个群组。
 BURST_ALERT_CHAT_IDS = (-1003936488413, -5116531249)
 BURST_ALERT_CHAT_ID = BURST_ALERT_CHAT_IDS[0]
@@ -497,6 +498,19 @@ def _fmt_delta(value, decimals=2):
     n = float(value or 0)
     return f"{n:+,.{decimals}f}"
 
+
+def get_official_dapp_coefficient():
+    """读取与看板/个人提醒共用的官方 DApp 动态系数。"""
+    response = requests.get(
+        f"{ARK_API_BASE_URL.rstrip('/')}/api/official-coefficient",
+        timeout=5,
+    )
+    response.raise_for_status()
+    value = response.json().get("coefficient")
+    if value is None:
+        raise ValueError("官方 DApp 当前系数为空")
+    return float(value)
+
 def push_to_telegram(record, target_chat_id=None, title_suffix="汇总", include_consensus=False):
     """推送汇总到 Telegram"""
     if not TELEGRAM_BOT_TOKEN:
@@ -514,11 +528,12 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总", include
     consensus_line = ""
     if include_consensus:
         try:
-            coefficient = get_latest_consensus_coefficient()
+            coefficient = get_official_dapp_coefficient()
             coefficient_text = f"{coefficient * 100:.2f}%" if coefficient is not None else "--"
         except Exception as exc:
-            print(f"  [Telegram] 读取共识系数失败: {exc}")
-            coefficient_text = "--"
+            print(f"  [Telegram] 读取官方 DApp 共识系数失败，回退历史值: {exc}")
+            coefficient = get_latest_consensus_coefficient()
+            coefficient_text = f"{coefficient * 100:.2f}%" if coefficient is not None else "--"
         consensus_line = f"当前共识系数：{coefficient_text}\n"
 
     msg = f"""<b>📊 ARK 链上数据</b>

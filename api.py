@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import os, threading, time, requests, json
+import os, threading, time, requests, json, random
 from datetime import datetime, timezone, timedelta
 from db import (
     get_all_daily_until_yesterday,
@@ -12,6 +12,8 @@ from db import (
     get_dex_daily_snapshots,
     get_staking_daily_snapshots,
     insert_staking_daily_snapshot,
+    record_staking_yield_settlement,
+    get_staking_yield_latest,
     get_pool_address_daily_summaries,
     get_pool_address_summary,
     save_pool_address_daily_summary,
@@ -28,7 +30,7 @@ from db import (
 )
 from event_parser import (
     BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply,
-    get_release_periods,
+    TARGET_DYNAMIC, _rpc_call,
 )
 from pusher import (
     get_telegram_chat_ids,
@@ -85,6 +87,9 @@ POOL_ADDRESS_BALANCE_CACHE = {"ts": 0, "data": None}
 ARK_SUPPLY_CACHE = {"ts": 0, "value": None}
 LIDO_STETH_CACHE = {"ts": 0, "value": None}
 DEX_SNAPSHOT_LOCK = threading.Lock()
+OFFICIAL_TURBINE_CONFIG_SELECTOR = "0xc3f909d4"  # RewardVesting.getConfig()
+OFFICIAL_TURBINE_CONFIG_CACHE_TTL = 10
+OFFICIAL_TURBINE_CONFIG_CACHE = {"ts": 0, "data": None}
 app = FastAPI(title="ARK")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 init_db()
@@ -183,6 +188,65 @@ def get_today_data():
             "event_count":ec,"last_block":lb}
     TODAY_CACHE.update({"date": today, "ts": now_ts, "data": result})
     return dict(result)
+
+
+def get_official_turbine_config():
+    """读取官方 DApp 使用的涡轮动态比例区间。
+
+    官方 DApp 会从 RewardVesting.getConfig() 读取两个万分比参数，
+    然后在浏览器中每 500ms 在该区间内生成当前展示值。这里仅负责
+    读取官方区间，动态值由看板前端按同样规则生成，避免把自有事件
+    数据误当作官方 DApp 的当前展示值。
+    """
+    now_ts = time.time()
+    cached = OFFICIAL_TURBINE_CONFIG_CACHE.get("data")
+    if cached is not None and now_ts - OFFICIAL_TURBINE_CONFIG_CACHE["ts"] < OFFICIAL_TURBINE_CONFIG_CACHE_TTL:
+        return dict(cached)
+
+    try:
+        raw = _rpc_call(
+            "eth_call",
+            [{"to": TARGET_DYNAMIC, "data": OFFICIAL_TURBINE_CONFIG_SELECTOR}, "latest"],
+            retries=2,
+        )
+        if not raw or not isinstance(raw, str) or not raw.startswith("0x"):
+            raise ValueError("官方涡轮配置返回为空")
+        body = raw[2:]
+        if len(body) < 64 * 6:
+            raise ValueError("官方涡轮配置返回长度异常")
+        words = [int(body[index:index + 64], 16) for index in range(0, len(body), 64)]
+        minimum = words[4] / 10000
+        maximum = words[5] / 10000
+        if not (0 <= minimum <= maximum <= 1):
+            raise ValueError(f"官方涡轮配置区间异常: {minimum} - {maximum}")
+        result = {
+            "min": minimum,
+            "max": maximum,
+            "contract": TARGET_DYNAMIC,
+            "source": "official-dapp",
+            "updated_at": datetime.now(BJT).isoformat(),
+        }
+        OFFICIAL_TURBINE_CONFIG_CACHE.update({"ts": now_ts, "data": result})
+        return dict(result)
+    except Exception as exc:
+        print(f"[官方 DApp] 涡轮配置读取失败: {exc}")
+        return {
+            "min": None,
+            "max": None,
+            "contract": TARGET_DYNAMIC,
+            "source": "official-dapp",
+            "error": str(exc),
+        }
+
+
+def sample_official_turbine_coefficient(config=None):
+    """按官方 DApp 的规则生成一次当前动态系数。"""
+    config = config or get_official_turbine_config()
+    minimum = config.get("min")
+    maximum = config.get("max")
+    if minimum is None or maximum is None:
+        return None
+    return random.uniform(float(minimum), float(maximum))
 
 
 def get_staking_overview(force_refresh=False):
@@ -891,10 +955,37 @@ def get_release_period_history(page: int = 1, per_page: int = 10):
 
 @app.get("/api/turbo-pending")
 def get_turbo_pending():
-    """只返回当前待领取总和与共识系数，不传输地址明细。"""
+    """返回待领取总和及官方 DApp 的动态系数区间。"""
     _, total = get_turbo_pending_snapshot()
-    return {"data": [], "total": round(total, 8),
-            "current_consensus_coefficient": get_latest_consensus_coefficient()}
+    official = get_official_turbine_config()
+    current = sample_official_turbine_coefficient(official)
+    official_payload = dict(official)
+    official_payload["current"] = current
+    official_payload["sampled_at"] = datetime.now(BJT).isoformat()
+    return {
+        "data": [],
+        "total": round(total, 8),
+        # 历史字段保留兼容旧客户端；新提醒服务使用官方 DApp 动态值。
+        "current_consensus_coefficient": get_latest_consensus_coefficient(),
+        "official_dapp": official_payload,
+        "official_dapp_coefficient": current,
+        "official_turbine_min_percentage": official.get("min"),
+        "official_turbine_max_percentage": official.get("max"),
+    }
+
+
+@app.get("/api/official-coefficient")
+def get_official_coefficient_api():
+    """返回一次与官方 DApp 同源的动态系数。"""
+    config = get_official_turbine_config()
+    current = sample_official_turbine_coefficient(config)
+    return {
+        "coefficient": current,
+        "min": config.get("min"),
+        "max": config.get("max"),
+        "source": "official-dapp",
+        "updated_at": datetime.now(BJT).isoformat(),
+    }
 
 
 @app.get("/api/release-period-summary")
@@ -909,7 +1000,65 @@ def get_today_trend_api():
 
 @app.get("/api/staking-overview")
 def get_staking_overview_api():
-    return get_staking_overview()
+    payload = get_staking_overview()
+    latest = get_staking_yield_latest()
+    for row in payload.get("data", []):
+        saved = latest.get(int(row.get("mode_id", 0)))
+        cumulative = float(saved["cumulative_earned_ark"]) if saved else 0.0
+        row["cumulative_earned_ark"] = round(cumulative, 8)
+        row["last_settlement_earned_ark"] = round(float(saved["earned_ark"]), 8) if saved else None
+        row["last_settlement_at"] = saved.get("settlement_at") if saved else None
+        row["yield_tracking_started_at"] = saved.get("settlement_at") if saved else None
+        # Total staking remains principal; accrued yield is tracked separately.
+        row["next_settlement_estimate_ark"] = round(
+            (float(row.get("total_ark") or 0) + cumulative)
+            * float(row.get("interest_rate") or 0), 8
+        )
+    payload["yield_tracking"] = {
+        "basis": "current total staking principal + recorded compound rewards",
+        "scope": "since feature activation; no historical backfill",
+        "settlement_times_bjt": ["00:00", "12:00"],
+    }
+    return payload
+
+
+STAKING_YIELD_MODE_IDS = {1, 2, 3, 4, 5, 6, 100}
+STAKING_YIELD_CAPTURE_WINDOW_SECONDS = 300
+
+
+def due_staking_yield_settlement(now=None):
+    """Return the current scheduled BJT settlement slot within its capture window."""
+    now = now or datetime.now(BJT)
+    slots = [now.replace(hour=0, minute=0, second=0, microsecond=0),
+             now.replace(hour=12, minute=0, second=0, microsecond=0)]
+    for slot in reversed(slots):
+        age = (now - slot).total_seconds()
+        if 0 <= age <= STAKING_YIELD_CAPTURE_WINDOW_SECONDS:
+            return slot.strftime("%Y-%m-%d %H:%M:%S")
+    return None
+
+
+def capture_staking_yield_settlement(payload, now=None):
+    """Persist one settlement only when all official periods and rates are available."""
+    slot = due_staking_yield_settlement(now)
+    rows = payload.get("data", []) if payload and not payload.get("stale") else []
+    rows_by_mode = {}
+    for row in rows:
+        try:
+            mode_id = int(row.get("mode_id"))
+            principal = float(row.get("total_ark"))
+            rate = float(row.get("interest_rate"))
+        except (TypeError, ValueError):
+            continue
+        if mode_id in STAKING_YIELD_MODE_IDS and principal >= 0 and 0 <= rate <= 1:
+            rows_by_mode[mode_id] = row
+    if not slot or set(rows_by_mode) != STAKING_YIELD_MODE_IDS:
+        return None
+    result = record_staking_yield_settlement(slot, [rows_by_mode[key] for key in sorted(rows_by_mode)])
+    if result["recorded"]:
+        total_earned = sum(row["earned_ark"] for row in result["rows"])
+        print(f"[质押收益] 已保存 {slot} 结算，累计覆盖 {len(result['rows'])} 个周期，本次收益 {total_earned:.8f} ARK")
+    return result
 
 
 def staking_snapshot_worker():
@@ -953,6 +1102,7 @@ def staking_rate_monitor_worker():
             payload = get_staking_overview(force_refresh=True)
             rows = payload.get("data", []) if payload and not payload.get("stale") else []
             if rows:
+                capture_staking_yield_settlement(payload)
                 current = {
                     str(row["mode_id"]): {
                         "period": row.get("period", ""),
