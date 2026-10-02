@@ -70,6 +70,8 @@ RELEASE_PERIOD_SECONDS = {
     5184000: "60天",
 }
 RELEASE_PERIOD_CACHE = {}
+RELEASE_PERIOD_RPC_FAILURES = {}
+RELEASE_PERIOD_RETRY_COOLDOWN = 900
 
 RPC_URLS = [
     "https://bsc-mainnet.nodereal.io/v1/70208501917a413bab46cb281fc0997f",
@@ -143,6 +145,72 @@ class RPCManager:
         # 兼容不支持 batch 的 RPC 节点；宁可慢一些也不能将未验证事件计入总涡轮。
         return [self.call(method, params, retries) for params in params_list]
 
+    def call_batch_checked(self, method, params_list, result_is_valid):
+        """批量请求后只对缺失/无效结果做一次备用节点批量重试。"""
+        params_list = list(params_list)
+        if not params_list:
+            return [], {"retried": 0, "unresolved": 0}
+
+        def request_at(url, params):
+            payload = [
+                {"jsonrpc": "2.0", "method": method, "params": item_params, "id": i}
+                for i, item_params in enumerate(params)
+            ]
+            response = requests.post(url, json=payload, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, list):
+                raise ValueError("RPC batch response is not a list")
+            by_id = {}
+            for item in data:
+                if not isinstance(item, dict) or item.get("error") or "result" not in item:
+                    continue
+                by_id[item.get("id")] = item["result"]
+            return [by_id.get(i) for i in range(len(params))]
+
+        # 优先当前节点；若它已确认不支持 batch，则尝试下一个可用节点。
+        primary_index = self.index
+        for offset in range(len(self.urls)):
+            candidate = (self.index + offset) % len(self.urls)
+            if self._batch_capability.get(self.urls[candidate]) is not False:
+                primary_index = candidate
+                break
+        primary_url = self.urls[primary_index]
+        try:
+            results = request_at(primary_url, params_list)
+            self._batch_capability[primary_url] = True
+            self.index = primary_index
+        except Exception:
+            self._batch_capability[primary_url] = False
+            results = [None] * len(params_list)
+
+        missing = [i for i, result in enumerate(results) if not result_is_valid(result)]
+        retried = 0
+        if missing:
+            alternate_index = None
+            for offset in range(1, len(self.urls)):
+                candidate = (primary_index + offset) % len(self.urls)
+                if self._batch_capability.get(self.urls[candidate]) is not False:
+                    alternate_index = candidate
+                    break
+            if alternate_index is not None:
+                alternate_url = self.urls[alternate_index]
+                retried = len(missing)
+                try:
+                    retry_results = request_at(
+                        alternate_url, [params_list[i] for i in missing]
+                    )
+                    self._batch_capability[alternate_url] = True
+                    self.index = alternate_index
+                    for index, result in zip(missing, retry_results):
+                        if result_is_valid(result):
+                            results[index] = result
+                except Exception:
+                    self._batch_capability[alternate_url] = False
+
+        unresolved = sum(not result_is_valid(result) for result in results)
+        return results, {"retried": retried, "unresolved": unresolved}
+
 _rpc = RPCManager(RPC_URLS)
 
 _time_ref_block = REF_BLOCK
@@ -161,31 +229,74 @@ def get_transaction_by_hash(tx_hash):
         return None
     return _rpc_call("eth_getTransactionByHash", [tx_hash], retries=1)
 
-def _parse_release_period_from_input(input_data):
-    """按释放合约 ABI 第 6 个参数解析释放周期。"""
+def _decode_release_period_from_input(input_data):
+    """解析释放周期并给出原因，区分 RPC 暂时失败与周期值未映射。"""
     raw_input = (input_data or "").lower()
     if raw_input.startswith("0x"):
         raw_input = raw_input[2:]
+    if not raw_input:
+        return "未知", "empty_input"
     selector_pos = raw_input.rfind("4399333d")
     body = raw_input[selector_pos + 8:] if selector_pos >= 0 else raw_input[8:]
-    words = [int(body[index:index + 64], 16) for index in range(0, len(body) - 63, 64)]
-    return RELEASE_PERIOD_SECONDS.get(words[5], "未知") if len(words) > 5 else "未知"
+    if len(body) < 6 * 64:
+        return "未知", "short_calldata"
+    try:
+        value = int(body[5 * 64:6 * 64], 16)
+    except ValueError:
+        return "未知", "invalid_calldata"
+    period = RELEASE_PERIOD_SECONDS.get(value)
+    if period is None:
+        return "未知", "unmapped_period"
+    return period, "ok"
+
+
+def _parse_release_period_from_input(input_data):
+    """按释放合约 ABI 第 6 个参数解析释放周期。"""
+    return _decode_release_period_from_input(input_data)[0]
+
+
+def _is_valid_release_transaction(transaction):
+    if not isinstance(transaction, dict):
+        return False
+    input_data = transaction.get("input") or transaction.get("data") or ""
+    _, reason = _decode_release_period_from_input(input_data)
+    return reason in ("ok", "unmapped_period")
 
 def get_release_periods(tx_hashes):
     """批量解析释放交易周期，并复用已缓存的解析结果。"""
     unique = [tx for tx in dict.fromkeys(tx_hashes) if tx]
-    missing = [tx for tx in unique if tx not in RELEASE_PERIOD_CACHE]
+    now = time.time()
+    missing = [
+        tx for tx in unique
+        if tx not in RELEASE_PERIOD_CACHE
+        and now - RELEASE_PERIOD_RPC_FAILURES.get(tx, 0) >= RELEASE_PERIOD_RETRY_COOLDOWN
+    ]
     if missing:
-        transactions = _rpc.call_batch(
-            "eth_getTransactionByHash", [[tx] for tx in missing], retries=1
+        transactions, rpc_stats = _rpc.call_batch_checked(
+            "eth_getTransactionByHash",
+            [[tx] for tx in missing],
+            _is_valid_release_transaction,
         )
+        rpc_failures = 0
+        unmapped_periods = 0
         for tx, transaction in zip(missing, transactions):
-            try:
-                input_data = (transaction or {}).get("input") or (transaction or {}).get("data") or ""
-                RELEASE_PERIOD_CACHE[tx] = _parse_release_period_from_input(input_data)
-            except Exception as exc:
-                print(f"  [释放周期] 解析失败 {tx}: {exc}")
-                RELEASE_PERIOD_CACHE[tx] = "未知"
+            if not _is_valid_release_transaction(transaction):
+                # RPC 暂时失败不能作为永久“未知”缓存；冷却后才允许再次尝试。
+                RELEASE_PERIOD_RPC_FAILURES[tx] = now
+                rpc_failures += 1
+                continue
+            input_data = transaction.get("input") or transaction.get("data") or ""
+            period, reason = _decode_release_period_from_input(input_data)
+            RELEASE_PERIOD_CACHE[tx] = period
+            RELEASE_PERIOD_RPC_FAILURES.pop(tx, None)
+            if reason == "unmapped_period":
+                unmapped_periods += 1
+
+        if rpc_stats["retried"] or rpc_failures or unmapped_periods:
+            print(
+                f"[释放周期解析] 本批 {len(missing)} 笔，备用节点重试 {rpc_stats['retried']} 笔，"
+                f"RPC 未取得有效交易 {rpc_failures} 笔，未映射周期值 {unmapped_periods} 笔"
+            )
     return {tx: RELEASE_PERIOD_CACHE.get(tx, "未知") for tx in unique}
 
 def _refresh_time_ref(force=False):
