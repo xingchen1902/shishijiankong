@@ -24,6 +24,7 @@ from db import (
     refresh_turbo_pending,
     get_turbo_pending_snapshot,
     get_latest_consensus_coefficient,
+    get_top_turbo_coefficients,
     get_release_period_summary,
     get_release_period_daily_summary,
     get_release_amount_distribution,
@@ -1283,6 +1284,19 @@ def get_realtime(limit:int=100):
         "data": [dict(r) for r in rows],
         "totals": {row["type"]: row["count"] for row in totals},
         "recent_by_type": recent_by_type,
+    }
+
+@app.get("/api/turbo-coefficient-top")
+def get_turbo_coefficient_top():
+    """Return the five highest-coefficient turbo events from the rolling 24 hours."""
+    end = datetime.now(BJT)
+    start = end - timedelta(hours=24)
+    start_at = start.strftime("%Y-%m-%d %H:%M:%S")
+    end_at = end.strftime("%Y-%m-%d %H:%M:%S")
+    return {
+        "start_at": start_at,
+        "end_at": end_at,
+        "data": get_top_turbo_coefficients(start_at, end_at, limit=5),
     }
 
 @app.get("/api/lp-swaps")

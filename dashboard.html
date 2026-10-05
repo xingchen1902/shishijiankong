@@ -240,6 +240,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .event-detail-row .label { color: #64748b; font-size: 12px; }
 .event-detail-row .value { min-width: 0; overflow: hidden; color: #cbd5e1; font-size: 12px; font-weight: 600; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .event-detail-row .value a { color: #60a5fa; text-decoration: none; }
+.turbo-top-card { margin-top: 18px; padding: 16px; background: linear-gradient(120deg, rgba(20,184,166,.08), transparent 42%), #111d32; border: 1px solid #263b59; border-radius: 12px; }
+.turbo-top-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.turbo-top-title { color: #e2e8f0; font-size: 16px; font-weight: 700; }
+.turbo-top-meta { color: #64748b; font-size: 11px; }
+.turbo-top-table-wrap { overflow-x: auto; border: 1px solid rgba(51,65,85,.78); border-radius: 9px; -webkit-overflow-scrolling: touch; }
+.turbo-top-table { min-width: 760px; table-layout: fixed; }
+.turbo-top-table th { position: static; background: #14233b; }
+.turbo-top-table td { white-space: nowrap; color: #cbd5e1; }
+.turbo-top-table td:first-child { width: 56px; color: #64748b; font-variant-numeric: tabular-nums; }
+.turbo-top-table .coefficient { color: #2dd4bf; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.turbo-top-table .turbo-amount { color: #60a5fa; font-weight: 700; }
+.turbo-top-table a { color: #60a5fa; text-decoration: none; }
+.turbo-top-table a:hover { color: #93c5fd; text-decoration: underline; }
+.turbo-top-empty { padding: 22px 12px; color: #64748b; text-align: center; font-size: 12px; }
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: hidden; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
 .daily-history-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-color: #475569 #172235; scrollbar-width: thin; }
@@ -386,6 +400,9 @@ td.neg { color: #ef4444; }
   .release-analysis-amount, .release-analysis-share { font-size:11px; }
   .events-box { height: 360px; min-height: 320px; max-height: 360px; }
   .events-center-title { font-size: 18px; }
+  .turbo-top-card { padding: 12px; }
+  .turbo-top-head { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .turbo-top-title { font-size: 14px; }
 }
 
 @media (max-width: 700px) {
@@ -562,6 +579,18 @@ td.neg { color: #ef4444; }
           <div style="color:#64748b;font-size:12px;padding:24px 0;text-align:center;">点击左侧事件查看详情</div>
         </aside>
       </div>
+      <section class="turbo-top-card" aria-labelledby="turboTopTitle">
+        <div class="turbo-top-head">
+          <div class="turbo-top-title" id="turboTopTitle">🚀 最近 24 小时最高系数涡轮 · TOP 5</div>
+          <div class="turbo-top-meta" id="turboTopMeta">滚动 24 小时 · 每 30 秒更新</div>
+        </div>
+        <div class="turbo-top-table-wrap">
+          <table class="turbo-top-table">
+            <thead><tr><th>排名</th><th>时间</th><th>共识系数</th><th>原始涡轮</th><th>实际涡轮</th><th>接收地址</th><th>交易</th></tr></thead>
+            <tbody id="turboTopBody"><tr><td colspan="7"><div class="turbo-top-empty">正在加载最高系数涡轮...</div></td></tr></tbody>
+          </table>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -1445,6 +1474,33 @@ function renderEventDetail(event) {
     row("虚拟机", "BSC") + row("事件索引", event.id != null ? esc(String(event.id)) : "--");
 }
 
+function renderTopTurboCoefficients(payload) {
+  var body = document.getElementById("turboTopBody");
+  var meta = document.getElementById("turboTopMeta");
+  if (!body) return;
+  var rows = payload && Array.isArray(payload.data) ? payload.data : [];
+  if (meta) meta.textContent = payload && payload.start_at && payload.end_at
+    ? "统计区间 " + eventTime(payload.start_at, true) + " — " + eventTime(payload.end_at, true) + " · 每 30 秒更新"
+    : "滚动 24 小时 · 每 30 秒更新";
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="7"><div class="turbo-top-empty">最近 24 小时暂无带共识系数的涡轮数据</div></td></tr>';
+    return;
+  }
+  body.innerHTML = rows.slice(0, 5).map(function(event, index) {
+    var tx = event.tx || "";
+    var address = event.to_addr || "";
+    return "<tr>" +
+      "<td>" + String(index + 1).padStart(2, "0") + "</td>" +
+      "<td>" + esc(eventTime(event.timestamp, true)) + "</td>" +
+      '<td class="coefficient">' + turboCoefficient(event.consensus_coefficient) + "</td>" +
+      "<td>" + fmt(event.value) + " ARK</td>" +
+      '<td class="turbo-amount">' + fmt(event.actual_value != null ? event.actual_value : event.value) + " ARK</td>" +
+      "<td title=\"" + esc(address) + "\">" + esc(shortAddress(address)) + "</td>" +
+      '<td>' + (tx ? '<a href="https://bscscan.com/tx/' + encodeURIComponent(tx) + '" target="_blank" rel="noopener noreferrer">' + esc(shortAddress(tx)) + "</a>" : "--") + "</td>" +
+      "</tr>";
+  }).join("");
+}
+
 function updateEvents(allEvents, totals, recentByType) {
   var box = document.getElementById("eventStream");
   renderEventCenter(allEvents, totals, recentByType);
@@ -1685,6 +1741,12 @@ function loadRealtime() {
   }).catch(function(err) { logLoadError("realtime", err); });
 }
 
+function loadTopTurboCoefficients() {
+  return fetchAPI("/api/turbo-coefficient-top").then(function(payload) {
+    renderTopTurboCoefficients(payload);
+  }).catch(function(err) { logLoadError("top turbo coefficients", err); });
+}
+
 function loadTrend() {
   return fetchAPI("/api/today-trend").then(function(trend) {
     try { updateTrend(trend ? trend.data : null); }
@@ -1719,6 +1781,7 @@ function loadAll() {
   loadPoolAddressOverview();
   loadDaily();
   loadRealtime();
+  loadTopTurboCoefficients();
   loadTrend();
   loadDex();
   loadLpSwaps();
