@@ -276,6 +276,11 @@ def _init_db():
         ON events(block DESC, id DESC, consensus_coefficient)
         WHERE type='turbo_total' AND consensus_coefficient IS NOT NULL
     """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_events_turbo_coefficient_time
+        ON events(timestamp DESC, consensus_coefficient DESC)
+        WHERE type='turbo_total' AND consensus_coefficient IS NOT NULL
+    """)
     # 周期统计只从功能首次上线时间开始，不回填此前的历史释放数据。
     activation_at = datetime.now(BJT).strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
@@ -504,6 +509,24 @@ def get_latest_consensus_coefficient():
     ).fetchone()
     conn.close()
     return float(row[0]) if row else None
+
+
+def get_top_turbo_coefficients(start_at, end_at, limit=2):
+    """Return the highest-coefficient turbo events in a timestamp interval."""
+    limit = max(1, min(int(limit or 2), 10))
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT timestamp, tx, to_addr, value, actual_value, consensus_coefficient
+           FROM events
+           WHERE type='turbo_total'
+             AND consensus_coefficient IS NOT NULL
+             AND timestamp >= ? AND timestamp <= ?
+           ORDER BY consensus_coefficient DESC, timestamp DESC, block DESC, id DESC
+           LIMIT ?""",
+        (start_at, end_at, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 def save_ai_daily_report(date_str, **kwargs):
     """保存或更新每日 AI 日报状态，支持失败后重试推送。"""

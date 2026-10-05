@@ -17,6 +17,7 @@ from db import (
     get_monitor_state,
     set_monitor_state,
     get_latest_consensus_coefficient,
+    get_top_turbo_coefficients,
     get_all_daily_until_yesterday as get_all_daily,
     refresh_release_period_daily_summary,
 )
@@ -31,6 +32,7 @@ from pusher import (
     push_static_release_top30_excel,
     push_dynamic_release_top30_excel,
     push_release_period_summary_to_telegram,
+    push_top_turbo_coefficients_to_telegram,
 )
 from ai_analyzer import generate_and_push_daily_report
 
@@ -448,6 +450,38 @@ class DailyAggregator:
             self.flush_events()
             self._pending_push(yesterday)
         self._check_yesterday_push()
+        self._check_daily_turbo_coefficient_push()
+
+    def _check_daily_turbo_coefficient_push(self):
+        """At/after BJT noon, send the top two turbo coefficients from the prior 24h once."""
+        now = datetime.now(BJT)
+        if (now.hour, now.minute) < (12, 0):
+            return
+
+        date_str = now.strftime("%Y-%m-%d")
+        sent_key = f"turbo_coefficient_top2_sent:{date_str}"
+        if get_monitor_state(sent_key) == "1":
+            return
+
+        attempt_key = f"turbo_coefficient_top2_attempt:{date_str}"
+        last_attempt = get_monitor_state(attempt_key)
+        if last_attempt:
+            try:
+                previous_attempt = datetime.strptime(last_attempt, "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJT)
+                if now - previous_attempt < timedelta(minutes=5):
+                    return
+            except ValueError:
+                pass
+
+        end_at = now.strftime("%Y-%m-%d %H:%M:%S")
+        start_at = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        set_monitor_state(attempt_key, end_at)
+        try:
+            rows = get_top_turbo_coefficients(start_at, end_at, limit=2)
+            if push_top_turbo_coefficients_to_telegram(rows, start_at, end_at):
+                set_monitor_state(sent_key, "1")
+        except Exception as exc:
+            print(f"[涡轮系数 TOP 2] 定时推送处理失败: {exc}")
 
     def _pending_push(self, date_str):
         now = datetime.now(BJT)

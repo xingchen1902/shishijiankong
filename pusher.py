@@ -5,6 +5,7 @@
 """
 
 import os, sys, json, time, requests
+from html import escape
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from db import (
@@ -187,6 +188,58 @@ def push_release_period_summary_to_telegram(date_str, realtime=False):
         print(f"  [释放周期 Telegram] 推送成功 {date_str} realtime={realtime}")
         return True
     print(f"  [释放周期 Telegram] 推送失败: {data.get('description', data)}")
+    return False
+
+
+def push_top_turbo_coefficients_to_telegram(rows, start_at, end_at):
+    """Send the two highest-coefficient turbo events from a 24-hour window."""
+    if not TELEGRAM_BOT_TOKEN:
+        print("  [涡轮系数 TOP 2] 跳过: 未配置 BOT_TOKEN")
+        return False
+
+    lines = [
+        "<b>🚀 最近24小时最高系数涡轮 TOP 2</b>",
+        f"统计区间：{escape(start_at)} 至 {escape(end_at)}（北京时间）",
+        "",
+    ]
+    if not rows:
+        lines.append("该时段暂无已解析的涡轮系数事件。")
+    else:
+        for rank, row in enumerate(rows[:2], 1):
+            coefficient = float(row.get("consensus_coefficient") or 0) * 100
+            raw_amount = float(row.get("value") or 0)
+            actual_amount = float(row.get("actual_value") if row.get("actual_value") is not None else raw_amount)
+            address = str(row.get("to_addr") or "--")
+            short_address = f"{address[:8]}…{address[-6:]}" if len(address) > 18 else address
+            tx = str(row.get("tx") or "")
+            tx_markup = f'<a href="https://bscscan.com/tx/{escape(tx, quote=True)}">{escape(tx[:12] + "…" + tx[-8:])}</a>' if tx else "--"
+            lines.extend([
+                f"<b>#{rank} · 系数 {coefficient:.4f}%</b>",
+                f"实际涡轮：{actual_amount:,.4f} ARK｜原始量：{raw_amount:,.4f} ARK",
+                f"时间：{escape(str(row.get('timestamp') or '--'))}",
+                f"接收地址：<code>{escape(short_address)}</code>",
+                f"交易：{tx_markup}",
+                "",
+            ])
+
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": STAKING_RATE_CHAT_ID,
+                "text": "\n".join(lines).rstrip(),
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
+            timeout=15,
+        )
+        data = response.json()
+        if data.get("ok"):
+            print(f"  [涡轮系数 TOP 2] 推送成功 chat_id={STAKING_RATE_CHAT_ID} rows={len(rows)}")
+            return True
+        print(f"  [涡轮系数 TOP 2] 推送失败: {data.get('description', data)}")
+    except Exception as exc:
+        print(f"  [涡轮系数 TOP 2] 请求失败: {exc}")
     return False
 
 def get_feishu_token():
