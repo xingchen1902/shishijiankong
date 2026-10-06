@@ -5,7 +5,7 @@ __pycache__
 *.pyc
 node_modules
 .env
-data/*.db
+data/
 ark-monitor.service
 ark-dashboard.service
 DEPLOY.md
