@@ -254,12 +254,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .turbo-top-table a { color: #60a5fa; text-decoration: none; }
 .turbo-top-table a:hover { color: #93c5fd; text-decoration: underline; }
 .turbo-top-empty { padding: 22px 12px; color: #64748b; text-align: center; font-size: 12px; }
+.events-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; margin-top: 18px; }
+.events-summary-grid > .turbo-top-card,
+.events-summary-grid > .turbine-change-card { min-width: 0; margin-top: 0; }
 .turbine-change-card { margin-top: 14px; padding: 16px; background: #111d32; border: 1px solid #263b59; border-radius: 12px; }
 .turbine-change-table-wrap { overflow-x: auto; border: 1px solid rgba(51,65,85,.78); border-radius: 9px; -webkit-overflow-scrolling: touch; }
 .turbine-change-table { min-width: 800px; table-layout: fixed; }
 .turbine-change-table th { position: static; background: #14233b; }
 .turbine-change-table td { white-space: nowrap; color: #cbd5e1; }
-.turbine-change-kind { color: #fbbf24 !important; font-weight: 700; }
+.turbine-change-kind { font-weight: 700; }
+.turbine-change-kind.is-upper { color: #fbbf24 !important; }
+.turbine-change-kind.is-lower { color: #60a5fa !important; }
+.turbine-change-kind.is-both { color: #c084fc !important; }
+.turbine-change-kind.is-unchanged { color: #94a3b8 !important; }
 .turbine-change-range { color: #2dd4bf; font-weight: 700; font-variant-numeric: tabular-nums; }
 .turbine-change-table a { color: #60a5fa; text-decoration: none; }
 .turbine-change-empty { padding: 22px 12px; color: #64748b; text-align: center; font-size: 12px; line-height: 1.6; }
@@ -385,6 +392,7 @@ td.neg { color: #ef4444; }
 }
 @media (max-width: 1100px) {
   .dashboard-layout { grid-template-columns: 1fr; }
+  .events-summary-grid { grid-template-columns: minmax(0, 1fr); }
   .dex-sidebar .dex-card, .pool-history-sidebar .dex-card { position: static; }
   .dashboard-main > .section-title, .dashboard-main > .table-wrap, .dashboard-main > #dailyPagination, .dashboard-main > .release-summary-card, .dashboard-main > .release-analysis-card { width: 100%; }
   .dashboard-main > .history-page { width: 100%; }
@@ -588,30 +596,32 @@ td.neg { color: #ef4444; }
           <div style="color:#64748b;font-size:12px;padding:24px 0;text-align:center;">点击左侧事件查看详情</div>
         </aside>
       </div>
-      <section class="turbo-top-card" aria-labelledby="turboTopTitle">
-        <div class="turbo-top-head">
-          <div class="turbo-top-title" id="turboTopTitle">🚀 最近 24 小时最高系数涡轮 · TOP 5</div>
-          <div class="turbo-top-meta" id="turboTopMeta">滚动 24 小时 · 每 30 秒更新</div>
-        </div>
-        <div class="turbo-top-table-wrap">
-          <table class="turbo-top-table">
-            <thead><tr><th>排名</th><th>时间</th><th>共识系数</th><th>原始涡轮</th><th>实际涡轮</th><th>接收地址</th><th>交易</th></tr></thead>
-            <tbody id="turboTopBody"><tr><td colspan="7"><div class="turbo-top-empty">正在加载最高系数涡轮...</div></td></tr></tbody>
-          </table>
-        </div>
-      </section>
-      <section class="turbine-change-card" aria-labelledby="turbineChangeTitle">
-        <div class="turbo-top-head">
-          <div class="turbo-top-title" id="turbineChangeTitle">⚙️ 系数范围调整 · 最近 10 次</div>
-          <div class="turbo-top-meta">仅记录启用后新检测到的变更</div>
-        </div>
-        <div class="turbine-change-table-wrap">
-          <table class="turbine-change-table">
-            <thead><tr><th>时间</th><th>调整项</th><th>调整前范围</th><th>调整后范围</th><th>操作地址</th><th>交易</th></tr></thead>
-            <tbody id="turbineChangeBody"><tr><td colspan="6"><div class="turbine-change-empty">功能启用后检测到新的范围调整时会显示在这里；不回溯旧交易。</div></td></tr></tbody>
-          </table>
-        </div>
-      </section>
+      <div class="events-summary-grid">
+        <section class="turbo-top-card" aria-labelledby="turboTopTitle">
+          <div class="turbo-top-head">
+            <div class="turbo-top-title" id="turboTopTitle">🚀 最近 24 小时最高系数涡轮 · TOP 5</div>
+            <div class="turbo-top-meta" id="turboTopMeta">滚动 24 小时 · 每 30 秒更新</div>
+          </div>
+          <div class="turbo-top-table-wrap">
+            <table class="turbo-top-table">
+              <thead><tr><th>排名</th><th>时间</th><th>共识系数</th><th>原始涡轮</th><th>实际涡轮</th><th>接收地址</th><th>交易</th></tr></thead>
+              <tbody id="turboTopBody"><tr><td colspan="7"><div class="turbo-top-empty">正在加载最高系数涡轮...</div></td></tr></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="turbine-change-card" aria-labelledby="turbineChangeTitle">
+          <div class="turbo-top-head">
+            <div class="turbo-top-title" id="turbineChangeTitle">⚙️ 系数范围调整 · 最近 10 次</div>
+            <div class="turbo-top-meta">仅记录启用后新检测到的变更</div>
+          </div>
+          <div class="turbine-change-table-wrap">
+            <table class="turbine-change-table">
+              <thead><tr><th>时间</th><th>调整项</th><th>调整前范围</th><th>调整后范围</th><th>操作地址</th><th>交易</th></tr></thead>
+              <tbody id="turbineChangeBody"><tr><td colspan="6"><div class="turbine-change-empty">功能启用后检测到新的范围调整时会显示在这里；不回溯旧交易。</div></td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 
@@ -1538,9 +1548,10 @@ function renderTurbineConfigChanges(payload) {
     var minChanged = Math.abs(Number(change.previous_min) - Number(change.new_min)) > 1e-12;
     var maxChanged = Math.abs(Number(change.previous_max) - Number(change.new_max)) > 1e-12;
     var changedBound = minChanged && maxChanged ? "上下限" : minChanged ? "下限" : maxChanged ? "上限" : "范围未变化";
+    var changedClass = minChanged && maxChanged ? "is-both" : minChanged ? "is-lower" : maxChanged ? "is-upper" : "is-unchanged";
     return "<tr>" +
       "<td>" + esc(eventTime(change.timestamp, true)) + "</td>" +
-      '<td class="turbine-change-kind">' + changedBound + "</td>" +
+      '<td class="turbine-change-kind ' + changedClass + '">' + changedBound + "</td>" +
       '<td class="turbine-change-range">' + rangeText(change.previous_min, change.previous_max) + "</td>" +
       '<td class="turbine-change-range">' + rangeText(change.new_min, change.new_max) + "</td>" +
       "<td title=\"" + esc(change.from_addr || "") + "\">" + esc(shortAddress(change.from_addr)) + "</td>" +
