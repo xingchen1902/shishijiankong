@@ -216,6 +216,8 @@ _rpc = RPCManager(RPC_URLS)
 _time_ref_block = REF_BLOCK
 _time_ref_ts = BASE_TS
 _time_ref_updated = 0
+_block_timestamp_cache = {}
+_BLOCK_TIMESTAMP_CACHE_LIMIT = 10000
 
 def _rpc_call(method, params, retries=3):
     try:
@@ -315,6 +317,50 @@ def estimate_block_time(block_number):
     _refresh_time_ref()
     return datetime.fromtimestamp(_time_ref_ts + (block_number - _time_ref_block) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
 
+def get_block_timestamps(block_numbers):
+    """Resolve exact BSC header times for unique blocks, batching and caching RPC reads."""
+    unique_blocks = list(dict.fromkeys(int(block) for block in block_numbers if block is not None))
+    missing = [block for block in unique_blocks if block not in _block_timestamp_cache]
+    unresolved = []
+
+    def valid_header(header):
+        return isinstance(header, dict) and header.get("timestamp") is not None
+
+    for offset in range(0, len(missing), 50):
+        chunk = missing[offset:offset + 50]
+        headers, _stats = _rpc.call_batch_checked(
+            "eth_getBlockByNumber",
+            [[hex(block), False] for block in chunk],
+            valid_header,
+        )
+        for block, header in zip(chunk, headers):
+            if valid_header(header):
+                timestamp = datetime.fromtimestamp(int(header["timestamp"], 16), BJT)
+                _block_timestamp_cache[block] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                unresolved.append(block)
+
+    # Retry only missing headers individually; keep ingestion running with the old estimate
+    # if the RPC providers still cannot return a header.
+    for block in unresolved:
+        header = _rpc_call("eth_getBlockByNumber", [hex(block), False], retries=1)
+        if valid_header(header):
+            timestamp = datetime.fromtimestamp(int(header["timestamp"], 16), BJT)
+            _block_timestamp_cache[block] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+    if len(_block_timestamp_cache) > _BLOCK_TIMESTAMP_CACHE_LIMIT:
+        for block in list(_block_timestamp_cache)[:len(_block_timestamp_cache) - _BLOCK_TIMESTAMP_CACHE_LIMIT]:
+            del _block_timestamp_cache[block]
+
+    result = {}
+    for block in unique_blocks:
+        result[block] = _block_timestamp_cache.get(block) or estimate_block_time(block)
+    if unresolved:
+        fallback_count = sum(block not in _block_timestamp_cache for block in unresolved)
+        if fallback_count:
+            print(f"[区块时间] {fallback_count} 个区块头读取失败，暂以估算时间写入")
+    return result
+
 def get_balance(token, address, block_hex="latest"):
     """eth_call 查余额（仅在汇总时需要，不高频调用）"""
     data = "0x70a08231" + address[2:].lower().zfill(64)
@@ -331,7 +377,7 @@ def _topic_address(address):
     return "0x" + address[2:].lower().zfill(64)
 
 
-def _pool_transfer_records(logs, token):
+def _pool_transfer_records(logs, token, block_timestamps=None):
     """提取监控地址与 ARK/USDT 底池的直接交互。"""
     records = []
     seen = set()
@@ -361,7 +407,7 @@ def _pool_transfer_records(logs, token):
             "token": token,
             "direction": direction,
             "value": int(log["data"], 16) / 10**DECIMALS,
-            "timestamp": estimate_block_time(int(log["blockNumber"], 16)),
+            "timestamp": (block_timestamps or {}).get(int(log["blockNumber"], 16)) or estimate_block_time(int(log["blockNumber"], 16)),
         })
     return records
 
@@ -384,7 +430,10 @@ def reserve_usdt_transfer_detected(from_block, to_block):
         "topics": [USDT_TRANSFER_TOPIC, None, address_topics],
     }], retries=1) or []
     all_logs = outgoing + incoming
-    records = _pool_transfer_records(all_logs, "USDT")
+    block_timestamps = get_block_timestamps(
+        int(log["blockNumber"], 16) for log in all_logs if log.get("blockNumber")
+    )
+    records = _pool_transfer_records(all_logs, "USDT", block_timestamps)
     reserve_dirty = any(
         len(log.get("topics", [])) >= 3 and (
             _topic_addr(log["topics"][1]).lower() in RESERVE_USDT_ADDRESSES
@@ -399,7 +448,7 @@ def reserve_usdt_transfer_detected(from_block, to_block):
         )
     return reserve_dirty, records
 
-def _classify_logs(logs, from_block, to_block, turbo_contribution_txs=None):
+def _classify_logs(logs, from_block, to_block, turbo_contribution_txs=None, block_timestamps=None):
     """解析 ARK logs，按地址分类，返回 (已分类, 未分类原始log)"""
     turbo_contribution_txs = {tx.lower() for tx in (turbo_contribution_txs or set())}
     results = []
@@ -410,7 +459,7 @@ def _classify_logs(logs, from_block, to_block, turbo_contribution_txs=None):
         fr = "0x" + log["topics"][1][26:]
         to = "0x" + log["topics"][2][26:]
         val = int(log["data"], 16) / 10**DECIMALS
-        ts = estimate_block_time(bn)
+        ts = (block_timestamps or {}).get(bn) or estimate_block_time(bn)
 
         # 涡轮余额转贡献值单独记录到数据库；它不是收益永久质押。
         if fr == BONUS_POOL and to == BURN_ADDR and tx.lower() in turbo_contribution_txs:
@@ -473,7 +522,7 @@ def _uint256_words(data):
     body = data[2:] if data.startswith("0x") else data
     return [int(body[i:i+64], 16) for i in range(0, len(body), 64) if body[i:i+64]]
 
-def _parse_lp_swap_logs(logs):
+def _parse_lp_swap_logs(logs, block_timestamps=None):
     swaps = []
     for log in logs:
         words = _uint256_words(log.get("data", "0x"))
@@ -504,7 +553,7 @@ def _parse_lp_swap_logs(logs):
             "amount_usdt": amount_usdt,
             "amount_ark": amount_ark,
             "price_usdt": price_usdt,
-            "timestamp": estimate_block_time(bn),
+            "timestamp": (block_timestamps or {}).get(bn) or estimate_block_time(bn),
         })
     return swaps
 
@@ -572,9 +621,15 @@ class EventParser:
             for log in contribution_logs
             if log.get("transactionHash")
         }
+        block_timestamps = get_block_timestamps(
+            int(log["blockNumber"], 16)
+            for logs in (ark_logs, gark_logs, dynamic_event_logs, release_logs, turbo_logs, contribution_logs)
+            for log in (logs or [])
+            if log.get("blockNumber")
+        )
         if ark_logs:
             classified, raw = _classify_logs(
-                ark_logs, from_block, to_block, turbo_contribution_txs
+                ark_logs, from_block, to_block, turbo_contribution_txs, block_timestamps
             )
             results.extend(classified)
             if raw:
@@ -591,7 +646,7 @@ class EventParser:
                     tx = log.get("transactionHash", "")
                     fr = "0x" + log["topics"][1][26:]
                     val = int(log["data"], 16) / 10**DECIMALS
-                    ts = estimate_block_time(bn)
+                    ts = block_timestamps.get(bn) or estimate_block_time(bn)
                     static_release_txs.add(tx)
                     results.append({
                         "block": bn, "tx": tx, "type": "static_burn",
@@ -616,7 +671,7 @@ class EventParser:
                     "type": "release_static" if tx in static_release_txs else "release_dynamic",
                     "from": TARGET_DYNAMIC,
                     "to": _topic_addr(log["topics"][1]) if len(log.get("topics", [])) > 1 else "",
-                    "value": val, "timestamp": estimate_block_time(bn),
+                    "value": val, "timestamp": block_timestamps.get(bn) or estimate_block_time(bn),
                     "release_period": release_periods.get(tx, "未知"),
                 })
 
@@ -671,7 +726,7 @@ class EventParser:
                     "value": amount_wei / 10**DECIMALS,
                     "actual_value": actual_amount_wei / 10**DECIMALS,
                     "consensus_coefficient": consensus_coefficient,
-                    "timestamp": estimate_block_time(bn),
+                    "timestamp": block_timestamps.get(bn) or estimate_block_time(bn),
                 })
 
         # 4. ARK/USDT LP Swap logs
@@ -682,7 +737,10 @@ class EventParser:
             "topics": [SWAP_TOPIC]
         }])
         if lp_logs:
-            swaps = _parse_lp_swap_logs(lp_logs)
+            lp_timestamps = get_block_timestamps(
+                int(log["blockNumber"], 16) for log in lp_logs if log.get("blockNumber")
+            )
+            swaps = _parse_lp_swap_logs(lp_logs, lp_timestamps)
             if swaps:
                 from db import insert_lp_swaps_batch
                 insert_lp_swaps_batch(swaps)

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """容器启动时补齐今日缺失数据（小批量模式，每10块一次eth_getLogs）"""
 import sqlite3, time, requests, sys
-from datetime import datetime, timezone, timedelta
-
-BJT = timezone(timedelta(hours=8))
+from event_parser import get_block_timestamps
 
 RPC_URLS = [
     "https://bsc-mainnet.nodereal.io/v1/70208501917a413bab46cb281fc0997f",
@@ -64,32 +62,7 @@ EXCLUDED_BURN_SOURCES = {
     BONUS_POOL,
     STAKE_POOL,
 }
-REF_BLOCK = 105553753
-BASE_TS = 1782057600.0
-BLOCK_SEC = 0.45
 BATCH_SIZE = 20
-
-_time_ref_block = REF_BLOCK
-_time_ref_ts = BASE_TS
-_time_ref_updated = 0
-
-def refresh_time_ref(force=False):
-    global _time_ref_block, _time_ref_ts, _time_ref_updated
-    now = time.time()
-    if not force and now - _time_ref_updated < 3600:
-        return
-    try:
-        latest = RPC.call("eth_blockNumber", [], retries=1)
-        _time_ref_block = int(latest, 16)
-        _time_ref_ts = now
-        _time_ref_updated = now
-        print(f"[时间校准] ref_block=#{_time_ref_block}")
-    except Exception as e:
-        print(f"[时间校准] 失败: {e}")
-
-def estimate_block_time(block_number):
-    refresh_time_ref()
-    return datetime.fromtimestamp(_time_ref_ts + (block_number - _time_ref_block) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def process_batch(from_block, to_block):
@@ -100,12 +73,15 @@ def process_batch(from_block, to_block):
             "address": TOKEN_ARK, "topics": [TRANSFER_TOPIC]
         }])
         if ark_logs:
+            block_timestamps = get_block_timestamps(
+                int(log["blockNumber"], 16) for log in ark_logs if log.get("blockNumber")
+            )
             for log in ark_logs:
                 bn = int(log["blockNumber"], 16)
                 fr = "0x" + log["topics"][1][26:]
                 to = "0x" + log["topics"][2][26:]
                 val = int(log["data"], 16) / 10**DECIMALS
-                ts = estimate_block_time(bn)
+                ts = block_timestamps.get(bn)
                 if fr == BONUS_POOL and to == BURN_ADDR: etype = "permanent_bonus"
                 elif fr == STAKE_POOL and to == BURN_ADDR: etype = "permanent_stake"
                 elif to == BURN_ADDR and fr not in EXCLUDED_BURN_SOURCES: etype = "burn_stake"
@@ -122,13 +98,16 @@ def process_batch(from_block, to_block):
             "address": TOKEN_GARK, "topics": [TRANSFER_TOPIC]
         }])
         if gark_logs:
+            block_timestamps = get_block_timestamps(
+                int(log["blockNumber"], 16) for log in gark_logs if log.get("blockNumber")
+            )
             for log in gark_logs:
                 to = "0x" + log["topics"][2][26:]
                 if to in (BURN_ADDR, BURN_ADDR2):
                     bn = int(log["blockNumber"], 16)
                     fr = "0x" + log["topics"][1][26:]
                     val = int(log["data"], 16) / 10**DECIMALS
-                    ts = estimate_block_time(bn)
+                    ts = block_timestamps.get(bn)
                     results.append((bn, log.get("transactionHash",""), "static_burn", fr, to, val, ts))
     except:
         pass
