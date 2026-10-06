@@ -254,6 +254,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .turbo-top-table a { color: #60a5fa; text-decoration: none; }
 .turbo-top-table a:hover { color: #93c5fd; text-decoration: underline; }
 .turbo-top-empty { padding: 22px 12px; color: #64748b; text-align: center; font-size: 12px; }
+.turbine-change-card { margin-top: 14px; padding: 16px; background: #111d32; border: 1px solid #263b59; border-radius: 12px; }
+.turbine-change-table-wrap { overflow-x: auto; border: 1px solid rgba(51,65,85,.78); border-radius: 9px; -webkit-overflow-scrolling: touch; }
+.turbine-change-table { min-width: 800px; table-layout: fixed; }
+.turbine-change-table th { position: static; background: #14233b; }
+.turbine-change-table td { white-space: nowrap; color: #cbd5e1; }
+.turbine-change-kind { color: #fbbf24 !important; font-weight: 700; }
+.turbine-change-range { color: #2dd4bf; font-weight: 700; font-variant-numeric: tabular-nums; }
+.turbine-change-table a { color: #60a5fa; text-decoration: none; }
+.turbine-change-empty { padding: 22px 12px; color: #64748b; text-align: center; font-size: 12px; line-height: 1.6; }
 .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #cbd5e1; }
 .table-wrap { overflow-x: hidden; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
 .daily-history-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-color: #475569 #172235; scrollbar-width: thin; }
@@ -588,6 +597,18 @@ td.neg { color: #ef4444; }
           <table class="turbo-top-table">
             <thead><tr><th>排名</th><th>时间</th><th>共识系数</th><th>原始涡轮</th><th>实际涡轮</th><th>接收地址</th><th>交易</th></tr></thead>
             <tbody id="turboTopBody"><tr><td colspan="7"><div class="turbo-top-empty">正在加载最高系数涡轮...</div></td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="turbine-change-card" aria-labelledby="turbineChangeTitle">
+        <div class="turbo-top-head">
+          <div class="turbo-top-title" id="turbineChangeTitle">⚙️ 系数范围调整 · 最近 10 次</div>
+          <div class="turbo-top-meta">仅记录启用后新检测到的变更</div>
+        </div>
+        <div class="turbine-change-table-wrap">
+          <table class="turbine-change-table">
+            <thead><tr><th>时间</th><th>调整项</th><th>调整前范围</th><th>调整后范围</th><th>操作地址</th><th>交易</th></tr></thead>
+            <tbody id="turbineChangeBody"><tr><td colspan="6"><div class="turbine-change-empty">功能启用后检测到新的范围调整时会显示在这里；不回溯旧交易。</div></td></tr></tbody>
           </table>
         </div>
       </section>
@@ -1501,6 +1522,33 @@ function renderTopTurboCoefficients(payload) {
   }).join("");
 }
 
+function renderTurbineConfigChanges(payload) {
+  var body = document.getElementById("turbineChangeBody");
+  if (!body) return;
+  var rows = payload && Array.isArray(payload.data) ? payload.data : [];
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="6"><div class="turbine-change-empty">功能启用后检测到新的范围调整时会显示在这里；不回溯旧交易。</div></td></tr>';
+    return;
+  }
+  function rangeText(min, max) {
+    return (Number(min) * 100).toFixed(2) + "% – " + (Number(max) * 100).toFixed(2) + "%";
+  }
+  body.innerHTML = rows.slice(0, 10).map(function(change) {
+    var tx = change.tx_hash || "";
+    var minChanged = Math.abs(Number(change.previous_min) - Number(change.new_min)) > 1e-12;
+    var maxChanged = Math.abs(Number(change.previous_max) - Number(change.new_max)) > 1e-12;
+    var changedBound = minChanged && maxChanged ? "上下限" : minChanged ? "下限" : maxChanged ? "上限" : "范围未变化";
+    return "<tr>" +
+      "<td>" + esc(eventTime(change.timestamp, true)) + "</td>" +
+      '<td class="turbine-change-kind">' + changedBound + "</td>" +
+      '<td class="turbine-change-range">' + rangeText(change.previous_min, change.previous_max) + "</td>" +
+      '<td class="turbine-change-range">' + rangeText(change.new_min, change.new_max) + "</td>" +
+      "<td title=\"" + esc(change.from_addr || "") + "\">" + esc(shortAddress(change.from_addr)) + "</td>" +
+      "<td>" + (tx ? '<a href="https://bscscan.com/tx/' + encodeURIComponent(tx) + '" target="_blank" rel="noopener noreferrer">' + esc(shortAddress(tx)) + "</a>" : "交易哈希未能唯一识别") + "</td>" +
+      "</tr>";
+  }).join("");
+}
+
 function updateEvents(allEvents, totals, recentByType) {
   var box = document.getElementById("eventStream");
   renderEventCenter(allEvents, totals, recentByType);
@@ -1747,6 +1795,12 @@ function loadTopTurboCoefficients() {
   }).catch(function(err) { logLoadError("top turbo coefficients", err); });
 }
 
+function loadTurbineConfigChanges() {
+  return fetchAPI("/api/turbine-config-changes?limit=10").then(function(payload) {
+    renderTurbineConfigChanges(payload);
+  }).catch(function(err) { logLoadError("turbine config changes", err); });
+}
+
 function loadTrend() {
   return fetchAPI("/api/today-trend").then(function(trend) {
     try { updateTrend(trend ? trend.data : null); }
@@ -1782,6 +1836,7 @@ function loadAll() {
   loadDaily();
   loadRealtime();
   loadTopTurboCoefficients();
+  loadTurbineConfigChanges();
   loadTrend();
   loadDex();
   loadLpSwaps();

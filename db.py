@@ -150,6 +150,21 @@ def _init_db():
             updated_at TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS turbine_config_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            block INTEGER NOT NULL,
+            tx_hash TEXT UNIQUE,
+            timestamp TEXT NOT NULL,
+            from_addr TEXT,
+            previous_min REAL NOT NULL,
+            previous_max REAL NOT NULL,
+            new_min REAL NOT NULL,
+            new_max REAL NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_turbine_config_changes_block
+            ON turbine_config_changes(block DESC, id DESC);
+
         CREATE TABLE IF NOT EXISTS staking_daily_snapshots (
             date TEXT PRIMARY KEY,
             snapshot_at TEXT NOT NULL,
@@ -297,6 +312,28 @@ def get_monitor_state(state_key):
     ).fetchone()
     conn.close()
     return row["state_value"] if row else None
+
+def save_turbine_config_change(block, tx_hash, timestamp, from_addr, previous, current):
+    conn = get_conn()
+    conn.execute(
+        """INSERT OR IGNORE INTO turbine_config_changes
+           (block, tx_hash, timestamp, from_addr, previous_min, previous_max, new_min, new_max)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (int(block), tx_hash, timestamp, from_addr,
+         float(previous[0]), float(previous[1]), float(current[0]), float(current[1])),
+    )
+    conn.commit()
+    conn.close()
+
+def get_turbine_config_changes(limit=10):
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT block, tx_hash, timestamp, from_addr, previous_min, previous_max, new_min, new_max
+           FROM turbine_config_changes ORDER BY block DESC, id DESC LIMIT ?""",
+        (max(1, min(int(limit or 10), 50)),),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 def set_monitor_state(state_key, state_value):
     conn = get_conn()

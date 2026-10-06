@@ -25,13 +25,16 @@ from db import (
     get_turbo_pending_snapshot,
     get_latest_consensus_coefficient,
     get_top_turbo_coefficients,
+    get_turbine_config_changes,
+    save_turbine_config_change,
     get_release_period_summary,
     get_release_period_daily_summary,
     get_release_amount_distribution,
 )
 from event_parser import (
     BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply,
-    TARGET_DYNAMIC, _rpc_call,
+    TARGET_DYNAMIC, _rpc_call, RELEASE_TOPIC, TURBO_TOPIC, TURBO_TOPIC_V2,
+    TURBO_CONTRIBUTION_TOPIC,
 )
 from pusher import (
     get_telegram_chat_ids,
@@ -238,6 +241,107 @@ def get_official_turbine_config():
             "source": "official-dapp",
             "error": str(exc),
         }
+
+
+def _read_turbine_config_at_block(block_number):
+    raw = _rpc_call(
+        "eth_call",
+        [{"to": TARGET_DYNAMIC, "data": OFFICIAL_TURBINE_CONFIG_SELECTOR}, hex(int(block_number))],
+        retries=2,
+    )
+    if not raw or not isinstance(raw, str) or not raw.startswith("0x"):
+        raise ValueError("指定区块的涡轮配置读取为空")
+    body = raw[2:]
+    if len(body) < 64 * 6:
+        raise ValueError("指定区块的涡轮配置返回长度异常")
+    words = [int(body[index:index + 64], 16) for index in range(0, len(body), 64)]
+    minimum, maximum = words[4] / 10000, words[5] / 10000
+    if not (0 <= minimum <= maximum <= 1):
+        raise ValueError("指定区块的涡轮系数范围异常")
+    return minimum, maximum
+
+
+def track_turbine_config_changes(current_config, latest_block=None):
+    """Record newly observed range changes and associate them with their chain transaction where possible."""
+    try:
+        if latest_block is None:
+            latest_block = int(_rpc_call("eth_blockNumber", []), 16)
+        elif isinstance(latest_block, str):
+            latest_block = int(latest_block, 16) if latest_block.startswith("0x") else int(latest_block)
+        else:
+            latest_block = int(latest_block)
+        current = (float(current_config[0]), float(current_config[1])) if isinstance(current_config, (tuple, list)) else (float(current_config["min"]), float(current_config["max"]))
+        previous_min = get_monitor_state("turbine_config_tracking_min")
+        previous_max = get_monitor_state("turbine_config_tracking_max")
+        previous_block = get_monitor_state("turbine_config_tracking_block")
+
+        # Start a forward-only history at first observation; do not backfill older changes.
+        if previous_min is None or previous_max is None or previous_block is None:
+            set_monitor_state("turbine_config_tracking_min", current[0])
+            set_monitor_state("turbine_config_tracking_max", current[1])
+            set_monitor_state("turbine_config_tracking_block", latest_block)
+            return
+
+        old = (float(previous_min), float(previous_max))
+        scan_from = int(previous_block)
+        if latest_block <= scan_from:
+            return
+
+        def same_range(left, right):
+            return abs(left[0] - right[0]) < 1e-12 and abs(left[1] - right[1]) < 1e-12
+
+        block_cache = {}
+        known_topics = {RELEASE_TOPIC.lower(), TURBO_TOPIC.lower(), TURBO_TOPIC_V2.lower(), TURBO_CONTRIBUTION_TOPIC.lower()}
+        while scan_from < latest_block and not same_range(old, current):
+            low, high = scan_from + 1, latest_block
+            while low < high:
+                mid = (low + high) // 2
+                if same_range(_read_turbine_config_at_block(mid), old):
+                    low = mid + 1
+                else:
+                    high = mid
+            changed_block = low
+            new_range = _read_turbine_config_at_block(changed_block)
+            block_hex = hex(changed_block)
+            if changed_block not in block_cache:
+                block_cache[changed_block] = _rpc_call("eth_getBlockByNumber", [block_hex, True], retries=2)
+            block_data = block_cache[changed_block] or {}
+            txs = block_data.get("transactions", [])
+            target_txs = [tx for tx in txs if isinstance(tx, dict) and (tx.get("to") or "").lower() == TARGET_DYNAMIC]
+
+            # Prefer an unrecognized contract log in the changed block (typically the setter's event).
+            changed_tx_hashes = set()
+            logs = _rpc_call("eth_getLogs", [{"fromBlock": block_hex, "toBlock": block_hex, "address": TARGET_DYNAMIC}], retries=2) or []
+            for log in logs:
+                topics = log.get("topics") or []
+                tx_hash = log.get("transactionHash")
+                if tx_hash and topics and topics[0].lower() not in known_topics:
+                    changed_tx_hashes.add(tx_hash.lower())
+            matching_txs = [tx for tx in txs if isinstance(tx, dict) and (tx.get("hash") or "").lower() in changed_tx_hashes]
+            if len(matching_txs) != 1 and not changed_tx_hashes and len(target_txs) == 1:
+                matching_txs = target_txs
+            changed_tx = matching_txs[0] if len(matching_txs) == 1 else None
+
+            header = block_data
+            if not header.get("timestamp"):
+                header = _rpc_call("eth_getBlockByNumber", [block_hex, False], retries=2) or {}
+            block_timestamp = int(header.get("timestamp", "0x0"), 16)
+            timestamp = datetime.fromtimestamp(block_timestamp, BJT).strftime("%Y-%m-%d %H:%M:%S")
+            tx_hash = (changed_tx or {}).get("hash")
+            from_addr = (changed_tx or {}).get("from")
+            save_turbine_config_change(changed_block, tx_hash, timestamp, from_addr, old, new_range)
+            if not tx_hash:
+                print(f"[系数范围监控] 检测到区块 {changed_block} 范围变化，但无法唯一识别交易")
+            else:
+                print(f"[系数范围监控] 记录范围变化 tx={tx_hash} {old} -> {new_range}")
+            old = new_range
+            scan_from = changed_block
+
+        set_monitor_state("turbine_config_tracking_min", current[0])
+        set_monitor_state("turbine_config_tracking_max", current[1])
+        set_monitor_state("turbine_config_tracking_block", latest_block)
+    except Exception as exc:
+        print(f"[系数范围监控] 检查失败: {exc}")
 
 
 def sample_official_turbine_coefficient(config=None):
@@ -1191,6 +1295,19 @@ def staking_feishu_push_worker():
             time.sleep(30)
 
 
+def turbine_config_change_monitor_worker():
+    """Poll the official turbine range and retain newly observed changes only."""
+    while True:
+        try:
+            latest_block = int(_rpc_call("eth_blockNumber", []), 16)
+            config = _read_turbine_config_at_block(latest_block)
+            track_turbine_config_changes(config, latest_block)
+            time.sleep(30)
+        except Exception as exc:
+            print(f"[系数范围监控] 异常: {exc}")
+            time.sleep(30)
+
+
 @app.get("/api/staking-snapshots")
 def get_staking_snapshots_api(limit: int = 30):
     return {"data": get_staking_daily_snapshots(limit)}
@@ -1209,6 +1326,7 @@ def get_pool_address_daily_api(limit: int = 30):
 threading.Thread(target=staking_snapshot_worker, daemon=True).start()
 threading.Thread(target=staking_feishu_push_worker, daemon=True).start()
 threading.Thread(target=staking_rate_monitor_worker, daemon=True).start()
+threading.Thread(target=turbine_config_change_monitor_worker, daemon=True).start()
 
 @app.get("/api/dex/ark")
 def get_ark_dex():
@@ -1298,6 +1416,11 @@ def get_turbo_coefficient_top():
         "end_at": end_at,
         "data": get_top_turbo_coefficients(start_at, end_at, limit=5),
     }
+
+@app.get("/api/turbine-config-changes")
+def get_turbine_config_changes_api(limit: int = 10):
+    """Return the newest forward-only range changes captured by the background monitor."""
+    return {"data": get_turbine_config_changes(limit)}
 
 @app.get("/api/lp-swaps")
 def get_lp_swaps(limit:int=100, period: str = "h24"):
