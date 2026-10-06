@@ -92,6 +92,10 @@ ARK_SUPPLY_CACHE = {"ts": 0, "value": None}
 LIDO_STETH_CACHE = {"ts": 0, "value": None}
 DEX_SNAPSHOT_LOCK = threading.Lock()
 OFFICIAL_TURBINE_CONFIG_SELECTOR = "0xc3f909d4"  # RewardVesting.getConfig()
+TURBINE_CONFIG_SETTER_BOUND_BY_SELECTOR = {
+    "0xdb90f944": "min",
+    "0x3e6a7534": "max",
+}
 OFFICIAL_TURBINE_CONFIG_CACHE_TTL = 10
 OFFICIAL_TURBINE_CONFIG_CACHE = {"ts": 0, "data": None}
 app = FastAPI(title="ARK")
@@ -261,6 +265,53 @@ def _read_turbine_config_at_block(block_number):
     return minimum, maximum
 
 
+def _decode_turbine_config_setter(transaction):
+    """Decode a known one-argument min/max setter call to the turbine contract."""
+    call_data = (transaction.get("input") or "").lower()
+    selector = call_data[:10]
+    bound = TURBINE_CONFIG_SETTER_BOUND_BY_SELECTOR.get(selector)
+    argument = call_data[10:]
+    if not bound or len(argument) != 64:
+        return None
+    try:
+        value = int(argument, 16) / 10000
+    except ValueError:
+        return None
+    if not 0 <= value <= 1:
+        return None
+    return bound, value
+
+
+def _match_turbine_config_setter_transitions(transactions, previous, expected):
+    """Reconstruct successful setter calls in block order and verify the final range."""
+    def same_range(left, right):
+        return abs(left[0] - right[0]) < 1e-12 and abs(left[1] - right[1]) < 1e-12
+
+    candidates = []
+    for transaction in transactions:
+        if not isinstance(transaction, dict) or (transaction.get("to") or "").lower() != TARGET_DYNAMIC:
+            continue
+        decoded = _decode_turbine_config_setter(transaction)
+        if decoded:
+            candidates.append((transaction, decoded))
+    candidates.sort(key=lambda item: int(item[0].get("transactionIndex") or "0x0", 16))
+
+    current = (float(previous[0]), float(previous[1]))
+    transitions = []
+    for transaction, (bound, value) in candidates:
+        receipt = _rpc_call("eth_getTransactionReceipt", [transaction.get("hash")], retries=2)
+        if not receipt or str(receipt.get("status", "")).lower() != "0x1":
+            continue
+        updated = (value, current[1]) if bound == "min" else (current[0], value)
+        if not (0 <= updated[0] <= updated[1] <= 1):
+            return None
+        if not same_range(current, updated):
+            transitions.append((transaction, current, updated))
+            current = updated
+
+    return transitions if transitions and same_range(current, expected) else None
+
+
 def track_turbine_config_changes(current_config, latest_block=None):
     """Record newly observed range changes and associate them with their chain transaction where possible."""
     try:
@@ -306,7 +357,25 @@ def track_turbine_config_changes(current_config, latest_block=None):
             if changed_block not in block_cache:
                 block_cache[changed_block] = _rpc_call("eth_getBlockByNumber", [block_hex, True], retries=2)
             block_data = block_cache[changed_block] or {}
+            header = block_data
+            if not header.get("timestamp"):
+                header = _rpc_call("eth_getBlockByNumber", [block_hex, False], retries=2) or {}
+            block_timestamp = int(header.get("timestamp", "0x0"), 16)
+            timestamp = datetime.fromtimestamp(block_timestamp, BJT).strftime("%Y-%m-%d %H:%M:%S")
             txs = block_data.get("transactions", [])
+            setter_transitions = _match_turbine_config_setter_transitions(txs, old, new_range)
+            if setter_transitions:
+                for changed_tx, range_before, range_after in setter_transitions:
+                    tx_hash = changed_tx.get("hash")
+                    from_addr = changed_tx.get("from")
+                    save_turbine_config_change(
+                        changed_block, tx_hash, timestamp, from_addr, range_before, range_after
+                    )
+                    print(f"[系数范围监控] 按设置方法识别 tx={tx_hash} {range_before} -> {range_after}")
+                old = new_range
+                scan_from = changed_block
+                continue
+
             target_txs = [tx for tx in txs if isinstance(tx, dict) and (tx.get("to") or "").lower() == TARGET_DYNAMIC]
 
             # Prefer an unrecognized contract log in the changed block (typically the setter's event).
@@ -322,11 +391,6 @@ def track_turbine_config_changes(current_config, latest_block=None):
                 matching_txs = target_txs
             changed_tx = matching_txs[0] if len(matching_txs) == 1 else None
 
-            header = block_data
-            if not header.get("timestamp"):
-                header = _rpc_call("eth_getBlockByNumber", [block_hex, False], retries=2) or {}
-            block_timestamp = int(header.get("timestamp", "0x0"), 16)
-            timestamp = datetime.fromtimestamp(block_timestamp, BJT).strftime("%Y-%m-%d %H:%M:%S")
             tx_hash = (changed_tx or {}).get("hash")
             from_addr = (changed_tx or {}).get("from")
             save_turbine_config_change(changed_block, tx_hash, timestamp, from_addr, old, new_range)
