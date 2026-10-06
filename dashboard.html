@@ -599,7 +599,7 @@ td.neg { color: #ef4444; }
       <div class="events-summary-grid">
         <section class="turbo-top-card" aria-labelledby="turboTopTitle">
           <div class="turbo-top-head">
-            <div class="turbo-top-title" id="turboTopTitle">🚀 最近 24 小时最高系数涡轮 · TOP 5</div>
+            <div class="turbo-top-title" id="turboTopTitle">🚀 最近 24 小时最高系数涡轮 · TOP 10</div>
             <div class="turbo-top-meta" id="turboTopMeta">滚动 24 小时 · 每 30 秒更新</div>
           </div>
           <div class="turbo-top-table-wrap">
@@ -1517,7 +1517,7 @@ function renderTopTurboCoefficients(payload) {
     body.innerHTML = '<tr><td colspan="7"><div class="turbo-top-empty">最近 24 小时暂无带共识系数的涡轮数据</div></td></tr>';
     return;
   }
-  body.innerHTML = rows.slice(0, 5).map(function(event, index) {
+  body.innerHTML = rows.slice(0, 10).map(function(event, index) {
     var tx = event.tx || "";
     var address = event.to_addr || "";
     return "<tr>" +
