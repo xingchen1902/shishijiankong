@@ -23,6 +23,7 @@ from db import (
     set_monitor_state,
     refresh_turbo_pending,
     get_turbo_pending_snapshot,
+    get_turbo_pending_dashboard_snapshot,
     get_latest_consensus_coefficient,
     get_top_turbo_coefficients,
     get_turbine_config_changes,
@@ -1125,7 +1126,7 @@ def get_release_period_history(page: int = 1, per_page: int = 10):
 @app.get("/api/turbo-pending")
 def get_turbo_pending():
     """返回待领取总和及官方 DApp 的动态系数区间。"""
-    _, total = get_turbo_pending_snapshot()
+    total = get_turbo_pending_dashboard_snapshot()
     official = get_official_turbine_config()
     current = sample_official_turbine_coefficient(official)
     official_payload = dict(official)

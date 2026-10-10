@@ -20,6 +20,10 @@ RELEASE_AMOUNT_BUCKETS = (
     ("40_80", "40–80 ARK"),
     ("80_plus", "80 ARK以上"),
 )
+TURBO_PENDING_GLOBAL_BASELINE = 79861.348503
+TURBO_PENDING_GLOBAL_BASELINE_KEY = "turbo_pending_global_baseline_v1"
+TURBO_PENDING_GLOBAL_BASELINE_AT_KEY = "turbo_pending_global_baseline_at_v1"
+TURBO_PENDING_GLOBAL_TOTAL_KEY = "turbo_pending_global_total_v1"
 
 def get_conn():
     os.makedirs(DB_DIR, exist_ok=True)
@@ -356,6 +360,7 @@ def get_ai_daily_report(date_str):
 def refresh_turbo_pending():
     """按地址重算已满足12小时的涡轮与奖金池实际提取余额。"""
     now = datetime.now(BJT)
+    baseline_total, baseline_at = _ensure_turbo_pending_global_baseline()
     # 新版统计使用独立起点；起点前的旧汇总全部废弃，不参与本账本。
     start_key = "turbo_pending_activation_at_v2"
     start_at = get_monitor_state(start_key)
@@ -521,6 +526,38 @@ def refresh_turbo_pending():
     total = conn.execute(
         "SELECT COALESCE(SUM(pending_total), 0) FROM turbo_pending WHERE pending_total > 0.00000001"
     ).fetchone()[0]
+    global_turbo_delta = conn.execute(
+        """
+        SELECT COALESCE(SUM(COALESCE(actual_value, value)), 0)
+        FROM events
+        WHERE type='turbo_total' AND timestamp > ? AND timestamp <= ?
+        """,
+        (baseline_at, eligible_before),
+    ).fetchone()[0]
+    bonus_pool = "0x8501168656fcac4628f6910ccabea8b64ebe5bd4"
+    global_claim_delta = conn.execute(
+        """
+        SELECT COALESCE(SUM(value), 0)
+        FROM events
+        WHERE type='bonus_withdraw' AND lower(from_addr)=? AND timestamp > ?
+        """,
+        (bonus_pool, baseline_at),
+    ).fetchone()[0]
+    global_total = max(
+        float(baseline_total) + float(global_turbo_delta or 0) - float(global_claim_delta or 0),
+        0.0,
+    )
+    conn.execute(
+        """
+        INSERT INTO monitor_state (state_key, state_value, updated_at)
+        VALUES (?, ?, datetime('now'))
+        ON CONFLICT(state_key) DO UPDATE SET
+            state_value=excluded.state_value,
+            updated_at=datetime('now')
+        """,
+        (TURBO_PENDING_GLOBAL_TOTAL_KEY, f"{global_total:.8f}"),
+    )
+    conn.commit()
     conn.close()
     if anomaly_count:
         print(f"[涡轮待领取][异常] {anomaly_count} 个地址提取超过已到期涡轮，超额 {anomaly_total:.8f} ARK；待领取已按0封顶")
@@ -535,6 +572,34 @@ def get_turbo_pending_snapshot():
     conn.close()
     # 看板和推送只需要总和，不把上万条地址明细序列化并传给前端。
     return [], float(total or 0)
+
+
+def _ensure_turbo_pending_global_baseline():
+    """Initialize the dashboard-wide pending baseline once, without importing old rows."""
+    now = datetime.now(BJT).strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_conn()
+    conn.executemany(
+        "INSERT OR IGNORE INTO monitor_state (state_key, state_value) VALUES (?, ?)",
+        [
+            (TURBO_PENDING_GLOBAL_BASELINE_KEY, f"{TURBO_PENDING_GLOBAL_BASELINE:.8f}"),
+            (TURBO_PENDING_GLOBAL_BASELINE_AT_KEY, now),
+            (TURBO_PENDING_GLOBAL_TOTAL_KEY, f"{TURBO_PENDING_GLOBAL_BASELINE:.8f}"),
+        ],
+    )
+    conn.commit()
+    rows = dict(conn.execute(
+        "SELECT state_key, state_value FROM monitor_state WHERE state_key IN (?, ?)",
+        (TURBO_PENDING_GLOBAL_BASELINE_KEY, TURBO_PENDING_GLOBAL_BASELINE_AT_KEY),
+    ).fetchall())
+    conn.close()
+    return float(rows[TURBO_PENDING_GLOBAL_BASELINE_KEY]), rows[TURBO_PENDING_GLOBAL_BASELINE_AT_KEY]
+
+
+def get_turbo_pending_dashboard_snapshot():
+    """Return the dashboard baseline plus matured post-baseline net changes."""
+    _ensure_turbo_pending_global_baseline()
+    total = get_monitor_state(TURBO_PENDING_GLOBAL_TOTAL_KEY)
+    return float(total) if total is not None else TURBO_PENDING_GLOBAL_BASELINE
 
 def get_latest_consensus_coefficient():
     """读取最近一笔新版涡轮事件中的共识系数。"""
