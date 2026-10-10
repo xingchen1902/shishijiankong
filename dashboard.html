@@ -1857,13 +1857,11 @@ function loadAll() {
   // 独立渲染：趋势查询较慢时，不再阻塞其余看板卡片出现。
   loadToday();
   loadReleaseSummary();
-  loadTurboPending();
   loadStakingOverview();
   loadPoolAddressOverview();
   loadDaily();
   loadRealtime();
   loadTopTurboCoefficients();
-  loadTurbineConfigChanges();
   loadTrend();
   loadDex();
   loadLpSwaps();
@@ -1872,8 +1870,12 @@ function loadAll() {
 
 loadAll();
 setInterval(loadAll, 30000);
+// 当前范围小字与范围调整历史表统一每 10 秒刷新。
+loadTurboPending();
+loadTurbineConfigChanges();
 // 官方 DApp 每约 10 秒重新读取配置区间；动态展示值由上面的 500ms ticker 负责。
 setInterval(loadTurboPending, 10000);
+setInterval(loadTurbineConfigChanges, 10000);
 </script>
 </body>
 </html>
