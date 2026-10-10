@@ -140,11 +140,59 @@ class DailyAggregator:
                         (start_str, end_str, *rule["types"]),
                     ).fetchall()
                 summary = self._burst_summary(rule, rows, conn, start_str, end_str)
+                self._repair_burst_state_if_needed(
+                    key, rule, states.get(key, {}), conn, end_str
+                )
                 self._send_single_alerts(key, rule, rows, states)
                 self._handle_burst_state(key, rule, summary, rows, states, start_str, end_str)
             self._save_burst_state(states)
         finally:
             conn.close()
+
+    @classmethod
+    def _repair_burst_state_if_needed(cls, key, rule, state, conn, end_str):
+        """Rebuild legacy active-alert totals from unique event rows before switching dedupe."""
+        if not state.get("active") or int(state.get("dedupe_version") or 0) >= 2:
+            return
+        started_at = state.get("started_at")
+        if not started_at:
+            return
+
+        if key == "redeem":
+            rows = conn.execute(
+                "SELECT id, block, tx, type, from_addr, to_addr, value, timestamp FROM events "
+                "WHERE timestamp >= ? AND timestamp <= ? AND lower(from_addr)=? "
+                "AND lower(COALESCE(to_addr, '')) NOT IN (?, ?) ORDER BY block, id",
+                (started_at, end_str, STAKE_POOL, BURN_ADDR, BURN_ADDR2),
+            ).fetchall()
+        else:
+            placeholders = ",".join("?" for _ in rule["types"])
+            rows = conn.execute(
+                f"SELECT id, block, tx, type, from_addr, to_addr, value, timestamp FROM events "
+                f"WHERE timestamp >= ? AND timestamp <= ? AND type IN ({placeholders}) "
+                "ORDER BY block, id",
+                (started_at, end_str, *rule["types"]),
+            ).fetchall()
+
+        summary = cls._burst_summary(rule, rows, conn, started_at, end_str)
+        state.update({
+            "cumulative_amount": summary["amount"],
+            "cumulative_count": summary["count"],
+            "cumulative_static": summary["static_amount"],
+            "cumulative_dynamic": summary["dynamic_amount"],
+            "cumulative_largest": summary["largest"],
+            "cumulative_largest_tx": summary["largest_tx"],
+            "cumulative_largest_address": summary["largest_address"],
+            "last_seen_id": max((int(row["id"]) for row in rows), default=0),
+            "dedupe_version": 2,
+            # Send a corrected cumulative total on the next normal alert cycle.
+            "last_push_at": 0,
+        })
+        state.pop("seen_ids", None)
+        print(
+            f"[集中{rule['title']}提醒] 已按唯一事件重算累计："
+            f"{summary['amount']:.2f} ARK / {summary['count']} 笔"
+        )
 
     @staticmethod
     def _burst_summary(rule, rows, conn, start_str, end_str):
@@ -229,6 +277,8 @@ class DailyAggregator:
         state = states.setdefault(key, {})
         level = self._level(rule, summary)
         active = bool(state.get("active"))
+        if active:
+            self._accumulate_state(state, rule, summary, rows)
         if level == 0:
             if active:
                 display = self._cumulative_summary(state, summary)
@@ -276,9 +326,11 @@ class DailyAggregator:
                 "cumulative_largest": 0,
                 "cumulative_largest_tx": "",
                 "cumulative_largest_address": "",
+                "last_seen_id": 0,
+                "dedupe_version": 2,
             })
             active = True
-        self._accumulate_state(state, rule, summary, rows)
+            self._accumulate_state(state, rule, summary, rows)
         previous_level = int(state.get("level") or 0)
         title = "集中%s提醒" % rule["title"]
         if level > previous_level:
@@ -295,13 +347,13 @@ class DailyAggregator:
 
     @staticmethod
     def _accumulate_state(state, rule, summary, rows):
-        seen = {int(item) for item in state.get("seen_ids", [])}
-        new_rows = [row for row in rows if int(row["id"]) not in seen]
-        new_permanent = [row for row in summary["permanent_rows"] if int(row["id"]) not in seen]
-        state["seen_ids"] = list(seen | {int(row["id"]) for row in rows} | {int(row["id"]) for row in new_permanent})[-5000:]
+        last_seen_id = int(state.get("last_seen_id") or 0)
+        new_rows = [row for row in rows if int(row["id"]) > last_seen_id]
+        if rows:
+            state["last_seen_id"] = max(
+                last_seen_id, max(int(row["id"]) for row in rows)
+            )
         delta = sum(float(row["value"] or 0) for row in new_rows)
-        if rule["title"] == "赎回":
-            delta -= sum(float(row["value"] or 0) for row in new_permanent)
         state["cumulative_amount"] = max(float(state.get("cumulative_amount") or 0) + delta, 0)
         state["cumulative_count"] = int(state.get("cumulative_count") or 0) + len(new_rows)
         state["cumulative_static"] = float(state.get("cumulative_static") or 0) + sum(
@@ -387,7 +439,8 @@ class DailyAggregator:
         lines = [
             f"{icon} <b>{title} · {level}级</b>",
             "",
-            f"统计时间：{start_str} - {end_str}",
+            f"检测窗口：{start_str} - {end_str}",
+            f"累计起点：{started_at}",
             f"持续时间：{DailyAggregator._duration_text(started_at, end_str)}",
         ]
         if summary["static_amount"] or summary["dynamic_amount"]:
