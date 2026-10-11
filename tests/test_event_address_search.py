@@ -30,6 +30,8 @@ class EventAddressSearchTests(unittest.TestCase):
                 timestamp TEXT
             )
         """)
+        conn.execute("CREATE INDEX idx_events_from_addr_recent ON events(from_addr COLLATE NOCASE, timestamp DESC, block DESC, id DESC)")
+        conn.execute("CREATE INDEX idx_events_to_addr_recent ON events(to_addr COLLATE NOCASE, timestamp DESC, block DESC, id DESC)")
         conn.executemany(
             """INSERT INTO events
                (id, block, tx, type, from_addr, to_addr, value, timestamp)

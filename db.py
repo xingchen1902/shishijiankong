@@ -271,6 +271,8 @@ def _init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_turbine_config_changes_block
             ON turbine_config_changes(block DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_turbine_config_changes_timestamp
+            ON turbine_config_changes(timestamp, block, id);
 
         CREATE TABLE IF NOT EXISTS staking_daily_snapshots (
             date TEXT PRIMARY KEY,
@@ -441,6 +443,50 @@ def get_turbine_config_changes(limit=10):
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+def get_turbine_config_range_extremes_24h(current_range=None, now=None):
+    """Return the lowest configured lower bound and highest configured upper bound seen in 24h."""
+    end = now or datetime.now(BJT)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=BJT)
+    else:
+        end = end.astimezone(BJT)
+    end_text = end.strftime("%Y-%m-%d %H:%M:%S")
+    start_text = (end - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = get_conn()
+    previous = conn.execute(
+        """SELECT new_min, new_max FROM turbine_config_changes
+           WHERE timestamp < ? ORDER BY timestamp DESC, block DESC, id DESC LIMIT 1""",
+        (start_text,),
+    ).fetchone()
+    changes = conn.execute(
+        """SELECT previous_min, previous_max, new_min, new_max
+           FROM turbine_config_changes
+           WHERE timestamp >= ? AND timestamp <= ?
+           ORDER BY timestamp ASC, block ASC, id ASC""",
+        (start_text, end_text),
+    ).fetchall()
+    conn.close()
+
+    observed_ranges = []
+    if previous:
+        observed_ranges.append((float(previous["new_min"]), float(previous["new_max"])))
+    elif changes:
+        # If history starts inside the 24h window, include the on-chain state
+        # immediately before the first recorded transition.
+        observed_ranges.append((float(changes[0]["previous_min"]), float(changes[0]["previous_max"])))
+
+    observed_ranges.extend(
+        (float(row["new_min"]), float(row["new_max"])) for row in changes
+    )
+    if current_range and len(current_range) == 2:
+        observed_ranges.append((float(current_range[0]), float(current_range[1])))
+
+    valid_ranges = [(lower, upper) for lower, upper in observed_ranges if 0 <= lower <= upper <= 1]
+    if not valid_ranges:
+        return None, None
+    return min(lower for lower, _ in valid_ranges), max(upper for _, upper in valid_ranges)
 
 def set_monitor_state(state_key, state_value):
     conn = get_conn()
@@ -1021,20 +1067,24 @@ def search_events_by_address(address, page=1, per_page=50, event_type="all"):
     # These are supporting/internal rows, not separate Event Center events.
     # Keep them in SQLite for accounting and diagnostics, but avoid showing a
     # turbo transfer twice when its canonical turbo_total row is also present.
-    clauses = [
-        "(from_addr COLLATE NOCASE = ? OR to_addr COLLATE NOCASE = ?)",
-        "type NOT IN ('dynamic', 'static_burn', 'turbo_contribution')",
-    ]
-    params = [address, address]
+    type_clause = "type NOT IN ('dynamic', 'static_burn', 'turbo_contribution')"
+    type_params = []
     if event_type != "all":
-        clauses.append("type = ?")
-        params.append(event_type)
-    where = " AND ".join(clauses)
+        type_clause += " AND type = ?"
+        type_params.append(event_type)
+    # Force the address-leading indexes. Without this, SQLite may choose the
+    # event-type index and scan millions of rows for a common event type.
+    matching_rows = f"""SELECT * FROM events INDEXED BY idx_events_from_addr_recent
+        WHERE from_addr COLLATE NOCASE = ? AND {type_clause}
+        UNION
+        SELECT * FROM events INDEXED BY idx_events_to_addr_recent
+        WHERE to_addr COLLATE NOCASE = ? AND {type_clause}"""
+    params = [address, *type_params, address, *type_params]
     conn = get_conn()
     try:
-        total_row = conn.execute(f"SELECT COUNT(*) FROM events WHERE {where}", params).fetchone()
+        total_row = conn.execute(f"SELECT COUNT(*) FROM ({matching_rows})", params).fetchone()
         rows = conn.execute(
-            f"""SELECT * FROM events WHERE {where}
+            f"""SELECT * FROM ({matching_rows})
                 ORDER BY timestamp DESC, block DESC, id DESC LIMIT ? OFFSET ?""",
             (*params, per_page, offset),
         ).fetchall()
