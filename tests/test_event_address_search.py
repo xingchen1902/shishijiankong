@@ -60,6 +60,12 @@ class EventAddressSearchTests(unittest.TestCase):
         self.assertEqual(first["data"][0]["tx"], "tx-b")
         self.assertEqual(second["data"][0]["tx"], "tx-a")
 
+    def test_filters_by_event_type(self):
+        result = db.search_events_by_address("0xabc", page=1, per_page=50, event_type="turbo_total")
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual([row["type"] for row in result["data"]], ["turbo_total"])
+
 
 if __name__ == "__main__":
     unittest.main()

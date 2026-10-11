@@ -1013,7 +1013,7 @@ def insert_events_batch(events):
     conn.commit()
     conn.close()
 
-def search_events_by_address(address, page=1, per_page=50):
+def search_events_by_address(address, page=1, per_page=50, event_type="all"):
     """Return dashboard-visible events already stored for either event address."""
     page = max(1, int(page or 1))
     per_page = min(100, max(1, int(per_page or 50)))
@@ -1021,8 +1021,15 @@ def search_events_by_address(address, page=1, per_page=50):
     # These are supporting/internal rows, not separate Event Center events.
     # Keep them in SQLite for accounting and diagnostics, but avoid showing a
     # turbo transfer twice when its canonical turbo_total row is also present.
-    where = "(from_addr COLLATE NOCASE = ? OR to_addr COLLATE NOCASE = ?) AND type NOT IN ('dynamic', 'static_burn', 'turbo_contribution')"
-    params = (address, address)
+    clauses = [
+        "(from_addr COLLATE NOCASE = ? OR to_addr COLLATE NOCASE = ?)",
+        "type NOT IN ('dynamic', 'static_burn', 'turbo_contribution')",
+    ]
+    params = [address, address]
+    if event_type != "all":
+        clauses.append("type = ?")
+        params.append(event_type)
+    where = " AND ".join(clauses)
     conn = get_conn()
     try:
         total_row = conn.execute(f"SELECT COUNT(*) FROM events WHERE {where}", params).fetchone()

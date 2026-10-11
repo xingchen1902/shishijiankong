@@ -218,12 +218,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .events-center-title { color: #e2e8f0; font-size: 22px; font-weight: 700; }
 .events-center-meta { color: #64748b; font-size: 12px; }
 .events-center-meta .live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 0 10px rgba(45,212,191,.7); }
-.event-address-search { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 280px; max-width: 560px; flex: 1; }
+.event-address-search { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 280px; max-width: 760px; flex: 1; }
 .event-address-search input { width: 100%; min-width: 0; height: 38px; flex: 1; padding: 0 12px; border: 1px solid #334b6b; border-radius: 8px; outline: none; background: #0f172a; color: #e2e8f0; font: inherit; font-size: 12px; transition: border-color .15s, box-shadow .15s; }
 .event-address-search input::placeholder { color: #64748b; }
 .event-address-search input:focus { border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.12); }
 .event-address-search button { height: 38px; padding: 0 13px; border: 1px solid #2563eb; border-radius: 8px; background: linear-gradient(135deg,#0e7490,#2563eb); color: #eff6ff; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .event-address-search button.secondary { border-color: #334155; background: #172338; color: #94a3b8; }
+.event-address-type-filter { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 9px; border: 1px solid #334b6b; border-radius: 8px; background: #0f172a; color: #64748b; font-size: 11px; white-space: nowrap; }
+.event-address-type-filter[hidden] { display: none; }
+.event-address-type-filter select { max-width: 142px; border: 0; outline: 0; background: transparent; color: #cbd5e1; font: inherit; font-size: 12px; cursor: pointer; }
+.event-address-type-filter:focus-within { border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.12); }
+.event-address-type-filter option { color: #e2e8f0; background: #0f172a; }
 .event-address-search button:focus-visible, .event-search-pagination button:focus-visible { outline: 2px solid #67e8f9; outline-offset: 2px; }
 .event-address-search-status { flex-basis: 100%; min-height: 14px; color: #64748b; font-size: 11px; }
 .event-filter-grid { display: flex; gap: 10px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
@@ -607,6 +612,10 @@ td.neg { color: #ef4444; }
           <div class="events-center-title">⚡ 事件中心</div>
           <form id="eventAddressSearchForm" class="event-address-search" role="search">
             <input id="eventAddressSearchInput" type="text" maxlength="42" spellcheck="false" autocomplete="off" aria-label="查询地址事件" placeholder="输入 BSC 地址，查询该地址参与的全部已记录事件">
+            <label class="event-address-type-filter" id="eventAddressTypeFilterWrap" hidden>
+              <span>类型</span>
+              <select id="eventAddressTypeFilter" aria-label="按事件类型筛选"><option value="all">全部事件</option></select>
+            </label>
             <button type="submit">查询</button>
             <button type="button" class="secondary" id="eventAddressSearchClear" hidden>返回实时</button>
             <span class="event-address-search-status" id="eventAddressSearchStatus" aria-live="polite">按数据库记录的从地址或到地址匹配，不发起链上查询</span>
@@ -1464,11 +1473,20 @@ var eventCenterTotals = {};
 var eventCenterRecentByType = {};
 var eventCenterFilter = "all";
 var eventCenterSelectedIndex = 0;
-var eventAddressSearch = {active: false, address: "", page: 1, perPage: 50, total: 0, requestId: 0};
+var eventAddressSearch = {active: false, address: "", eventType: "all", page: 1, perPage: 50, total: 0, requestId: 0};
 var EVENT_CENTER_TYPES = [
   "bonus_withdraw", "stake_in", "stake_out", "bonus_in", "burn_stake", "transfer_720",
   "turbo_total", "release_dynamic", "release_static", "permanent_bonus", "permanent_stake", "burn_other"
 ];
+var addressTypeFilter = document.getElementById("eventAddressTypeFilter");
+if (addressTypeFilter) {
+  addressTypeFilter.innerHTML = '<option value="all">全部事件</option>' + EVENT_CENTER_TYPES.map(function(type) {
+    return '<option value="' + esc(type) + '">' + esc(TYPE_LABELS[type] || type) + '</option>';
+  }).join("");
+  addressTypeFilter.addEventListener("change", function() {
+    if (eventAddressSearch.active) loadAddressEvents(eventAddressSearch.address, 1, addressTypeFilter.value);
+  });
+}
 
 function eventTime(value, withDate) {
   if (!value) return "--";
@@ -1570,7 +1588,8 @@ function renderEventSearchPagination() {
   if (next) next.disabled = eventAddressSearch.page >= pageCount;
 }
 
-function loadAddressEvents(address, page) {
+function loadAddressEvents(address, page, eventType) {
+  if (eventType !== undefined) eventAddressSearch.eventType = eventType;
   eventAddressSearch.active = true;
   eventAddressSearch.address = address;
   eventAddressSearch.page = page;
@@ -1578,14 +1597,17 @@ function loadAddressEvents(address, page) {
   var requestId = ++eventAddressSearch.requestId;
   var status = document.getElementById("eventAddressSearchStatus");
   var clearButton = document.getElementById("eventAddressSearchClear");
+  var typeFilterWrap = document.getElementById("eventAddressTypeFilterWrap");
   var meta = document.getElementById("eventsCenterMeta");
   var body = document.getElementById("eventCenterBody");
   if (meta) meta.textContent = "地址历史 · 数据库匹配";
   if (status) status.textContent = "正在查询数据库中的已记录事件…";
   if (clearButton) clearButton.hidden = false;
+  if (typeFilterWrap) typeFilterWrap.hidden = false;
+  if (addressTypeFilter) addressTypeFilter.value = eventAddressSearch.eventType;
   if (body) body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;">正在查询数据库…</td></tr>';
   renderEventSearchPagination();
-  fetchAPI("/api/events/address?address=" + encodeURIComponent(address) + "&page=" + page + "&per_page=" + eventAddressSearch.perPage).then(function(payload) {
+  fetchAPI("/api/events/address?address=" + encodeURIComponent(address) + "&page=" + page + "&per_page=" + eventAddressSearch.perPage + "&event_type=" + encodeURIComponent(eventAddressSearch.eventType)).then(function(payload) {
     if (requestId !== eventAddressSearch.requestId) return;
     if (!payload || !Array.isArray(payload.data)) {
       if (status) status.textContent = "查询失败，请稍后重试。";
@@ -1602,16 +1624,20 @@ function loadAddressEvents(address, page) {
 function clearAddressEventSearch() {
   eventAddressSearch.active = false;
   eventAddressSearch.address = "";
+  eventAddressSearch.eventType = "all";
   eventAddressSearch.page = 1;
   eventAddressSearch.total = 0;
   eventAddressSearch.requestId++;
   var input = document.getElementById("eventAddressSearchInput");
   var status = document.getElementById("eventAddressSearchStatus");
   var clearButton = document.getElementById("eventAddressSearchClear");
+  var typeFilterWrap = document.getElementById("eventAddressTypeFilterWrap");
   var meta = document.getElementById("eventsCenterMeta");
   if (input) input.value = "";
   if (status) status.textContent = "按数据库记录的从地址或到地址匹配，不发起链上查询";
   if (clearButton) clearButton.hidden = true;
+  if (typeFilterWrap) typeFilterWrap.hidden = true;
+  if (addressTypeFilter) addressTypeFilter.value = "all";
   if (meta) meta.innerHTML = '<span class="live-dot"></span>实时数据 · 最近事件';
   renderEventCenter(eventCenterLiveEvents, eventCenterTotals, eventCenterRecentByType);
 }
@@ -1626,7 +1652,7 @@ document.getElementById("eventAddressSearchForm").addEventListener("submit", fun
     if (input) input.focus();
     return;
   }
-  loadAddressEvents(address, 1);
+  loadAddressEvents(address, 1, addressTypeFilter ? addressTypeFilter.value : "all");
 });
 document.getElementById("eventAddressSearchClear").addEventListener("click", clearAddressEventSearch);
 document.getElementById("eventSearchPrev").addEventListener("click", function() {

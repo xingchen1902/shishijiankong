@@ -1471,13 +1471,19 @@ def get_realtime(limit:int=100):
     }
 
 @app.get("/api/events/address")
-def get_events_by_address(address: str, page: int = 1, per_page: int = 50):
+def get_events_by_address(address: str, page: int = 1, per_page: int = 50, event_type: str = "all"):
     """Search already-stored events by either indexed event address; never queries chain RPC."""
     address = (address or "").strip()
     if not re.fullmatch(r"0x[a-fA-F0-9]{40}", address):
         raise HTTPException(status_code=400, detail="请输入有效的 BSC 地址")
+    allowed_types = {
+        "all", "bonus_withdraw", "stake_in", "stake_out", "bonus_in", "burn_stake", "transfer_720",
+        "turbo_total", "release_dynamic", "release_static", "permanent_bonus", "permanent_stake", "burn_other",
+    }
+    if event_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="无效的事件类型")
 
-    return search_events_by_address(address.lower(), page=page, per_page=per_page)
+    return search_events_by_address(address.lower(), page=page, per_page=per_page, event_type=event_type)
 
 @app.get("/api/turbo-coefficient-top")
 def get_turbo_coefficient_top():
