@@ -157,6 +157,10 @@ def _init_db():
         CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
         CREATE INDEX IF NOT EXISTS idx_events_type_recent
             ON events(type, timestamp DESC, block DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_events_from_addr_recent
+            ON events(from_addr COLLATE NOCASE, timestamp DESC, block DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_events_to_addr_recent
+            ON events(to_addr COLLATE NOCASE, timestamp DESC, block DESC, id DESC);
 
         CREATE TABLE IF NOT EXISTS event_type_counts (
             type TEXT PRIMARY KEY,
@@ -1008,6 +1012,30 @@ def insert_events_batch(events):
     )
     conn.commit()
     conn.close()
+
+def search_events_by_address(address, page=1, per_page=50):
+    """Return already-stored events where the address is either event endpoint."""
+    page = max(1, int(page or 1))
+    per_page = min(100, max(1, int(per_page or 50)))
+    offset = (page - 1) * per_page
+    where = "(from_addr COLLATE NOCASE = ? OR to_addr COLLATE NOCASE = ?)"
+    params = (address, address)
+    conn = get_conn()
+    try:
+        total_row = conn.execute(f"SELECT COUNT(*) FROM events WHERE {where}", params).fetchone()
+        rows = conn.execute(
+            f"""SELECT * FROM events WHERE {where}
+                ORDER BY timestamp DESC, block DESC, id DESC LIMIT ? OFFSET ?""",
+            (*params, per_page, offset),
+        ).fetchall()
+        return {
+            "data": [dict(row) for row in rows],
+            "total": int(total_row[0] if total_row else 0),
+            "page": page,
+            "per_page": per_page,
+        }
+    finally:
+        conn.close()
 
 def update_release_period(tx, period):
     """把异常释放解析出的周期写回对应的释放事件记录。"""

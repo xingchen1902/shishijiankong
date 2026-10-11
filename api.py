@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import os, threading, time, requests, json, random
+import os, threading, time, requests, json, random, re
 from datetime import datetime, timezone, timedelta
 from db import (
     get_all_daily_until_yesterday,
@@ -31,6 +31,7 @@ from db import (
     get_release_period_summary,
     get_release_period_daily_summary,
     get_release_amount_distribution,
+    search_events_by_address,
 )
 from event_parser import (
     BONUS_POOL, STAKE_POOL, TOKEN_ARK, DECIMALS, get_balance, get_total_supply,
@@ -1468,6 +1469,15 @@ def get_realtime(limit:int=100):
         "totals": {row["type"]: row["count"] for row in totals},
         "recent_by_type": recent_by_type,
     }
+
+@app.get("/api/events/address")
+def get_events_by_address(address: str, page: int = 1, per_page: int = 50):
+    """Search already-stored events by either indexed event address; never queries chain RPC."""
+    address = (address or "").strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{40}", address):
+        raise HTTPException(status_code=400, detail="请输入有效的 BSC 地址")
+
+    return search_events_by_address(address.lower(), page=page, per_page=per_page)
 
 @app.get("/api/turbo-coefficient-top")
 def get_turbo_coefficient_top():

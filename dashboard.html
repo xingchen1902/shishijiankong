@@ -214,10 +214,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .pool-empty { color: #64748b; text-align: center; padding: 18px 8px; font-size: 12px; border: 1px dashed #334155; border-radius: 10px; background: #0f172a; }
 .events-center { min-width: 0; }
 .events-center-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 4px 0 16px; }
+.events-center-heading { display: flex; min-width: 0; align-items: center; gap: 18px; }
 .events-center-title { color: #e2e8f0; font-size: 22px; font-weight: 700; }
 .events-center-meta { color: #64748b; font-size: 12px; }
 .events-center-meta .live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 0 10px rgba(45,212,191,.7); }
+.event-address-search { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 280px; max-width: 560px; flex: 1; }
+.event-address-search input { width: 100%; min-width: 0; height: 38px; flex: 1; padding: 0 12px; border: 1px solid #334b6b; border-radius: 8px; outline: none; background: #0f172a; color: #e2e8f0; font: inherit; font-size: 12px; transition: border-color .15s, box-shadow .15s; }
+.event-address-search input::placeholder { color: #64748b; }
+.event-address-search input:focus { border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.12); }
+.event-address-search button { height: 38px; padding: 0 13px; border: 1px solid #2563eb; border-radius: 8px; background: linear-gradient(135deg,#0e7490,#2563eb); color: #eff6ff; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.event-address-search button.secondary { border-color: #334155; background: #172338; color: #94a3b8; }
+.event-address-search button:focus-visible, .event-search-pagination button:focus-visible { outline: 2px solid #67e8f9; outline-offset: 2px; }
+.event-address-search-status { flex-basis: 100%; min-height: 14px; color: #64748b; font-size: 11px; }
 .event-filter-grid { display: flex; gap: 10px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.event-filter-grid[hidden] { display: none; }
 .event-filter { flex: 1 0 0; min-width: 112px; padding: 12px 10px; color: #94a3b8; background: #111d32; border: 1px solid #263b59; border-radius: 10px; text-align: left; cursor: pointer; }
 .event-filter.active { color: #dbeafe; background: linear-gradient(135deg, rgba(20,184,166,.2), rgba(37,99,235,.2)); border-color: #38bdf8; box-shadow: inset 0 -2px 0 #2dd4bf; }
 .event-filter-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
@@ -241,6 +251,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .event-detail-row .label { color: #64748b; font-size: 12px; }
 .event-detail-row .value { min-width: 0; overflow: hidden; color: #cbd5e1; font-size: 12px; font-weight: 600; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .event-detail-row .value a { color: #60a5fa; text-decoration: none; }
+.event-search-pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 10px 0 0; color: #94a3b8; font-size: 12px; }
+.event-search-pagination[hidden] { display: none; }
+.event-search-pagination-controls { display: flex; align-items: center; gap: 8px; }
+.event-search-pagination button { padding: 6px 10px; border: 1px solid #334155; border-radius: 7px; background: #0f172a; color: #cbd5e1; cursor: pointer; }
+.event-search-pagination button:disabled { opacity: .4; cursor: not-allowed; }
 .turbo-top-card { margin-top: 18px; padding: 16px; background: linear-gradient(120deg, rgba(20,184,166,.08), transparent 42%), #111d32; border: 1px solid #263b59; border-radius: 12px; }
 .turbo-top-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
 .turbo-top-title { color: #e2e8f0; font-size: 16px; font-weight: 700; }
@@ -305,6 +320,7 @@ td.neg { color: #ef4444; }
 .event-type.turbo_total { background: #134e4a; color: #5eead4; }
 .event-type.release_dynamic { background: #0c4a6e; color: #7dd3fc; }
 .event-type.release_static { background: #1a052e; color: #d8b4fe; }
+.event-type.turbo_contribution { background: #3b1f52; color: #d8b4fe; }
 .event-type.burn_stake { background: #3f1d2e; color: #fda4af; }
 .event-type.bonus_in { background: #172554; color: #93c5fd; }
 .event-type.permanent_bonus { background: #422006; color: #fcd34d; }
@@ -421,6 +437,12 @@ td.neg { color: #ef4444; }
   .turbo-top-card { padding: 12px; }
   .turbo-top-head { align-items: flex-start; flex-direction: column; gap: 5px; }
   .turbo-top-title { font-size: 14px; }
+  .events-center-head { align-items: stretch; flex-direction: column; gap: 8px; }
+  .events-center-heading { align-items: stretch; flex-direction: column; gap: 10px; }
+  .event-address-search { width: 100%; min-width: 0; max-width: none; }
+  .event-address-search-status { order: 1; }
+  .events-center-meta { align-self: flex-end; }
+  .event-search-pagination { align-items: flex-start; flex-direction: column; }
 }
 
 @media (max-width: 700px) {
@@ -581,8 +603,16 @@ td.neg { color: #ef4444; }
   <div class="dashboard-page events-page is-hidden" data-page-content="events">
     <div class="events-center">
       <div class="events-center-head">
-        <div class="events-center-title">⚡ 事件中心</div>
-        <div class="events-center-meta"><span class="live-dot"></span>实时数据 · 最近事件</div>
+        <div class="events-center-heading">
+          <div class="events-center-title">⚡ 事件中心</div>
+          <form id="eventAddressSearchForm" class="event-address-search" role="search">
+            <input id="eventAddressSearchInput" type="text" maxlength="42" spellcheck="false" autocomplete="off" aria-label="查询地址事件" placeholder="输入 BSC 地址，查询该地址参与的全部已记录事件">
+            <button type="submit">查询</button>
+            <button type="button" class="secondary" id="eventAddressSearchClear" hidden>返回实时</button>
+            <span class="event-address-search-status" id="eventAddressSearchStatus" aria-live="polite">按数据库记录的从地址或到地址匹配，不发起链上查询</span>
+          </form>
+        </div>
+        <div class="events-center-meta" id="eventsCenterMeta"><span class="live-dot"></span>实时数据 · 最近事件</div>
       </div>
       <div class="event-filter-grid" id="eventFilterGrid"></div>
       <div class="event-center-grid">
@@ -596,6 +626,14 @@ td.neg { color: #ef4444; }
           <div class="event-detail-title">事件详情</div>
           <div style="color:#64748b;font-size:12px;padding:24px 0;text-align:center;">点击左侧事件查看详情</div>
         </aside>
+      </div>
+      <div class="event-search-pagination" id="eventSearchPagination" hidden>
+        <span id="eventSearchSummary"></span>
+        <div class="event-search-pagination-controls">
+          <button type="button" id="eventSearchPrev">上一页</button>
+          <span id="eventSearchPageLabel"></span>
+          <button type="button" id="eventSearchNext">下一页</button>
+        </div>
       </div>
       <div class="events-summary-grid">
         <section class="turbo-top-card" aria-labelledby="turboTopTitle">
@@ -766,7 +804,9 @@ var TYPE_LABELS = {
   bonus_withdraw: "奖金池提取", stake_in: "新增质押", stake_out: "赎回",
   bonus_in: "奖金池注入", burn_stake: "新增销毁质押", burn_other: "其他销毁", transfer_720: "转720天",
   turbo_total: "总涡轮", release_dynamic: "动态释放", release_static: "静态释放",
-  permanent_bonus: "收益永久质押", permanent_stake: "本金永久质押"
+  permanent_bonus: "收益永久质押", permanent_stake: "本金永久质押",
+  dynamic: "动态释放转账记录", static_burn: "静态释放销毁记录",
+  turbo_contribution: "涡轮余额转贡献值"
 };
 var API_BASE = window.location.origin;
 var currentDexData = null;
@@ -1419,10 +1459,12 @@ function syncEventStreamHeight() {
 }
 
 var eventCenterEvents = [];
+var eventCenterLiveEvents = [];
 var eventCenterTotals = {};
 var eventCenterRecentByType = {};
 var eventCenterFilter = "all";
 var eventCenterSelectedIndex = 0;
+var eventAddressSearch = {active: false, address: "", page: 1, perPage: 50, total: 0, requestId: 0};
 var EVENT_CENTER_TYPES = [
   "bonus_withdraw", "stake_in", "stake_out", "bonus_in", "burn_stake", "transfer_720",
   "turbo_total", "release_dynamic", "release_static", "permanent_bonus", "permanent_stake", "burn_other"
@@ -1455,6 +1497,13 @@ function renderEventCenter(events, totals, recentByType) {
   var filterGrid = document.getElementById("eventFilterGrid");
   var body = document.getElementById("eventCenterBody");
   if (!filterGrid || !body) return;
+  if (eventAddressSearch.active) {
+    filterGrid.hidden = true;
+    renderEventRows(eventCenterEvents);
+    renderEventSearchPagination();
+    return;
+  }
+  filterGrid.hidden = false;
   var totalCount = EVENT_CENTER_TYPES.reduce(function(sum, type) { return sum + Number(eventCenterTotals[type] || 0); }, 0);
   filterGrid.innerHTML = '<button class="event-filter ' + (eventCenterFilter === "all" ? "active" : "") + '" type="button" data-event-filter="all"><span class="event-filter-label">全部事件</span><span class="event-filter-count">' + totalCount + '</span></button>' + EVENT_CENTER_TYPES.map(function(type) {
     return '<button class="event-filter ' + (eventCenterFilter === type ? "active" : "") + '" type="button" data-event-filter="' + esc(type) + '"><span class="event-filter-label">' + esc(TYPE_LABELS[type] || type) + '</span><span class="event-filter-count">' + Number(eventCenterTotals[type] || 0) + '</span></button>';
@@ -1469,6 +1518,12 @@ function renderEventCenter(events, totals, recentByType) {
   var filtered = eventCenterFilter === "all"
     ? eventCenterEvents.slice(0, 15)
     : (eventCenterRecentByType[eventCenterFilter] || eventCenterEvents.filter(function(e) { return e.type === eventCenterFilter; }).slice(0, 15));
+  renderEventRows(filtered);
+}
+
+function renderEventRows(filtered) {
+  var body = document.getElementById("eventCenterBody");
+  if (!body) return;
   if (!filtered.length) {
     body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#64748b;">暂无事件</td></tr>';
     renderEventDetail(null);
@@ -1491,11 +1546,96 @@ function renderEventCenter(events, totals, recentByType) {
   body.querySelectorAll("tr[data-event-index]").forEach(function(row) {
     row.addEventListener("click", function() {
       eventCenterSelectedIndex = Number(row.getAttribute("data-event-index"));
-      renderEventCenter(eventCenterEvents, eventCenterTotals, eventCenterRecentByType);
+      body.querySelectorAll("tr[data-event-index]").forEach(function(other) { other.classList.remove("selected"); });
+      row.classList.add("selected");
+      renderEventDetail(filtered[eventCenterSelectedIndex]);
     });
   });
   renderEventDetail(filtered[eventCenterSelectedIndex]);
 }
+
+function renderEventSearchPagination() {
+  var pager = document.getElementById("eventSearchPagination");
+  if (!pager) return;
+  pager.hidden = !eventAddressSearch.active;
+  if (!eventAddressSearch.active) return;
+  var pageCount = Math.max(1, Math.ceil(eventAddressSearch.total / eventAddressSearch.perPage));
+  var summary = document.getElementById("eventSearchSummary");
+  var pageLabel = document.getElementById("eventSearchPageLabel");
+  var previous = document.getElementById("eventSearchPrev");
+  var next = document.getElementById("eventSearchNext");
+  if (summary) summary.textContent = shortAddress(eventAddressSearch.address) + " · 共 " + fmtInt(eventAddressSearch.total) + " 条已记录事件";
+  if (pageLabel) pageLabel.textContent = eventAddressSearch.page + " / " + pageCount;
+  if (previous) previous.disabled = eventAddressSearch.page <= 1;
+  if (next) next.disabled = eventAddressSearch.page >= pageCount;
+}
+
+function loadAddressEvents(address, page) {
+  eventAddressSearch.active = true;
+  eventAddressSearch.address = address;
+  eventAddressSearch.page = page;
+  eventAddressSearch.total = 0;
+  var requestId = ++eventAddressSearch.requestId;
+  var status = document.getElementById("eventAddressSearchStatus");
+  var clearButton = document.getElementById("eventAddressSearchClear");
+  var meta = document.getElementById("eventsCenterMeta");
+  var body = document.getElementById("eventCenterBody");
+  if (meta) meta.textContent = "地址历史 · 数据库匹配";
+  if (status) status.textContent = "正在查询数据库中的已记录事件…";
+  if (clearButton) clearButton.hidden = false;
+  if (body) body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;">正在查询数据库…</td></tr>';
+  renderEventSearchPagination();
+  fetchAPI("/api/events/address?address=" + encodeURIComponent(address) + "&page=" + page + "&per_page=" + eventAddressSearch.perPage).then(function(payload) {
+    if (requestId !== eventAddressSearch.requestId) return;
+    if (!payload || !Array.isArray(payload.data)) {
+      if (status) status.textContent = "查询失败，请稍后重试。";
+      if (body) body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#fca5a5;">数据库查询失败，请稍后重试</td></tr>';
+      return;
+    }
+    eventAddressSearch.total = Number(payload.total || 0);
+    eventCenterSelectedIndex = 0;
+    if (status) status.textContent = "查询完成 · 仅返回数据库中已记录的事件，不会补解析历史数据";
+    renderEventCenter(payload.data, eventCenterTotals, eventCenterRecentByType);
+  });
+}
+
+function clearAddressEventSearch() {
+  eventAddressSearch.active = false;
+  eventAddressSearch.address = "";
+  eventAddressSearch.page = 1;
+  eventAddressSearch.total = 0;
+  eventAddressSearch.requestId++;
+  var input = document.getElementById("eventAddressSearchInput");
+  var status = document.getElementById("eventAddressSearchStatus");
+  var clearButton = document.getElementById("eventAddressSearchClear");
+  var meta = document.getElementById("eventsCenterMeta");
+  if (input) input.value = "";
+  if (status) status.textContent = "按数据库记录的从地址或到地址匹配，不发起链上查询";
+  if (clearButton) clearButton.hidden = true;
+  if (meta) meta.innerHTML = '<span class="live-dot"></span>实时数据 · 最近事件';
+  renderEventCenter(eventCenterLiveEvents, eventCenterTotals, eventCenterRecentByType);
+}
+
+document.getElementById("eventAddressSearchForm").addEventListener("submit", function(event) {
+  event.preventDefault();
+  var input = document.getElementById("eventAddressSearchInput");
+  var status = document.getElementById("eventAddressSearchStatus");
+  var address = input ? input.value.trim() : "";
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    if (status) status.textContent = "请输入完整的 42 位 BSC 地址（0x 开头）";
+    if (input) input.focus();
+    return;
+  }
+  loadAddressEvents(address, 1);
+});
+document.getElementById("eventAddressSearchClear").addEventListener("click", clearAddressEventSearch);
+document.getElementById("eventSearchPrev").addEventListener("click", function() {
+  if (eventAddressSearch.active && eventAddressSearch.page > 1) loadAddressEvents(eventAddressSearch.address, eventAddressSearch.page - 1);
+});
+document.getElementById("eventSearchNext").addEventListener("click", function() {
+  var pageCount = Math.max(1, Math.ceil(eventAddressSearch.total / eventAddressSearch.perPage));
+  if (eventAddressSearch.active && eventAddressSearch.page < pageCount) loadAddressEvents(eventAddressSearch.address, eventAddressSearch.page + 1);
+});
 
 function renderEventDetail(event) {
   var card = document.getElementById("eventDetailCard");
@@ -1578,7 +1718,13 @@ function renderTurbineConfigChanges(payload) {
 
 function updateEvents(allEvents, totals, recentByType) {
   var box = document.getElementById("eventStream");
-  renderEventCenter(allEvents, totals, recentByType);
+  eventCenterLiveEvents = Array.isArray(allEvents) ? allEvents : [];
+  if (eventAddressSearch.active) {
+    if (totals) eventCenterTotals = totals;
+    if (recentByType) eventCenterRecentByType = recentByType;
+  } else {
+    renderEventCenter(eventCenterLiveEvents, totals, recentByType);
+  }
   if (!box) return;
   if (!allEvents || !allEvents.length) {
     box.innerHTML = "<div style=\"text-align:center;color:#64748b;padding:10px;\">暂无事件</div>";
