@@ -1014,11 +1014,14 @@ def insert_events_batch(events):
     conn.close()
 
 def search_events_by_address(address, page=1, per_page=50):
-    """Return already-stored events where the address is either event endpoint."""
+    """Return dashboard-visible events already stored for either event address."""
     page = max(1, int(page or 1))
     per_page = min(100, max(1, int(per_page or 50)))
     offset = (page - 1) * per_page
-    where = "(from_addr COLLATE NOCASE = ? OR to_addr COLLATE NOCASE = ?)"
+    # These are supporting/internal rows, not separate Event Center events.
+    # Keep them in SQLite for accounting and diagnostics, but avoid showing a
+    # turbo transfer twice when its canonical turbo_total row is also present.
+    where = "(from_addr COLLATE NOCASE = ? OR to_addr COLLATE NOCASE = ?) AND type NOT IN ('dynamic', 'static_burn', 'turbo_contribution')"
     params = (address, address)
     conn = get_conn()
     try:

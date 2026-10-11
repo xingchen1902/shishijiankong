@@ -35,9 +35,11 @@ class EventAddressSearchTests(unittest.TestCase):
                (id, block, tx, type, from_addr, to_addr, value, timestamp)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             [
-                (1, 10, "tx-a", "stake_in", "0xAbC", "0xpool", 5, "2026-10-10 10:00:00"),
+                (1, 10, "tx-a", "turbo_total", "0xAbC", "0xpool", 5, "2026-10-10 10:00:00"),
                 (2, 11, "tx-b", "stake_out", "0xpool", "0xabc", 7, "2026-10-10 11:00:00"),
                 (3, 12, "tx-c", "bonus_in", "0xother", "0xother2", 9, "2026-10-10 12:00:00"),
+                (4, 10, "tx-a", "dynamic", "0xAbC", "0xpool", 5, "2026-10-10 10:00:00"),
+                (5, 13, "tx-d", "turbo_contribution", "0xAbC", "0xpool", 2, "2026-10-10 13:00:00"),
             ],
         )
         conn.commit()
@@ -48,6 +50,7 @@ class EventAddressSearchTests(unittest.TestCase):
 
         self.assertEqual(result["total"], 2)
         self.assertEqual([row["tx"] for row in result["data"]], ["tx-b", "tx-a"])
+        self.assertEqual([row["type"] for row in result["data"]], ["stake_out", "turbo_total"])
 
     def test_paginates_matching_events(self):
         first = db.search_events_by_address("0xabc", page=1, per_page=1)
