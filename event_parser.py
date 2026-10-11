@@ -9,6 +9,7 @@ ARK 事件解析器
 import time, json
 from datetime import datetime, timezone, timedelta
 import requests
+from db import get_cached_block_timestamps, save_block_timestamps
 
 BJT = timezone(timedelta(hours=8))
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
@@ -217,7 +218,10 @@ _time_ref_block = REF_BLOCK
 _time_ref_ts = BASE_TS
 _time_ref_updated = 0
 _block_timestamp_cache = {}
+_block_timestamp_hash_cache = {}
 _BLOCK_TIMESTAMP_CACHE_LIMIT = 10000
+_BLOCK_TIMESTAMP_PERSIST_RETENTION_DAYS = 7
+_block_timestamp_last_prune = 0
 
 def _rpc_call(method, params, retries=3):
     try:
@@ -317,11 +321,50 @@ def estimate_block_time(block_number):
     _refresh_time_ref()
     return datetime.fromtimestamp(_time_ref_ts + (block_number - _time_ref_block) * BLOCK_SEC, BJT).strftime("%Y-%m-%d %H:%M:%S")
 
-def get_block_timestamps(block_numbers):
-    """Resolve exact BSC header times for unique blocks, batching and caching RPC reads."""
+def _block_hashes_from_logs(*log_groups):
+    hashes = {}
+    for logs in log_groups:
+        for log in logs or []:
+            if log.get("blockNumber") and log.get("blockHash"):
+                hashes[int(log["blockNumber"], 16)] = log["blockHash"].lower()
+    return hashes
+
+def get_block_timestamps(block_numbers, block_hashes=None):
+    """Resolve exact BSC header times, reusing memory and recent persistent cache entries."""
+    global _block_timestamp_last_prune
     unique_blocks = list(dict.fromkeys(int(block) for block in block_numbers if block is not None))
+    expected_hashes = {
+        int(block): str(block_hash).lower()
+        for block, block_hash in (block_hashes or {}).items()
+        if block_hash
+    }
+    # Do not reuse an in-memory entry if this height now refers to a different fork.
+    for block in unique_blocks:
+        expected_hash = expected_hashes.get(block)
+        if (expected_hash and block in _block_timestamp_cache
+                and _block_timestamp_hash_cache.get(block) != expected_hash):
+            _block_timestamp_cache.pop(block, None)
+            _block_timestamp_hash_cache.pop(block, None)
     missing = [block for block in unique_blocks if block not in _block_timestamp_cache]
+
+    # The persistent cache is mainly for short restarts/replays; normal forward-only
+    # ingestion still needs one exact header read for every newly observed block.
+    if missing:
+        try:
+            persisted = get_cached_block_timestamps({
+                block: expected_hashes[block]
+                for block in missing if block in expected_hashes
+            })
+            for block, entry in persisted.items():
+                _block_timestamp_cache[block] = entry["timestamp"]
+                _block_timestamp_hash_cache[block] = entry["block_hash"]
+            missing = [block for block in missing if block not in persisted]
+        except Exception as exc:
+            print(f"  [区块时间缓存] 读取失败，继续查询 RPC: {exc}")
+
     unresolved = []
+    newly_resolved = {}
+    newly_resolved_hashes = {}
 
     def valid_header(header):
         return isinstance(header, dict) and header.get("timestamp") is not None
@@ -335,8 +378,20 @@ def get_block_timestamps(block_numbers):
         )
         for block, header in zip(chunk, headers):
             if valid_header(header):
+                header_hash = str(header.get("hash") or "").lower()
+                expected_hash = expected_hashes.get(block)
+                if expected_hash and header_hash and header_hash != expected_hash:
+                    unresolved.append(block)
+                    continue
                 timestamp = datetime.fromtimestamp(int(header["timestamp"], 16), BJT)
-                _block_timestamp_cache[block] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                timestamp_text = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                _block_timestamp_cache[block] = timestamp_text
+                if header_hash:
+                    _block_timestamp_hash_cache[block] = header_hash
+                if not expected_hash or not header_hash or header_hash == expected_hash:
+                    newly_resolved[block] = timestamp_text
+                    if header_hash:
+                        newly_resolved_hashes[block] = header_hash
             else:
                 unresolved.append(block)
 
@@ -345,12 +400,41 @@ def get_block_timestamps(block_numbers):
     for block in unresolved:
         header = _rpc_call("eth_getBlockByNumber", [hex(block), False], retries=1)
         if valid_header(header):
+            header_hash = str(header.get("hash") or "").lower()
+            expected_hash = expected_hashes.get(block)
+            if expected_hash and header_hash and header_hash != expected_hash:
+                continue
             timestamp = datetime.fromtimestamp(int(header["timestamp"], 16), BJT)
-            _block_timestamp_cache[block] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            timestamp_text = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            _block_timestamp_cache[block] = timestamp_text
+            if header_hash:
+                _block_timestamp_hash_cache[block] = header_hash
+            if not expected_hash or not header_hash or header_hash == expected_hash:
+                newly_resolved[block] = timestamp_text
+                if header_hash:
+                    newly_resolved_hashes[block] = header_hash
+
+    if newly_resolved:
+        prune_before = None
+        now = time.time()
+        if now - _block_timestamp_last_prune >= 86400:
+            prune_before = (
+                datetime.now(BJT) - timedelta(days=_BLOCK_TIMESTAMP_PERSIST_RETENTION_DAYS)
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            _block_timestamp_last_prune = now
+        try:
+            save_block_timestamps(
+                newly_resolved,
+                block_hashes=newly_resolved_hashes,
+                prune_before=prune_before,
+            )
+        except Exception as exc:
+            print(f"  [区块时间缓存] 写入失败，不影响事件解析: {exc}")
 
     if len(_block_timestamp_cache) > _BLOCK_TIMESTAMP_CACHE_LIMIT:
         for block in list(_block_timestamp_cache)[:len(_block_timestamp_cache) - _BLOCK_TIMESTAMP_CACHE_LIMIT]:
             del _block_timestamp_cache[block]
+            _block_timestamp_hash_cache.pop(block, None)
 
     result = {}
     for block in unique_blocks:
@@ -431,7 +515,8 @@ def reserve_usdt_transfer_detected(from_block, to_block):
     }], retries=1) or []
     all_logs = outgoing + incoming
     block_timestamps = get_block_timestamps(
-        int(log["blockNumber"], 16) for log in all_logs if log.get("blockNumber")
+        (int(log["blockNumber"], 16) for log in all_logs if log.get("blockNumber")),
+        _block_hashes_from_logs(all_logs),
     )
     records = _pool_transfer_records(all_logs, "USDT", block_timestamps)
     reserve_dirty = any(
@@ -622,10 +707,16 @@ class EventParser:
             if log.get("transactionHash")
         }
         block_timestamps = get_block_timestamps(
-            int(log["blockNumber"], 16)
-            for logs in (ark_logs, gark_logs, dynamic_event_logs, release_logs, turbo_logs, contribution_logs)
-            for log in (logs or [])
-            if log.get("blockNumber")
+            (
+                int(log["blockNumber"], 16)
+                for logs in (ark_logs, gark_logs, dynamic_event_logs, release_logs, turbo_logs, contribution_logs)
+                for log in (logs or [])
+                if log.get("blockNumber")
+            ),
+            _block_hashes_from_logs(
+                ark_logs, gark_logs, dynamic_event_logs,
+                release_logs, turbo_logs, contribution_logs,
+            ),
         )
         if ark_logs:
             classified, raw = _classify_logs(
@@ -738,7 +829,8 @@ class EventParser:
         }])
         if lp_logs:
             lp_timestamps = get_block_timestamps(
-                int(log["blockNumber"], 16) for log in lp_logs if log.get("blockNumber")
+                (int(log["blockNumber"], 16) for log in lp_logs if log.get("blockNumber")),
+                _block_hashes_from_logs(lp_logs),
             )
             swaps = _parse_lp_swap_logs(lp_logs, lp_timestamps)
             if swaps:

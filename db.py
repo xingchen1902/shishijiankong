@@ -32,6 +32,96 @@ def get_conn():
     conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
+def _ensure_block_timestamp_cache(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS block_timestamp_cache (
+            block INTEGER PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            block_hash TEXT,
+            cached_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(block_timestamp_cache)")}
+    if "block_hash" not in columns:
+        conn.execute("ALTER TABLE block_timestamp_cache ADD COLUMN block_hash TEXT")
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_block_timestamp_cache_timestamp
+        ON block_timestamp_cache(timestamp)
+    """)
+
+def get_cached_block_timestamps(block_hashes):
+    """Return exact recent block timestamps persisted across monitor restarts."""
+    expected_hashes = {
+        int(block): str(block_hash).lower()
+        for block, block_hash in (block_hashes or {}).items()
+        if block is not None and block_hash
+    }
+    blocks = list(expected_hashes)
+    if not blocks:
+        return {}
+
+    conn = get_conn()
+    try:
+        _ensure_block_timestamp_cache(conn)
+        result = {}
+        # Stay below SQLite's parameter limit on older system SQLite builds.
+        for offset in range(0, len(blocks), 500):
+            chunk = blocks[offset:offset + 500]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = conn.execute(
+                f"SELECT block, timestamp, block_hash FROM block_timestamp_cache WHERE block IN ({placeholders})",
+                chunk,
+            ).fetchall()
+            result.update({
+                int(row["block"]): {
+                    "timestamp": row["timestamp"],
+                    "block_hash": row["block_hash"],
+                }
+                for row in rows
+                if row["block_hash"]
+                and str(row["block_hash"]).lower() == expected_hashes[int(row["block"])]
+            })
+        return result
+    finally:
+        conn.close()
+
+def save_block_timestamps(timestamps, block_hashes=None, prune_before=None):
+    """Persist exact timestamps; optionally prune entries older than a retention cutoff."""
+    block_hashes = block_hashes or {}
+    entries = [
+        (
+            int(block),
+            str(timestamp),
+            str(block_hashes.get(block) or block_hashes.get(int(block))).lower(),
+        )
+        for block, timestamp in (timestamps or {}).items()
+        if block is not None and timestamp
+        and (block_hashes.get(block) or block_hashes.get(int(block)))
+    ]
+    if not entries and not prune_before:
+        return
+
+    conn = get_conn()
+    try:
+        _ensure_block_timestamp_cache(conn)
+        if entries:
+            conn.executemany(
+                """INSERT INTO block_timestamp_cache (block, timestamp, block_hash, cached_at)
+                   VALUES (?, ?, ?, datetime('now'))
+                   ON CONFLICT(block) DO UPDATE SET
+                       timestamp=excluded.timestamp, block_hash=excluded.block_hash,
+                       cached_at=excluded.cached_at""",
+                entries,
+            )
+        if prune_before:
+            conn.execute(
+                "DELETE FROM block_timestamp_cache WHERE timestamp < ?",
+                (str(prune_before),),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
 def init_db():
     """Serialize schema initialization across the listener and API processes."""
     os.makedirs(DB_DIR, exist_ok=True)
@@ -87,6 +177,15 @@ def _init_db():
         CREATE INDEX IF NOT EXISTS idx_raw_block ON raw_logs(block);
         CREATE INDEX IF NOT EXISTS idx_raw_from ON raw_logs(from_addr);
         CREATE INDEX IF NOT EXISTS idx_raw_to ON raw_logs(to_addr);
+
+        CREATE TABLE IF NOT EXISTS block_timestamp_cache (
+            block INTEGER PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            block_hash TEXT,
+            cached_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_block_timestamp_cache_timestamp
+            ON block_timestamp_cache(timestamp);
 
         CREATE TABLE IF NOT EXISTS daily_summary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

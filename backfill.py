@@ -74,7 +74,9 @@ def process_batch(from_block, to_block):
         }])
         if ark_logs:
             block_timestamps = get_block_timestamps(
-                int(log["blockNumber"], 16) for log in ark_logs if log.get("blockNumber")
+                (int(log["blockNumber"], 16) for log in ark_logs if log.get("blockNumber")),
+                {int(log["blockNumber"], 16): log["blockHash"] for log in ark_logs
+                 if log.get("blockNumber") and log.get("blockHash")},
             )
             for log in ark_logs:
                 bn = int(log["blockNumber"], 16)
@@ -99,7 +101,9 @@ def process_batch(from_block, to_block):
         }])
         if gark_logs:
             block_timestamps = get_block_timestamps(
-                int(log["blockNumber"], 16) for log in gark_logs if log.get("blockNumber")
+                (int(log["blockNumber"], 16) for log in gark_logs if log.get("blockNumber")),
+                {int(log["blockNumber"], 16): log["blockHash"] for log in gark_logs
+                 if log.get("blockNumber") and log.get("blockHash")},
             )
             for log in gark_logs:
                 to = "0x" + log["topics"][2][26:]
