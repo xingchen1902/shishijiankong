@@ -133,7 +133,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .staking-calculator-card { min-width: 0; padding: 12px; border: 1px solid #334155; border-radius: 9px; background: #0f172a; }
 .staking-calculator-card.permanent-source { border-color: rgba(167,139,250,.55); box-shadow: inset 0 2px 0 rgba(167,139,250,.65); }
 .staking-calculator-card h4 { margin-bottom: 8px; color: #e2e8f0; font-size: 12px; }
-.staking-calculator-term-title { margin-top: 10px; padding-top: 9px; border-top: 1px solid #29384e; color: #c4b5fd; font-size: 11px; font-weight: 700; }
 .staking-calculator-card .staking-period-row { padding: 6px 0; }
 .staking-calculator-card .staking-period-row .label { white-space: normal; }
 .staking-calculator-card .staking-period-row .value { font-size: 12px; }
@@ -591,7 +590,7 @@ td.neg { color: #ef4444; }
             <div class="staking-calculator-help">按当前单次收益率在整个周期内保持不变估算，实际收益会随未来收益率变化。</div>
           </div>
           <label class="staking-calculator-input" for="stakingCalculatorAmount">
-            <input id="stakingCalculatorAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="输入质押数量" aria-label="输入质押数量，单位 ARK">
+            <input id="stakingCalculatorAmount" type="number" min="0" step="any" inputmode="decimal" value="100" aria-label="输入质押数量，单位 ARK">
             <span>ARK</span>
           </label>
         </div>
@@ -1318,23 +1317,19 @@ function updateStakingCalculator() {
     return renderEstimate(row, days, row.period);
   });
   if (permanentPeriod) {
-    function renderPermanentTerm(days) {
-      var rate = Number(permanentPeriod.interest_rate);
-      var valid = permanentPeriod.interest_rate != null && isFinite(rate) && rate >= 0;
-      var growth = valid ? Math.pow(1 + rate, days * 2) : NaN;
-      var ending = amount * growth;
-      var profit = ending - amount;
-      var annualized = valid && growth > 0 ? Math.pow(growth, 365 / days) - 1 : NaN;
-      var valuesValid = valid && isFinite(ending) && isFinite(profit) && isFinite(annualized);
-      return '<div class="staking-calculator-term-title">' + days + '天</div>' +
-        '<div class="staking-period-row"><span class="label">到期本金 + 收益</span><span class="value">' + (valuesValid ? fmt(ending) + ' ARK' : '暂不可计算') + '</span></div>' +
-        '<div class="staking-period-row yield"><span class="label">预估总收益</span><span class="value">' + (valuesValid ? fmt(profit) + ' ARK' : '--') + '</span></div>' +
-        '<div class="staking-period-row yield-estimate"><span class="label">周期年化收益率</span><span class="value">' + (valuesValid ? percent(annualized) : '--') + '</span></div>';
+    var permanentRate = Number(permanentPeriod.interest_rate);
+    var permanentRateValid = permanentPeriod.interest_rate != null && isFinite(permanentRate) && permanentRate >= 0;
+    function permanentProfit(days) {
+      var growth = permanentRateValid ? Math.pow(1 + permanentRate, days * 2) : NaN;
+      var profit = amount * (growth - 1);
+      return isFinite(profit) ? fmt(profit) + ' ARK' : '--';
     }
+    var permanentAnnualized = permanentRateValid ? Math.pow(1 + permanentRate, 730) - 1 : NaN;
     cards.push('<section class="staking-calculator-card permanent-source">' +
       '<h4>永久质押测算</h4>' +
-      '<div class="staking-period-row"><span class="label">收益率来源</span><span class="value staking-calculator-permanent">永久质押</span></div>' +
-      renderPermanentTerm(360) + renderPermanentTerm(720) +
+      '<div class="staking-period-row yield"><span class="label">360天总收益</span><span class="value">' + permanentProfit(360) + '</span></div>' +
+      '<div class="staking-period-row yield"><span class="label">720天总收益</span><span class="value">' + permanentProfit(720) + '</span></div>' +
+      '<div class="staking-period-row yield-estimate"><span class="label">年化收益率</span><span class="value">' + (permanentRateValid ? percent(permanentAnnualized) : '--') + '</span></div>' +
       '</section>');
   }
   results.innerHTML = cards.join("");
