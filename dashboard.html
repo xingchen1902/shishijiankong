@@ -119,6 +119,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .staking-yield-card .staking-period-row { padding: 7px 0; }
 .staking-yield-card .staking-period-row .label { white-space: normal; }
 .staking-yield-card .staking-period-row.updated .value { white-space: normal; overflow-wrap: anywhere; font-size: 10px; }
+.staking-yield-rate .value { font-variant-numeric: tabular-nums; }
+.staking-calculator { margin-top: 18px; padding-top: 16px; border-top: 1px solid #334155; }
+.staking-calculator-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 12px; }
+.staking-calculator-title { color: #e2e8f0; font-size: 14px; font-weight: 700; }
+.staking-calculator-help { margin-top: 4px; color: #64748b; font-size: 11px; line-height: 1.5; }
+.staking-calculator-input { display: flex; align-items: center; gap: 8px; width: min(100%, 340px); }
+.staking-calculator-input input { min-width: 0; width: 100%; height: 38px; padding: 0 11px; border: 1px solid #334b6b; border-radius: 8px; outline: none; background: #0f172a; color: #e2e8f0; font: inherit; font-size: 13px; }
+.staking-calculator-input input:focus { border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.12); }
+.staking-calculator-input input:focus-visible { outline: 2px solid #67e8f9; outline-offset: 2px; }
+.staking-calculator-input span { color: #94a3b8; font-size: 12px; }
+.staking-calculator-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.staking-calculator-card { min-width: 0; padding: 12px; border: 1px solid #334155; border-radius: 9px; background: #0f172a; }
+.staking-calculator-card h4 { margin-bottom: 8px; color: #e2e8f0; font-size: 12px; }
+.staking-calculator-card .staking-period-row { padding: 6px 0; }
+.staking-calculator-card .staking-period-row .label { white-space: normal; }
+.staking-calculator-card .staking-period-row .value { font-size: 12px; }
+.staking-calculator-empty { grid-column: 1 / -1; padding: 12px; color: #64748b; font-size: 12px; }
+.staking-calculator-permanent { color: #a78bfa !important; font-size: 11px !important; white-space: normal !important; }
 .staking-period-row.updated .value { color: #94a3b8; font-size: 11px; font-weight: 500; }
 .staking-period-row .change { margin-left: 4px; font-size: 11px; font-weight: 600; }
 .staking-period-row .change.positive { color: #22c55e; }
@@ -367,6 +385,9 @@ td.neg { color: #ef4444; }
   .today-item .value { font-size: 15px; }
   .rt-card .value { font-size: 16px; }
   .staking-overview { grid-template-columns: minmax(0, 1fr); }
+  .staking-calculator-head { align-items: stretch; flex-direction: column; }
+  .staking-calculator-input { width: 100%; }
+  .staking-calculator-results { grid-template-columns: minmax(0, 1fr); }
   .pool-address-overview { grid-template-columns: minmax(0, 1fr); }
   .staking-period { padding: 10px; }
   .staking-period-title { font-size: 13px; }
@@ -561,7 +582,23 @@ td.neg { color: #ef4444; }
       <div class="staking-yield-overview" id="stakingYieldOverview">
         <div class="staking-overview-status">加载中...</div>
       </div>
-      <div class="staking-yield-note">按北京时间 00:00、12:00 结算时各周期的单次收益率复利计算。累计收益从功能启用后的首次成功结算开始，不回填历史；下次结算为按当前本金、已记录累计收益和当前收益率计算的预估值。</div>
+      <div class="staking-calculator">
+        <div class="staking-calculator-head">
+          <div>
+            <div class="staking-calculator-title">质押数量收益测算</div>
+            <div class="staking-calculator-help">按当前单次收益率在整个周期内保持不变估算，实际收益会随未来收益率变化。</div>
+          </div>
+          <label class="staking-calculator-input" for="stakingCalculatorAmount">
+            <input id="stakingCalculatorAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="输入质押数量" aria-label="输入质押数量，单位 ARK">
+            <span>ARK</span>
+          </label>
+        </div>
+        <div class="staking-calculator-results" id="stakingCalculatorResults" aria-live="polite">
+          <div class="staking-calculator-empty">输入质押数量后，查看各周期到期收益估算。</div>
+        </div>
+        <div class="staking-calculator-help">永久质押没有固定到期日，因此不列入到期金额测算；其日收益率和有效年化仍显示在上方周期卡片中。</div>
+      </div>
+      <div class="staking-yield-note">各周期日收益率按北京时间 00:00、12:00 两次复利计算；有效年化按当前单次收益率全年恒定估算。累计收益从功能启用后的首次成功结算开始，不回填历史；下次结算预估按当前本金、已记录累计收益和当前收益率计算。</div>
     </div>
   </div>
 
@@ -827,6 +864,7 @@ var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24�
 var currentReleaseAmountType = "all";
 var currentReleaseAmountDistribution = null;
 var releaseAmountCharts = {};
+var stakingYieldRows = [];
 var RELEASE_AMOUNT_COLORS = ["#2dd4bf", "#60a5fa", "#a78bfa", "#f59e0b", "#fb7185", "#94a3b8"];
 
 function fmt(n) {
@@ -1198,14 +1236,21 @@ function updateStakingYieldOverview(payload) {
   var container = document.getElementById("stakingYieldOverview");
   if (!container) return;
   if (!payload || !Array.isArray(payload.data) || !payload.data.length) {
+    stakingYieldRows = [];
     container.innerHTML = '<div class="staking-overview-status">质押收益数据暂时不可用</div>';
+    updateStakingCalculator();
     return;
   }
+  stakingYieldRows = payload.data;
   function rate(value) {
     var n = Number(value);
     return isFinite(n) ? (n * 100).toFixed(4) + '%' : '--';
   }
   container.innerHTML = payload.data.map(function(row) {
+    var singleRate = Number(row.interest_rate);
+    var hasRate = row.interest_rate != null && isFinite(singleRate) && singleRate >= 0;
+    var dailyRate = hasRate ? (Math.pow(1 + singleRate, 2) - 1) : NaN;
+    var annualRate = hasRate ? (Math.pow(1 + singleRate, 730) - 1) : NaN;
     var lastSettlement = row.last_settlement_at
       ? esc(String(row.last_settlement_at)) + '（北京时间）'
       : '等待首次结算';
@@ -1215,10 +1260,53 @@ function updateStakingYieldOverview(payload) {
       '<div class="staking-yield-card-title">' + esc(row.period || '质押周期') + '</div>' +
       '<div class="staking-period-row total"><span class="label">当前质押本金</span><span class="value">' + fmt(row.total_ark) + ' ARK</span></div>' +
       '<div class="staking-period-row rebase"><span class="label">当前单次收益率</span><span class="value">' + rate(row.interest_rate) + '</span></div>' +
+      '<div class="staking-period-row yield staking-yield-rate"><span class="label">日复利收益率（2次结算）</span><span class="value">' + rate(dailyRate) + '</span></div>' +
+      '<div class="staking-period-row yield-estimate staking-yield-rate"><span class="label">有效年化收益率（估算）</span><span class="value">' + rate(annualRate) + '</span></div>' +
       '<div class="staking-period-row yield"><span class="label">最近一次结算收益</span><span class="value">' + lastEarned + '</span></div>' +
       '<div class="staking-period-row yield"><span class="label">累计收益（启用后）</span><span class="value">' + fmt(row.cumulative_earned_ark || 0) + ' ARK</span></div>' +
       '<div class="staking-period-row yield-estimate" title="按当前收益率估算；实际金额以结算时本金和收益率为准"><span class="label">下次结算预估</span><span class="value">' + fmt(row.next_settlement_estimate_ark || 0) + ' ARK</span></div>' +
       '<div class="staking-period-row updated"><span class="label">最近结算时间</span><span class="value">' + lastSettlement + '</span></div>' +
+      '</section>';
+  }).join("");
+  updateStakingCalculator();
+}
+
+function updateStakingCalculator() {
+  var input = document.getElementById("stakingCalculatorAmount");
+  var results = document.getElementById("stakingCalculatorResults");
+  if (!input || !results) return;
+  var rawAmount = input.value.trim();
+  var amount = Number(rawAmount);
+  if (!rawAmount || !isFinite(amount) || amount <= 0) {
+    results.innerHTML = '<div class="staking-calculator-empty">输入大于 0 的质押数量后，查看各周期到期收益估算。</div>';
+    return;
+  }
+  var periods = stakingYieldRows.filter(function(row) {
+    return Number(row.mode_id) !== 100 && !String(row.period || "").includes("永久");
+  });
+  if (!periods.length) {
+    results.innerHTML = '<div class="staking-calculator-empty">周期收益率数据暂不可用。</div>';
+    return;
+  }
+  function percent(value) {
+    if (!isFinite(value)) return "超出可计算范围";
+    return (value * 100).toLocaleString("zh-CN", {maximumFractionDigits: 4}) + "%";
+  }
+  results.innerHTML = periods.map(function(row) {
+    var match = String(row.period || "").match(/(\d+(?:\.\d+)?)/);
+    var days = match ? Number(match[1]) : 0;
+    var rate = Number(row.interest_rate);
+    var valid = days > 0 && row.interest_rate != null && isFinite(rate) && rate >= 0;
+    var growth = valid ? Math.pow(1 + rate, days * 2) : NaN;
+    var ending = amount * growth;
+    var profit = ending - amount;
+    var annualized = valid && growth > 0 ? Math.pow(growth, 365 / days) - 1 : NaN;
+    var valuesValid = valid && isFinite(ending) && isFinite(profit) && isFinite(annualized);
+    return '<section class="staking-calculator-card">' +
+      '<h4>' + esc(row.period || (days + "天")) + '</h4>' +
+      '<div class="staking-period-row"><span class="label">到期本金 + 收益</span><span class="value">' + (valuesValid ? fmt(ending) + ' ARK' : '暂不可计算') + '</span></div>' +
+      '<div class="staking-period-row yield"><span class="label">预估总收益</span><span class="value">' + (valuesValid ? fmt(profit) + ' ARK' : '--') + '</span></div>' +
+      '<div class="staking-period-row yield-estimate"><span class="label">周期年化收益率</span><span class="value">' + (valuesValid ? percent(annualized) : '--') + '</span></div>' +
       '</section>';
   }).join("");
 }
@@ -1883,6 +1971,9 @@ window.goToPoolHistoryPage = function(page) {
 };
 
 window.addEventListener("resize", syncEventStreamHeight);
+
+var stakingCalculatorInput = document.getElementById("stakingCalculatorAmount");
+if (stakingCalculatorInput) stakingCalculatorInput.addEventListener("input", updateStakingCalculator);
 
 document.querySelectorAll(".dex-change-tab").forEach(function(tab) {
   tab.addEventListener("click", function() {
