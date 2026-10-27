@@ -126,7 +126,7 @@ class DailyAggregator:
                 if key == "redeem":
                     # 赎回只统计质押池转给用户的 ARK；转入黑洞的是本金永久质押，不能算赎回。
                     rows = conn.execute(
-                        "SELECT id, block, tx, type, from_addr, to_addr, value, timestamp FROM events "
+                        "SELECT id, block, tx, type, from_addr, to_addr, value, actual_value, consensus_coefficient, timestamp FROM events "
                         "WHERE timestamp >= ? AND timestamp <= ? AND lower(from_addr)=? "
                         "AND lower(COALESCE(to_addr, '')) NOT IN (?, ?) ORDER BY block, id",
                         (start_str, end_str, STAKE_POOL, BURN_ADDR, BURN_ADDR2),
@@ -134,7 +134,7 @@ class DailyAggregator:
                 else:
                     placeholders = ",".join("?" for _ in rule["types"])
                     rows = conn.execute(
-                        f"SELECT id, block, tx, type, from_addr, to_addr, value, timestamp FROM events "
+                        f"SELECT id, block, tx, type, from_addr, to_addr, value, actual_value, consensus_coefficient, timestamp FROM events "
                         f"WHERE timestamp >= ? AND timestamp <= ? AND type IN ({placeholders}) "
                         "ORDER BY block, id",
                         (start_str, end_str, *rule["types"]),
@@ -262,9 +262,22 @@ class DailyAggregator:
                     f"交易：{self._tx_link(tx)}"
                 )
             else:
+                coefficient = row["consensus_coefficient"]
+                actual_value = row["actual_value"]
+                turbo_fields = ""
+                if key == "turbo":
+                    coefficient_text = (
+                        f"{float(coefficient) * 100:.4f}%" if coefficient is not None else "--"
+                    )
+                    actual_text = float(actual_value if actual_value is not None else value)
+                    turbo_fields = (
+                        f"📊 涡轮系数：{coefficient_text}\n"
+                        f"⚡️ 实际涡轮：{actual_text:,.2f} ARK\n"
+                    )
                 message = (
                     f"🔔 <b>单笔{rule['title']}异常提醒</b>\n\n"
                     f"数量：{value:,.2f} ARK\n"
+                    f"{turbo_fields}"
                     f"时间：{row['timestamp'] or '--'}\n"
                     f"类型：{release_type or rule['title']}\n"
                     f"触发地址：{row['to_addr'] or row['from_addr'] or '--'}\n"
