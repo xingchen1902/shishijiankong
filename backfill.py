@@ -2,6 +2,7 @@
 """容器启动时补齐今日缺失数据（小批量模式，每10块一次eth_getLogs）"""
 import sqlite3, time, requests, sys
 from event_parser import get_block_timestamps
+from rpc_config import add_fallback_rpc_urls
 
 RPC_URLS = [
     "https://bsc-mainnet.nodereal.io/v1/70208501917a413bab46cb281fc0997f",
@@ -13,6 +14,8 @@ RPC_URLS = [
     "https://rpc.ankr.com/bsc/c9251b3e097417a6e558de2dce53c2d276a591fbd89f2ec9f017392936a5e0b5",
     "https://bsc.mytokenpocket.vip",
 ]
+
+RPC_URLS = add_fallback_rpc_urls(RPC_URLS)
 
 class RPCManager:
     def __init__(self, urls):

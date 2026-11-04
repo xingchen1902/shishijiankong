@@ -10,6 +10,7 @@ import time, json
 from datetime import datetime, timezone, timedelta
 import requests
 from db import get_cached_block_timestamps, save_block_timestamps
+from rpc_config import add_fallback_rpc_urls
 
 BJT = timezone(timedelta(hours=8))
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
@@ -84,6 +85,7 @@ RPC_URLS = [
     "https://rpc.ankr.com/bsc/c9251b3e097417a6e558de2dce53c2d276a591fbd89f2ec9f017392936a5e0b5",
     "https://bsc.mytokenpocket.vip",
 ]
+RPC_URLS = add_fallback_rpc_urls(RPC_URLS)
 
 class RPCManager:
     def __init__(self, urls):

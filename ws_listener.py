@@ -9,6 +9,7 @@ BSC 区块监听器（HTTP 轮询 6s/次）
 
 import time, requests
 from datetime import datetime, timezone, timedelta
+from rpc_config import add_fallback_rpc_urls
 
 BJT = timezone(timedelta(hours=8))
 
@@ -22,6 +23,8 @@ RPC_URLS = [
     "https://rpc.ankr.com/bsc/c9251b3e097417a6e558de2dce53c2d276a591fbd89f2ec9f017392936a5e0b5",
     "https://bsc.mytokenpocket.vip",
 ]
+
+RPC_URLS = add_fallback_rpc_urls(RPC_URLS)
 
 BATCH_SIZE = 200
 # 事件按 200 区块批量处理，3 秒轮询不会缩短数据落库的批次等待；

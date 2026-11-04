@@ -18,6 +18,7 @@ services:
       - ./static_release_report.py:/app/static_release_report.py
       - ./dashboard.html:/app/dashboard.html
       - ./db.py:/app/db.py
+      - ./rpc_config.py:/app/rpc_config.py
     environment:
       - TZ=Asia/Shanghai
 
