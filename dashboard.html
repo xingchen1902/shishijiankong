@@ -294,6 +294,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .turbo-top-table a { color: #60a5fa; text-decoration: none; }
 .turbo-top-table a:hover { color: #93c5fd; text-decoration: underline; }
 .turbo-top-empty { padding: 22px 12px; color: #64748b; text-align: center; font-size: 12px; }
+.turbo-top-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; color: #94a3b8; font-size: 12px; }
+.turbo-top-pagination[hidden] { display: none; }
+.turbo-top-pagination button { padding: 6px 10px; border: 1px solid #334155; border-radius: 7px; background: #0f172a; color: #cbd5e1; cursor: pointer; }
+.turbo-top-pagination button:disabled { opacity: .4; cursor: not-allowed; }
 .events-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; margin-top: 18px; }
 .events-summary-grid > .turbo-top-card,
 .events-summary-grid > .turbine-change-card { min-width: 0; margin-top: 0; }
@@ -685,7 +689,7 @@ td.neg { color: #ef4444; }
       <div class="events-summary-grid">
         <section class="turbo-top-card" aria-labelledby="turboTopTitle">
           <div class="turbo-top-head">
-            <div class="turbo-top-title" id="turboTopTitle">🚀 最近 24 小时最高系数涡轮 · TOP 10</div>
+            <div class="turbo-top-title" id="turboTopTitle">🚀 最近 24 小时最高系数涡轮 · TOP 20</div>
             <div class="turbo-top-meta" id="turboTopMeta">滚动 24 小时 · 每 30 秒更新</div>
           </div>
           <div class="turbo-top-table-wrap">
@@ -693,6 +697,11 @@ td.neg { color: #ef4444; }
               <thead><tr><th>排名</th><th>时间</th><th>共识系数</th><th>原始涡轮</th><th>实际涡轮</th><th>接收地址</th><th>交易</th></tr></thead>
               <tbody id="turboTopBody"><tr><td colspan="7"><div class="turbo-top-empty">正在加载最高系数涡轮...</div></td></tr></tbody>
             </table>
+          </div>
+          <div class="turbo-top-pagination" id="turboTopPagination" hidden>
+            <button type="button" id="turboTopPrev">上一页</button>
+            <span id="turboTopPageLabel" aria-live="polite"></span>
+            <button type="button" id="turboTopNext">下一页</button>
           </div>
         </section>
         <section class="turbine-change-card" aria-labelledby="turbineChangeTitle">
@@ -861,6 +870,8 @@ var currentLpData = null;
 var currentDexPeriod = "h24";
 var currentPoolHistoryPage = 1;
 var POOL_HISTORY_PER_PAGE = 15;
+var currentTurboTopPage = 1;
+var TURBO_TOP_PER_PAGE = 10;
 var DEX_PERIOD_LABELS = {m5: "5分钟", h1: "1小时", h6: "6小时", h24: "24小时"};
 var currentReleaseAmountType = "all";
 var currentReleaseAmountDistribution = null;
@@ -1774,6 +1785,19 @@ document.getElementById("eventSearchNext").addEventListener("click", function() 
   var pageCount = Math.max(1, Math.ceil(eventAddressSearch.total / eventAddressSearch.perPage));
   if (eventAddressSearch.active && eventAddressSearch.page < pageCount) loadAddressEvents(eventAddressSearch.address, eventAddressSearch.page + 1);
 });
+document.getElementById("turboTopPrev").addEventListener("click", function() {
+  if (currentTurboTopPage > 1) {
+    currentTurboTopPage--;
+    if (latestTurboTopPayload) renderTopTurboCoefficients(latestTurboTopPayload);
+  }
+});
+document.getElementById("turboTopNext").addEventListener("click", function() {
+  var rows = latestTurboTopPayload && Array.isArray(latestTurboTopPayload.data) ? latestTurboTopPayload.data : [];
+  if (currentTurboTopPage < Math.ceil(rows.length / TURBO_TOP_PER_PAGE)) {
+    currentTurboTopPage++;
+    renderTopTurboCoefficients(latestTurboTopPayload);
+  }
+});
 
 function renderEventDetail(event) {
   var card = document.getElementById("eventDetailCard");
@@ -1799,23 +1823,39 @@ function renderEventDetail(event) {
     row("虚拟机", "BSC") + row("事件索引", event.id != null ? esc(String(event.id)) : "--");
 }
 
+var latestTurboTopPayload = null;
 function renderTopTurboCoefficients(payload) {
   var body = document.getElementById("turboTopBody");
   var meta = document.getElementById("turboTopMeta");
+  var pager = document.getElementById("turboTopPagination");
+  var pageLabel = document.getElementById("turboTopPageLabel");
+  var previous = document.getElementById("turboTopPrev");
+  var next = document.getElementById("turboTopNext");
   if (!body) return;
+  latestTurboTopPayload = payload;
   var rows = payload && Array.isArray(payload.data) ? payload.data : [];
   if (meta) meta.textContent = payload && payload.start_at && payload.end_at
     ? "统计区间 " + eventTime(payload.start_at, true) + " — " + eventTime(payload.end_at, true) + " · 每 30 秒更新"
     : "滚动 24 小时 · 每 30 秒更新";
   if (!rows.length) {
+    currentTurboTopPage = 1;
+    if (pager) pager.hidden = true;
     body.innerHTML = '<tr><td colspan="7"><div class="turbo-top-empty">最近 24 小时暂无带共识系数的涡轮数据</div></td></tr>';
     return;
   }
-  body.innerHTML = rows.slice(0, 10).map(function(event, index) {
+  var pageCount = Math.max(1, Math.ceil(rows.length / TURBO_TOP_PER_PAGE));
+  currentTurboTopPage = Math.min(currentTurboTopPage, pageCount);
+  var startIndex = (currentTurboTopPage - 1) * TURBO_TOP_PER_PAGE;
+  var pageRows = rows.slice(startIndex, startIndex + TURBO_TOP_PER_PAGE);
+  if (pager) pager.hidden = rows.length <= TURBO_TOP_PER_PAGE;
+  if (pageLabel) pageLabel.textContent = currentTurboTopPage + " / " + pageCount;
+  if (previous) previous.disabled = currentTurboTopPage <= 1;
+  if (next) next.disabled = currentTurboTopPage >= pageCount;
+  body.innerHTML = pageRows.map(function(event, index) {
     var tx = event.tx || "";
     var address = event.to_addr || "";
     return "<tr>" +
-      "<td>" + String(index + 1).padStart(2, "0") + "</td>" +
+      "<td>" + String(startIndex + index + 1).padStart(2, "0") + "</td>" +
       "<td>" + esc(eventTime(event.timestamp, true)) + "</td>" +
       '<td class="coefficient">' + turboCoefficient(event.consensus_coefficient) + "</td>" +
       "<td>" + fmt(event.value) + " ARK</td>" +

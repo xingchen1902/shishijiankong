@@ -762,9 +762,9 @@ def get_latest_consensus_coefficient():
     return float(row[0]) if row else None
 
 
-def get_top_turbo_coefficients(start_at, end_at, limit=2):
+def get_top_turbo_coefficients(start_at, end_at, limit=20):
     """Return the highest-coefficient turbo events in a timestamp interval."""
-    limit = max(1, min(int(limit or 2), 10))
+    limit = max(1, min(int(limit or 20), 20))
     conn = get_conn()
     rows = conn.execute(
         """SELECT timestamp, tx, to_addr, value, actual_value, consensus_coefficient

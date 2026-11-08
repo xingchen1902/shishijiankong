@@ -1487,7 +1487,7 @@ def get_events_by_address(address: str, page: int = 1, per_page: int = 50, event
 
 @app.get("/api/turbo-coefficient-top")
 def get_turbo_coefficient_top():
-    """Return the ten highest-coefficient turbo events from the rolling 24 hours."""
+    """Return the twenty highest-coefficient turbo events from the rolling 24 hours."""
     end = datetime.now(BJT)
     start = end - timedelta(hours=24)
     start_at = start.strftime("%Y-%m-%d %H:%M:%S")
@@ -1495,7 +1495,7 @@ def get_turbo_coefficient_top():
     return {
         "start_at": start_at,
         "end_at": end_at,
-        "data": get_top_turbo_coefficients(start_at, end_at, limit=10),
+        "data": get_top_turbo_coefficients(start_at, end_at, limit=20),
     }
 
 @app.get("/api/turbine-config-changes")
