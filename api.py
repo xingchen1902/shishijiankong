@@ -104,6 +104,9 @@ TURBINE_CONFIG_SETTER_BOUND_BY_SELECTOR = {
 OFFICIAL_TURBINE_CONFIG_CACHE_TTL = 10
 OFFICIAL_TURBINE_CONFIG_CACHE = {"ts": 0, "data": None}
 OFFICIAL_TURBINE_CONFIG_REFRESH_LOCK = threading.Lock()
+OFFICIAL_COEFFICIENT_API_CACHE_TTL = 1.0
+OFFICIAL_COEFFICIENT_API_CACHE = {"ts": 0, "data": None}
+OFFICIAL_COEFFICIENT_API_REFRESH_LOCK = threading.Lock()
 app = FastAPI(title="ARK")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 init_db()
@@ -1188,15 +1191,35 @@ def get_turbo_pending():
 @app.get("/api/official-coefficient")
 def get_official_coefficient_api():
     """返回一次与官方 DApp 同源的动态系数。"""
-    config = get_official_turbine_config()
-    current = sample_official_turbine_coefficient(config)
-    return {
-        "coefficient": current,
-        "min": config.get("min"),
-        "max": config.get("max"),
-        "source": "official-dapp",
-        "updated_at": datetime.now(BJT).isoformat(),
-    }
+    now_ts = time.time()
+    cached = OFFICIAL_COEFFICIENT_API_CACHE.get("data")
+    if cached is not None and now_ts - OFFICIAL_COEFFICIENT_API_CACHE["ts"] < OFFICIAL_COEFFICIENT_API_CACHE_TTL:
+        return dict(cached)
+
+    if not OFFICIAL_COEFFICIENT_API_REFRESH_LOCK.acquire(blocking=False):
+        if cached is not None:
+            return dict(cached)
+        OFFICIAL_COEFFICIENT_API_REFRESH_LOCK.acquire()
+
+    try:
+        now_ts = time.time()
+        cached = OFFICIAL_COEFFICIENT_API_CACHE.get("data")
+        if cached is not None and now_ts - OFFICIAL_COEFFICIENT_API_CACHE["ts"] < OFFICIAL_COEFFICIENT_API_CACHE_TTL:
+            return dict(cached)
+
+        config = get_official_turbine_config()
+        current = sample_official_turbine_coefficient(config)
+        result = {
+            "coefficient": current,
+            "min": config.get("min"),
+            "max": config.get("max"),
+            "source": "official-dapp",
+            "updated_at": datetime.now(BJT).isoformat(),
+        }
+        OFFICIAL_COEFFICIENT_API_CACHE.update({"ts": time.time(), "data": result})
+        return dict(result)
+    finally:
+        OFFICIAL_COEFFICIENT_API_REFRESH_LOCK.release()
 
 
 @app.get("/api/release-period-summary")
