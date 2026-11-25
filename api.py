@@ -73,6 +73,8 @@ POOL_MONITOR_ADDRESSES = [
 DEX_CACHE = {"ts": 0, "data": None}
 BONUS_BALANCE_CACHE = {"ts": 0, "value": None}
 STAKE_BALANCE_CACHE = {"ts": 0, "value": None}
+BONUS_BALANCE_REFRESH_LOCK = threading.Lock()
+STAKE_BALANCE_REFRESH_LOCK = threading.Lock()
 # 看板每 30 秒轮询一次；短缓存可避免多个浏览器/机器人同时重复扫描大表。
 TODAY_CACHE_TTL = 8
 TREND_CACHE_TTL = 45
@@ -110,6 +112,26 @@ if os.path.exists(logo_path):
     @app.get("/logo.png")
     def get_logo():
         return FileResponse(logo_path, media_type="image/png")
+
+def _refresh_balance_cache(cache, refresh_lock, address, label):
+    """Refresh one chain balance without holding up a dashboard request."""
+    if not refresh_lock.acquire(blocking=False):
+        return
+
+    def refresh():
+        try:
+            value = get_balance(TOKEN_ARK, address) / (10 ** DECIMALS)
+            cache.update({"value": value, "ts": time.time()})
+        except Exception as exc:
+            print(f"[链上余额] 后台刷新{label}失败: {exc}")
+        finally:
+            refresh_lock.release()
+
+    try:
+        threading.Thread(target=refresh, daemon=True, name=f"balance-refresh-{label}").start()
+    except Exception as exc:
+        refresh_lock.release()
+        print(f"[链上余额] 无法启动{label}刷新线程: {exc}")
 
 def get_today_data():
     today = datetime.now(BJT).strftime("%Y-%m-%d")
@@ -170,25 +192,18 @@ def get_today_data():
     # 事件公式保留用于校验；当前看板余额以链上 ARK balanceOf 为准，避免历史汇总基准误差累积。
     bonus_bal = base_bonus + bi - bo - permanent_bonus - tr720
     stake_bal = base_stake + si + tr720 - so - permanent_stake
-    # 页面刷新时优先读取链上质押池余额；缓存 60 秒，多个请求共用结果。
-    displayed_stake_bal = stake_bal
+    # 链上余额在后台刷新；RPC 变慢时先返回上次缓存或事件公式，不阻塞看板请求。
     if STAKE_BALANCE_CACHE["value"] is None or now_ts - STAKE_BALANCE_CACHE["ts"] >= 60:
-        try:
-            STAKE_BALANCE_CACHE["value"] = get_balance(TOKEN_ARK, STAKE_POOL) / (10 ** DECIMALS)
-            STAKE_BALANCE_CACHE["ts"] = now_ts
-        except Exception as exc:
-            print(f"[链上余额] 查询质押池失败，使用事件公式: {exc}")
-    if STAKE_BALANCE_CACHE["value"] is not None:
-        displayed_stake_bal = STAKE_BALANCE_CACHE["value"]
+        _refresh_balance_cache(STAKE_BALANCE_CACHE, STAKE_BALANCE_REFRESH_LOCK, STAKE_POOL, "质押池")
+    displayed_stake_bal = STAKE_BALANCE_CACHE["value"]
+    if displayed_stake_bal is None:
+        displayed_stake_bal = stake_bal
 
-    # 奖金池余额同样优先使用链上余额；当前缓存 30 秒。
     if BONUS_BALANCE_CACHE["value"] is None or now_ts - BONUS_BALANCE_CACHE["ts"] >= 30:
-        try:
-            BONUS_BALANCE_CACHE["value"] = get_balance(TOKEN_ARK, BONUS_POOL) / (10 ** DECIMALS)
-            BONUS_BALANCE_CACHE["ts"] = now_ts
-        except Exception as exc:
-            print(f"[链上余额] 查询奖金池失败，使用事件公式: {exc}")
-    displayed_bonus_bal = BONUS_BALANCE_CACHE["value"] if BONUS_BALANCE_CACHE["value"] is not None else bonus_bal
+        _refresh_balance_cache(BONUS_BALANCE_CACHE, BONUS_BALANCE_REFRESH_LOCK, BONUS_POOL, "奖金池")
+    displayed_bonus_bal = BONUS_BALANCE_CACHE["value"]
+    if displayed_bonus_bal is None:
+        displayed_bonus_bal = bonus_bal
 
     result = {"date":today,"bonus_balance":round(max(displayed_bonus_bal,0),2),"bonus_balance_formula":round(max(bonus_bal,0),2),"bonus_withdraw":round(bo,2),
             "static_burn":round(sb,2),"dynamic_in":round(di,2),"actual_turbo":round(actual_turbo,2),
