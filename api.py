@@ -103,6 +103,7 @@ TURBINE_CONFIG_SETTER_BOUND_BY_SELECTOR = {
 }
 OFFICIAL_TURBINE_CONFIG_CACHE_TTL = 10
 OFFICIAL_TURBINE_CONFIG_CACHE = {"ts": 0, "data": None}
+OFFICIAL_TURBINE_CONFIG_REFRESH_LOCK = threading.Lock()
 app = FastAPI(title="ARK")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 init_db()
@@ -229,7 +230,22 @@ def get_official_turbine_config():
     if cached is not None and now_ts - OFFICIAL_TURBINE_CONFIG_CACHE["ts"] < OFFICIAL_TURBINE_CONFIG_CACHE_TTL:
         return dict(cached)
 
+    # A legacy dashboard can poll this endpoint several times per second. When the
+    # cache expires, only one request may refresh it; concurrent requests get the
+    # stale value rather than launching duplicate slow RPC calls.
+    if not OFFICIAL_TURBINE_CONFIG_REFRESH_LOCK.acquire(blocking=False):
+        return dict(cached) if cached is not None else {
+            "min": None,
+            "max": None,
+            "contract": TARGET_DYNAMIC,
+            "source": "official-dapp",
+        }
+
     try:
+        now_ts = time.time()
+        cached = OFFICIAL_TURBINE_CONFIG_CACHE.get("data")
+        if cached is not None and now_ts - OFFICIAL_TURBINE_CONFIG_CACHE["ts"] < OFFICIAL_TURBINE_CONFIG_CACHE_TTL:
+            return dict(cached)
         raw = _rpc_call(
             "eth_call",
             [{"to": TARGET_DYNAMIC, "data": OFFICIAL_TURBINE_CONFIG_SELECTOR}, "latest"],
@@ -256,6 +272,8 @@ def get_official_turbine_config():
         return dict(result)
     except Exception as exc:
         print(f"[官方 DApp] 涡轮配置读取失败: {exc}")
+        if cached is not None:
+            return dict(cached)
         return {
             "min": None,
             "max": None,
@@ -263,6 +281,8 @@ def get_official_turbine_config():
             "source": "official-dapp",
             "error": str(exc),
         }
+    finally:
+        OFFICIAL_TURBINE_CONFIG_REFRESH_LOCK.release()
 
 
 def _read_turbine_config_at_block(block_number):
