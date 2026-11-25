@@ -76,6 +76,7 @@ STAKE_BALANCE_CACHE = {"ts": 0, "value": None}
 # 看板每 30 秒轮询一次；短缓存可避免多个浏览器/机器人同时重复扫描大表。
 TODAY_CACHE_TTL = 8
 TREND_CACHE_TTL = 45
+TURBO_PENDING_REFRESH_INTERVAL_SECONDS = 1800
 TODAY_CACHE = {"date": None, "ts": 0, "data": None}
 TREND_CACHE = {"ts": 0, "data": None}
 STAKING_OVERVIEW_URL = "https://0xfantasy.ark.pro/v1/bond-rebasing-config"
@@ -1094,15 +1095,19 @@ def telegram_poll():
             time.sleep(5)
 
 def turbo_pending_refresh_worker():
-    """后台低频重算待领取汇总，避免历史大表扫描阻塞看板请求。"""
-    time.sleep(15)
+    """低频重算待领取汇总；该聚合需要扫描大量历史事件。"""
+    # 启动时先让看板和区块监控稳定起来，避免服务重启后立刻扫全量历史。
+    time.sleep(TURBO_PENDING_REFRESH_INTERVAL_SECONDS)
     while True:
+        cycle_started = time.monotonic()
         try:
             refresh_turbo_pending()
-            print("[涡轮待领取] 汇总已刷新")
+            elapsed = time.monotonic() - cycle_started
+            print(f"[涡轮待领取] 汇总已刷新，耗时 {elapsed:.1f} 秒")
         except Exception as exc:
             print(f"[涡轮待领取] 刷新失败: {exc}")
-        time.sleep(300)
+        remaining = TURBO_PENDING_REFRESH_INTERVAL_SECONDS - (time.monotonic() - cycle_started)
+        time.sleep(max(0, remaining))
 
 # 启动后台轮询
 threading.Thread(target=telegram_poll, daemon=True).start()
