@@ -21,10 +21,6 @@ from db import (
     upsert_dex_daily_snapshot,
     get_monitor_state,
     set_monitor_state,
-    refresh_turbo_pending,
-    get_turbo_pending_snapshot,
-    get_turbo_pending_dashboard_snapshot,
-    get_latest_consensus_coefficient,
     get_top_turbo_coefficients,
     get_turbine_config_changes,
     save_turbine_config_change,
@@ -78,7 +74,6 @@ STAKE_BALANCE_REFRESH_LOCK = threading.Lock()
 # 看板每 30 秒轮询一次；短缓存可避免多个浏览器/机器人同时重复扫描大表。
 TODAY_CACHE_TTL = 8
 TREND_CACHE_TTL = 45
-TURBO_PENDING_REFRESH_INTERVAL_SECONDS = 1800
 TODAY_CACHE = {"date": None, "ts": 0, "data": None}
 TREND_CACHE = {"ts": 0, "data": None}
 STAKING_OVERVIEW_URL = "https://0xfantasy.ark.pro/v1/bond-rebasing-config"
@@ -1132,25 +1127,9 @@ def telegram_poll():
             print(f"[Telegram Poll] 异常: {e}")
             time.sleep(5)
 
-def turbo_pending_refresh_worker():
-    """低频重算待领取汇总；该聚合需要扫描大量历史事件。"""
-    # 启动时先让看板和区块监控稳定起来，避免服务重启后立刻扫全量历史。
-    time.sleep(TURBO_PENDING_REFRESH_INTERVAL_SECONDS)
-    while True:
-        cycle_started = time.monotonic()
-        try:
-            refresh_turbo_pending()
-            elapsed = time.monotonic() - cycle_started
-            print(f"[涡轮待领取] 汇总已刷新，耗时 {elapsed:.1f} 秒")
-        except Exception as exc:
-            print(f"[涡轮待领取] 刷新失败: {exc}")
-        remaining = TURBO_PENDING_REFRESH_INTERVAL_SECONDS - (time.monotonic() - cycle_started)
-        time.sleep(max(0, remaining))
-
 # 启动后台轮询
 threading.Thread(target=telegram_poll, daemon=True).start()
 threading.Thread(target=dex_daily_snapshot_worker, daemon=True).start()
-threading.Thread(target=turbo_pending_refresh_worker, daemon=True).start()
 
 @app.get("/api/today")
 def get_today():
@@ -1165,27 +1144,6 @@ def get_today():
 def get_release_period_history(page: int = 1, per_page: int = 10):
     """独立读取已落库的每日历史释放汇总，页面请求不扫描事件表。"""
     return get_release_period_daily_summary(page, per_page)
-
-
-@app.get("/api/turbo-pending")
-def get_turbo_pending():
-    """返回待领取总和及官方 DApp 的动态系数区间。"""
-    total = get_turbo_pending_dashboard_snapshot()
-    official = get_official_turbine_config()
-    current = sample_official_turbine_coefficient(official)
-    official_payload = dict(official)
-    official_payload["current"] = current
-    official_payload["sampled_at"] = datetime.now(BJT).isoformat()
-    return {
-        "data": [],
-        "total": round(total, 8),
-        # 历史字段保留兼容旧客户端；新提醒服务使用官方 DApp 动态值。
-        "current_consensus_coefficient": get_latest_consensus_coefficient(),
-        "official_dapp": official_payload,
-        "official_dapp_coefficient": current,
-        "official_turbine_min_percentage": official.get("min"),
-        "official_turbine_max_percentage": official.get("max"),
-    }
 
 
 @app.get("/api/official-coefficient")

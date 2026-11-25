@@ -10,7 +10,6 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from db import (
     get_pool_address_daily_summaries,
-    get_turbo_pending_dashboard_snapshot,
     get_latest_consensus_coefficient,
     get_release_period_summary,
 )
@@ -572,15 +571,6 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总", include
 
     def f(n): return f"{float(n):,.2f}"
 
-    try:
-        # Keep Telegram summary and /today on the exact same global baseline
-        # snapshot shown by the dashboard; the per-address ledger has a
-        # different historical scope and can therefore diverge.
-        turbo_pending_total = get_turbo_pending_dashboard_snapshot()
-    except Exception as exc:
-        print(f"  [Telegram] 读取待领取总和失败: {exc}")
-        turbo_pending_total = None
-
     consensus_line = ""
     if include_consensus:
         try:
@@ -617,7 +607,7 @@ def push_to_telegram(record, target_chat_id=None, title_suffix="汇总", include
 动态释放：{f(record.get('dynamic_release', record.get('dynamic_turbo',0)))} ARK
 总涡轮：{f(record.get('dynamic_in',0))} ARK
 实际涡轮：{f(record.get('actual_turbo',0))} ARK
-{consensus_line}当前待领取：{f(turbo_pending_total) if turbo_pending_total is not None else '--'} ARK
+{consensus_line}
 
 <b>🔄 转720天</b>
 {_fmt_720(record)} ARK

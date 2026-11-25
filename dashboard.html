@@ -530,7 +530,6 @@ td.neg { color: #ef4444; }
   <div class="realtime-grid">
     <div class="rt-card blue"><div class="label">奖金池余额</div><div class="value" id="bonusBal">--</div></div>
     <div class="rt-card green"><div class="label">质押池余额</div><div class="value" id="stakeBal">--</div></div>
-    <div class="rt-card teal"><div class="label">当前待领取 ARK</div><div class="value" id="turboPendingList">--</div></div>
     <div class="rt-card teal"><div class="label">当前共识系数</div><div class="value" id="currentConsensusCoefficient">--</div><div class="sub coefficient-range" id="currentConsensusRange">当前范围：--</div></div>
     <div class="rt-card purple"><div class="label">今日事件</div><div class="value" id="eventCount">--</div><div class="sub">条</div></div>
     <div class="rt-card orange"><div class="label">最新区块</div><div class="value" id="lastBlock">--</div></div>
@@ -1171,13 +1170,9 @@ function startOfficialCoefficientTicker() {
   officialCoefficientTimer = setInterval(renderOfficialCoefficient, 500);
 }
 
-function updateTurboPending(payload) {
-  var container = document.getElementById("turboPendingList");
-  if (!container) return;
-  var total = payload && payload.total != null ? payload.total : 0;
-  container.textContent = fmt(total);
-  officialCoefficientRange.min = payload && payload.official_turbine_min_percentage;
-  officialCoefficientRange.max = payload && payload.official_turbine_max_percentage;
+function updateOfficialCoefficientConfig(payload) {
+  officialCoefficientRange.min = payload && payload.min;
+  officialCoefficientRange.max = payload && payload.max;
   renderOfficialCoefficientRange();
   if (officialCoefficientRange.min != null && officialCoefficientRange.max != null) {
     startOfficialCoefficientTicker();
@@ -2101,22 +2096,10 @@ function loadReleaseSummary() {
   }).catch(function(err) { logLoadError("release summary", err); });
 }
 
-function loadTurboPending() {
-  return fetchAPI("/api/turbo-pending").then(function(payload) {
-    if (!payload) throw new Error("empty turbo pending response");
-    updateTurboPending(payload);
-  }).catch(function(err) {
-    logLoadError("turbo pending", err);
-    // 网络或后台刷新短暂繁忙时保留旧值，并快速重试，避免卡片一直显示 --。
-    setTimeout(function() {
-      fetchAPI("/api/turbo-pending").then(function(payload) {
-        if (payload) updateTurboPending(payload);
-        else throw new Error("empty turbo pending retry response");
-      }).catch(function(retryErr) {
-        logLoadError("turbo pending retry", retryErr);
-      });
-    }, 1500);
-  });
+function loadOfficialCoefficientConfig() {
+  return fetchAPI("/api/official-coefficient").then(function(payload) {
+    updateOfficialCoefficientConfig(payload);
+  }).catch(function(err) { logLoadError("official coefficient", err); });
 }
 
 function loadStakingOverview() {
@@ -2198,10 +2181,10 @@ function loadAll() {
 loadAll();
 setInterval(loadAll, 30000);
 // 当前范围小字与范围调整历史表统一每 10 秒刷新。
-loadTurboPending();
+loadOfficialCoefficientConfig();
 loadTurbineConfigChanges();
 // 官方 DApp 每约 10 秒重新读取配置区间；动态展示值由上面的 500ms ticker 负责。
-setInterval(loadTurboPending, 10000);
+setInterval(loadOfficialCoefficientConfig, 10000);
 setInterval(loadTurbineConfigChanges, 10000);
 </script>
 </body>
