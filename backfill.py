@@ -121,12 +121,6 @@ def process_batch(from_block, to_block):
     return results
 
 def backfill_today():
-    try:
-        cur = int(RPC.call("eth_blockNumber", []), 16)
-    except:
-        print("[补齐] 无法获取最新区块")
-        return
-
     conn = sqlite3.connect("/app/data/ark_monitor.db")
     has_state_table = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='monitor_state'"
@@ -144,6 +138,13 @@ def backfill_today():
     # 启动脚本无需再按旧的 ARK/gARK 逻辑重复扫描。
     if checkpoint:
         print(f"[补齐] 使用监听检查点 #{checkpoint}，交由主监听连续补齐")
+        return
+
+    # 仅无检查点的旧数据库才需要查询链上最新区块，避免每次重启都等待 RPC。
+    try:
+        cur = int(RPC.call("eth_blockNumber", []), 16)
+    except:
+        print("[补齐] 无法获取最新区块")
         return
 
     start_block = REF_BLOCK
